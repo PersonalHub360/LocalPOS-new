@@ -27,8 +27,11 @@ import {
   type InsertStaffSalary,
   type Settings,
   type InsertSettings,
+  type User,
+  type InsertUser,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 
 export interface IStorage {
   getCategories(): Promise<Category[]>;
@@ -134,6 +137,14 @@ export interface IStorage {
   
   getSettings(): Promise<Settings | undefined>;
   updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
+  
+  getUsers(): Promise<User[]>;
+  getUser(id: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
+  validateUserCredentials(username: string, password: string): Promise<User | null>;
 }
 
 export class MemStorage implements IStorage {
@@ -150,6 +161,7 @@ export class MemStorage implements IStorage {
   private leaves: Map<string, Leave>;
   private payroll: Map<string, Payroll>;
   private staffSalaries: Map<string, StaffSalary>;
+  private users: Map<string, User>;
   private settings: Settings | null;
   private orderCounter: number = 20;
 
@@ -167,6 +179,7 @@ export class MemStorage implements IStorage {
     this.leaves = new Map();
     this.payroll = new Map();
     this.staffSalaries = new Map();
+    this.users = new Map();
     this.settings = null;
     this.seedData();
   }
@@ -489,6 +502,23 @@ export class MemStorage implements IStorage {
     ];
 
     samplePurchases.forEach((purchase) => this.purchases.set(purchase.id, purchase));
+
+    // Seed default admin user
+    const defaultAdminPassword = bcrypt.hashSync("admin123", 10);
+    const defaultUsers: User[] = [
+      {
+        id: "user-1",
+        username: "admin",
+        password: defaultAdminPassword,
+        fullName: "System Administrator",
+        email: "admin@restaurant.com",
+        role: "admin",
+        employeeId: null,
+        isActive: "true",
+        createdAt: new Date(),
+      },
+    ];
+    defaultUsers.forEach((user) => this.users.set(user.id, user));
   }
 
   async getCategories(): Promise<Category[]> {
@@ -1237,6 +1267,67 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
     };
     return this.settings;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(user => user.username === username);
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = randomUUID();
+    const hashedPassword = bcrypt.hashSync(insertUser.password, 10);
+    const user: User = {
+      ...insertUser,
+      id,
+      password: hashedPassword,
+      role: insertUser.role ?? "staff",
+      email: insertUser.email ?? null,
+      employeeId: insertUser.employeeId ?? null,
+      isActive: insertUser.isActive ?? "true",
+      createdAt: new Date(),
+    };
+    this.users.set(id, user);
+    return user;
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, ...updates };
+    if (updates.password) {
+      updatedUser.password = bcrypt.hashSync(updates.password, 10);
+    }
+    
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const exists = this.users.has(id);
+    if (!exists) return false;
+    this.users.delete(id);
+    return true;
+  }
+
+  async validateUserCredentials(username: string, password: string): Promise<User | null> {
+    const user = await this.getUserByUsername(username);
+    if (!user) return null;
+    
+    if (user.isActive !== "true") return null;
+    
+    const isValid = bcrypt.compareSync(password, user.password);
+    if (!isValid) return null;
+    
+    return user;
   }
 }
 
