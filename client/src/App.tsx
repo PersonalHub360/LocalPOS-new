@@ -126,7 +126,7 @@ function AppHeader() {
 
   return (
     <>
-      <header className="h-14 border-b border-border bg-background px-4 flex items-center gap-4">
+      <header className="h-16 border-b border-border bg-background px-6 flex items-center gap-4">
         <SidebarTrigger data-testid="button-sidebar-toggle" />
         <div className="flex-1" />
         {isPOSPage && (
@@ -205,7 +205,7 @@ function AppHeader() {
 
 export default function App() {
   const style = {
-    "--sidebar-width": "16rem",
+    "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
   };
 

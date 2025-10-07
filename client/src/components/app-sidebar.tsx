@@ -18,7 +18,6 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -34,27 +33,27 @@ const menuItems = [
     icon: ShoppingCart,
   },
   {
-    title: "Table",
+    title: "Tables",
     url: "/tables",
     icon: Table2,
   },
   {
-    title: "Sales manage",
+    title: "Sales",
     url: "/sales",
     icon: TrendingUp,
   },
   {
-    title: "Expense Manage",
+    title: "Expenses",
     url: "/expenses",
     icon: Wallet,
   },
   {
-    title: "Item Manage",
+    title: "Items",
     url: "/items",
     icon: Package,
   },
   {
-    title: "Purchase Manage",
+    title: "Purchases",
     url: "/purchases",
     icon: ShoppingBag,
   },
@@ -80,18 +79,18 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-6 border-b border-sidebar-border">
-        <div className="flex items-center gap-3 justify-center">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center shadow-lg">
-            <Utensils className="w-6 h-6 text-primary-foreground" />
+      <SidebarHeader className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-3 px-2">
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+            <Utensils className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-600 bg-clip-text text-transparent">
-            BondPos
+          <span className="text-lg font-bold text-sidebar-foreground">
+            RestaurantPOS
           </span>
         </div>
       </SidebarHeader>
-      <SidebarContent className="px-4 py-6">
-        <div className="space-y-2">
+      <SidebarContent className="px-3 py-4">
+        <div className="space-y-1">
           {menuItems.map((item) => {
             const isActive = location === item.url;
             const Icon = item.icon;
@@ -102,25 +101,16 @@ export function AppSidebar() {
                 href={item.url}
                 data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
               >
-                <div className="group flex items-center gap-4 py-2 px-3 rounded-full transition-all duration-200 hover-elevate active-elevate-2 cursor-pointer">
-                  <div
-                    className={cn(
-                      "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-md",
-                      isActive
-                        ? "bg-gradient-to-br from-primary to-orange-600 text-primary-foreground scale-105 shadow-lg"
-                        : "bg-sidebar-accent text-sidebar-accent-foreground group-hover:scale-110 group-hover:shadow-lg"
-                    )}
-                  >
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <span
-                    className={cn(
-                      "text-sm font-medium transition-all duration-200",
-                      isActive
-                        ? "text-primary font-semibold"
-                        : "text-sidebar-foreground group-hover:text-primary"
-                    )}
-                  >
+                <div
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all cursor-pointer hover-elevate active-elevate-2",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-sidebar-foreground"
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-sm font-medium">
                     {item.title}
                   </span>
                 </div>
@@ -129,14 +119,14 @@ export function AppSidebar() {
           })}
         </div>
       </SidebarContent>
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 px-2" data-testid="sidebar-profile">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center shadow-md">
+      <SidebarFooter className="p-3 border-t border-sidebar-border">
+        <div className="flex items-center gap-3 px-3 py-2 rounded-md hover-elevate cursor-pointer" data-testid="sidebar-profile">
+          <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center">
             <User className="w-5 h-5 text-primary-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Mohid Zaman</p>
-            <p className="text-xs text-muted-foreground truncate">Product Designer</p>
+            <p className="text-sm font-medium truncate">Admin User</p>
+            <p className="text-xs text-muted-foreground truncate">Restaurant Manager</p>
           </div>
         </div>
       </SidebarFooter>
