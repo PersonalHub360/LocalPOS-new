@@ -7,7 +7,11 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 7, 2025
 - **Recent Changes**: 
-  - **Authentication System** (NEW): Complete session-based authentication with security
+  - **Production Login Fix** (NEW): Fixed session authentication for production
+    - Added `trust proxy` setting for production deployments behind reverse proxy
+    - Configured `sameSite: "none"` cookie attribute for production
+    - Sessions now work correctly in production environment
+  - **Authentication System**: Complete session-based authentication with security
     - User login page with form validation
     - Session-based authentication using express-session
     - Password hashing with bcrypt for security
