@@ -115,11 +115,11 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-auto h-full bg-background">
+    <div className="p-8 space-y-8 overflow-auto h-full bg-background">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Overview of your restaurant's performance</p>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-1.5">Overview of your restaurant's performance</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={dateFilter} onValueChange={setDateFilter}>
@@ -154,11 +154,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card data-testid="card-today-sales">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Sales</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card data-testid="card-today-sales" className="border-l-4 border-l-primary">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Sales</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
+              <DollarSign className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -168,7 +170,7 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold" data-testid="text-today-sales">
                   {formatCurrency(stats?.todaySales || 0)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1.5">
                   {stats?.todayOrders || 0} orders today
                 </p>
               </>
@@ -176,10 +178,12 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card data-testid="card-today-orders">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Orders</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+        <Card data-testid="card-today-orders" className="border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Orders</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-blue-500/10 flex items-center justify-center">
+              <ShoppingCart className="h-4 w-4 text-blue-500" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -189,16 +193,18 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold" data-testid="text-today-orders">
                   {stats?.todayOrders || 0}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Completed orders</p>
+                <p className="text-xs text-muted-foreground mt-1.5">Completed orders</p>
               </>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-total-revenue">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card data-testid="card-total-revenue" className="border-l-4 border-l-green-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-green-500/10 flex items-center justify-center">
+              <TrendingUp className="h-4 w-4 text-green-500" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -208,16 +214,18 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold" data-testid="text-total-revenue">
                   {formatCurrency(stats?.totalRevenue || 0)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">All time revenue</p>
+                <p className="text-xs text-muted-foreground mt-1.5">All time revenue</p>
               </>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-total-orders">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+        <Card data-testid="card-total-orders" className="border-l-4 border-l-purple-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Orders</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-purple-500/10 flex items-center justify-center">
+              <Package className="h-4 w-4 text-purple-500" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -227,16 +235,18 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold" data-testid="text-total-orders">
                   {stats?.totalOrders || 0}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Completed orders</p>
+                <p className="text-xs text-muted-foreground mt-1.5">Completed orders</p>
               </>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-total-expenses">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
+        <Card data-testid="card-total-expenses" className="border-l-4 border-l-red-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Expenses</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-red-500/10 flex items-center justify-center">
+              <Receipt className="h-4 w-4 text-red-500" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -246,16 +256,18 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold" data-testid="text-total-expenses">
                   {formatCurrency(stats?.totalExpenses || 0)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">For selected period</p>
+                <p className="text-xs text-muted-foreground mt-1.5">For selected period</p>
               </>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-profit-loss">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Profit/Loss</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card data-testid="card-profit-loss" className="border-l-4 border-l-amber-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Profit/Loss</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center">
+              <TrendingUp className="h-4 w-4 text-amber-500" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -265,16 +277,18 @@ export default function Dashboard() {
                 <div className={`text-2xl font-bold ${(stats?.profitLoss || 0) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`} data-testid="text-profit-loss">
                   {formatCurrency(stats?.profitLoss || 0)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">For selected period</p>
+                <p className="text-xs text-muted-foreground mt-1.5">For selected period</p>
               </>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-total-purchase">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Purchase</CardTitle>
-            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+        <Card data-testid="card-total-purchase" className="border-l-4 border-l-cyan-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Purchase</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-cyan-500/10 flex items-center justify-center">
+              <ShoppingBag className="h-4 w-4 text-cyan-500" />
+            </div>
           </CardHeader>
           <CardContent>
             {statsLoading ? (
@@ -284,14 +298,14 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold" data-testid="text-total-purchase">
                   {formatCurrency(stats?.totalPurchase || 0)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">For selected period</p>
+                <p className="text-xs text-muted-foreground mt-1.5">For selected period</p>
               </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-3">
         <Card data-testid="card-sales-by-category">
           <CardHeader>
             <CardTitle>Sales by Category</CardTitle>
