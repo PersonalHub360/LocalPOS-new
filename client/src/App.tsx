@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthWrapper } from "@/components/auth-wrapper";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Grid3x3 } from "lucide-react";
+import { Plus, Grid3x3, LogOut, User } from "lucide-react";
 import { QRMenuOrdersModal } from "@/components/qr-menu-orders-modal";
 import { DraftListModal } from "@/components/draft-list-modal";
 import { ReceiptPrintModal } from "@/components/receipt-print-modal";
@@ -49,8 +49,16 @@ function Router() {
   );
 }
 
+interface AuthUser {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string | null;
+  role: string;
+}
+
 function AppHeader() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const isPOSPage = location === "/";
   const [qrOrdersOpen, setQrOrdersOpen] = useState(false);
   const [draftListModalOpen, setDraftListModalOpen] = useState(false);
@@ -58,6 +66,24 @@ function AppHeader() {
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const { toast } = useToast();
+
+  const { data: user } = useQuery<AuthUser>({
+    queryKey: ["/api/auth/session"],
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/auth/logout", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+      setLocation("/login");
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out",
+      });
+    },
+  });
 
   const { data: orders = [] } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
@@ -175,6 +201,25 @@ function AppHeader() {
                   {tables.length}
                 </Badge>
               )}
+            </Button>
+          </div>
+        )}
+        {user && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-user-info">
+              <User className="w-4 h-4" />
+              <span>{user.fullName || user.username}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              data-testid="button-logout"
+              className="gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
             </Button>
           </div>
         )}
