@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema } from "@shared/schema";
@@ -7,6 +7,13 @@ import { z } from "zod";
 const createOrderWithItemsSchema = insertOrderSchema.extend({
   items: z.array(insertOrderItemSchema.omit({ orderId: true })),
 });
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  next();
+}
 
 function getDateRange(filter: string, customDate?: string): { startDate: Date; endDate: Date } {
   const now = new Date();
@@ -114,6 +121,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     res.status(401).json({ error: "Not authenticated" });
   });
+
+  // Apply authentication middleware to all routes below this point
+  app.use("/api", requireAuth);
 
   app.get("/api/categories", async (req, res) => {
     try {
