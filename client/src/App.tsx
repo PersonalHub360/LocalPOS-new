@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AuthWrapper } from "@/components/auth-wrapper";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Grid3x3 } from "lucide-react";
@@ -26,11 +27,13 @@ import PurchaseManage from "@/pages/purchases";
 import HRM from "@/pages/hrm";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
+import Login from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
+      <Route path="/login" component={Login} />
       <Route path="/" component={POS} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/tables" component={Tables} />
@@ -203,26 +206,39 @@ function AppHeader() {
   );
 }
 
-export default function App() {
+function AuthenticatedApp() {
+  const [location] = useLocation();
   const style = {
     "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
   };
 
+  if (location === "/login") {
+    return <Router />;
+  }
+
+  return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-col flex-1">
+          <AppHeader />
+          <main className="flex-1 overflow-hidden">
+            <Router />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full">
-            <AppSidebar />
-            <div className="flex flex-col flex-1">
-              <AppHeader />
-              <main className="flex-1 overflow-hidden">
-                <Router />
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <AuthWrapper>
+          <AuthenticatedApp />
+        </AuthWrapper>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
