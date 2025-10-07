@@ -9,9 +9,12 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Settings } from "@shared/schema";
+import { AddEditUserDialog } from "@/components/add-edit-user-dialog";
+import type { Settings, User } from "@shared/schema";
 import { 
   Save, 
   Building2, 
@@ -23,7 +26,8 @@ import {
   Database, 
   Bell,
   Palette,
-  Percent
+  Percent,
+  Trash2
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -33,7 +37,15 @@ export default function SettingsPage() {
     queryKey: ["/api/settings"],
   });
 
+  const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+  });
+
   const [formData, setFormData] = useState<Partial<Settings>>({});
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (settings) {
@@ -61,12 +73,65 @@ export default function SettingsPage() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest("DELETE", `/api/users/${userId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "User deleted",
+        description: "User has been removed successfully",
+      });
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSave = () => {
     updateMutation.mutate(formData);
   };
 
   const updateField = (field: keyof Settings, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddUser = () => {
+    setSelectedUser(null);
+    setUserDialogOpen(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setUserDialogOpen(true);
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    setUserToDelete(userId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteUser = () => {
+    if (userToDelete) {
+      deleteUserMutation.mutate(userToDelete);
+    }
+  };
+
+  const getRoleDescription = (role: string) => {
+    const descriptions: Record<string, string> = {
+      admin: "Full system access",
+      manager: "Manage staff and operations",
+      cashier: "POS and sales access",
+      staff: "Limited access",
+    };
+    return descriptions[role] || "Standard access";
   };
 
   if (isLoading) {
@@ -561,34 +626,49 @@ export default function SettingsPage() {
                       <h3 className="text-lg font-medium">Staff Users</h3>
                       <p className="text-sm text-muted-foreground">Add and manage staff access</p>
                     </div>
-                    <Button data-testid="button-add-user">Add User</Button>
+                    <Button onClick={handleAddUser} data-testid="button-add-user">Add User</Button>
                   </div>
 
                   <Separator />
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 border rounded-md">
-                      <div>
-                        <p className="font-medium">Admin User</p>
-                        <p className="text-sm text-muted-foreground">Full system access</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">Manager</span>
-                        <Button variant="outline" size="sm" data-testid="button-edit-user-1">Edit</Button>
-                      </div>
+                  {usersLoading ? (
+                    <div className="text-center py-8 text-muted-foreground">Loading users...</div>
+                  ) : users.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No users found. Add a user to get started.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {users.map((user) => (
+                        <div key={user.id} className="flex items-center justify-between p-4 border rounded-md">
+                          <div className="flex-1">
+                            <p className="font-medium">{user.fullName}</p>
+                            <p className="text-sm text-muted-foreground">{getRoleDescription(user.role)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={user.isActive === "true" ? "default" : "secondary"}>
+                              {user.isActive === "true" ? "Active" : "Inactive"}
+                            </Badge>
+                            <span className="text-sm font-medium capitalize">{user.role}</span>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleEditUser(user)}
+                              data-testid={`button-edit-user-${user.id}`}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id)}
+                              data-testid={`button-delete-user-${user.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-
-                    <div className="flex items-center justify-between p-4 border rounded-md">
-                      <div>
-                        <p className="font-medium">Cashier 01</p>
-                        <p className="text-sm text-muted-foreground">POS and sales access</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">Cashier</span>
-                        <Button variant="outline" size="sm" data-testid="button-edit-user-2">Edit</Button>
-                      </div>
-                    </div>
-                  </div>
+                  )}
 
                   <Separator />
 
@@ -1098,6 +1178,36 @@ export default function SettingsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AddEditUserDialog
+        open={userDialogOpen}
+        onClose={() => {
+          setUserDialogOpen(false);
+          setSelectedUser(null);
+        }}
+        user={selectedUser}
+      />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this user? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteUser}
+              disabled={deleteUserMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteUserMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

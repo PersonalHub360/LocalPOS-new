@@ -1032,6 +1032,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User routes
+  app.get("/api/users", async (req, res) => {
+    try {
+      const users = await storage.getUsers();
+      const usersWithoutPasswords = users.map(({ password, ...user }) => user);
+      res.json(usersWithoutPasswords);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  app.post("/api/users", async (req, res) => {
+    try {
+      const validatedData = insertUserSchema.parse(req.body);
+      const user = await storage.createUser(validatedData);
+      const { password, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid user data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create user" });
+    }
+  });
+
+  app.patch("/api/users/:id", async (req, res) => {
+    try {
+      const user = await storage.updateUser(req.params.id, req.body);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/users/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteUser(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
   app.get("/api/settings", async (req, res) => {
     try {
       const settings = await storage.getSettings();
