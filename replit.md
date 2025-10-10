@@ -7,7 +7,11 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Dual Currency Receipt** (NEW): Receipt/slip now displays both currencies
+  - **Cyan Sidebar** (NEW): Updated sidebar to light cyan/turquoise color
+    - Sidebar color changed to #b8e6f1 (light cyan/turquoise)
+    - Dark text for optimal contrast on light background
+    - Complementary accent colors
+  - **Dual Currency Receipt**: Receipt/slip now displays both currencies
     - USD and KHR (Cambodian Riel) displayed on all prices
     - Exchange rate: 1 USD = 4,100 KHR
     - Both currencies shown for item prices, subtotal, discount, and total
@@ -99,10 +103,10 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
   - **Accent**: Green (142 76% 36%) - Success states and highlights
   - **Gradient Header**: Blue → Purple → Green gradient
 - **Typography**: Inter for UI, Roboto Mono for numbers/prices
-- **Layout**: Dark sidebar + gradient header + colorful main content
+- **Layout**: Light cyan sidebar + gradient header + colorful main content
 - **Background**: Subtle gradient from background to primary/5
 - **Components**: Shadcn UI with vibrant colorful styling
-- **Sidebar**: Professional dark blue with bright blue accents
+- **Sidebar**: Light cyan/turquoise (#b8e6f1) with dark text
 
 ## Features
 
