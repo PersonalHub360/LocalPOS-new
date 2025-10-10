@@ -380,8 +380,16 @@ export default function ItemManage() {
       
       let imported = 0;
       let skipped = 0;
+      const skipReasons: string[] = [];
+      
       for (const row of rows) {
-        if (!row || row.length < 6) continue;
+        if (!row || row.length < 6) {
+          if (row && row.length > 0) {
+            skipped++;
+            skipReasons.push(`Row with insufficient data (need at least 6 columns)`);
+          }
+          continue;
+        }
 
         const name = (row[0] || "").toString().trim();
         const categoryName = (row[1] || "").toString().trim();
@@ -391,9 +399,16 @@ export default function ItemManage() {
         const quantity = (row[5] || "").toString().trim();
         const description = (row[6] || "").toString().trim();
 
+        if (!name || !categoryName || !price || !unit || !quantity) {
+          skipped++;
+          skipReasons.push(`Row "${name || 'unnamed'}": Missing required fields`);
+          continue;
+        }
+
         const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
         if (!category) {
           skipped++;
+          skipReasons.push(`Row "${name}": Category "${categoryName}" not found`);
           continue;
         }
 
@@ -412,13 +427,20 @@ export default function ItemManage() {
         } catch (error) {
           console.error("Failed to import item:", name, error);
           skipped++;
+          skipReasons.push(`Row "${name}": Failed to save to database`);
         }
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      
+      if (skipReasons.length > 0) {
+        console.log("Import skip reasons:", skipReasons);
+      }
+      
       toast({
         title: "Import Complete",
-        description: `Successfully imported ${imported} items. ${skipped > 0 ? `${skipped} items skipped.` : ''}`,
+        description: `Successfully imported ${imported} items. ${skipped > 0 ? `${skipped} items skipped. Check console for details.` : ''}`,
+        variant: skipped > 0 ? "default" : "default",
       });
     };
 
@@ -431,13 +453,29 @@ export default function ItemManage() {
   };
 
   const handleDownloadSample = () => {
+    if (categories.length === 0) {
+      toast({
+        title: "No Categories",
+        description: "Please create at least one category before downloading the template",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Use actual categories from the system
     const sampleData = [
       ["Name", "Category", "Purchase Cost", "Sales Price", "Unit", "Quantity", "Description"],
-      ["Shrimp Basil Salad", "Salads", "6.00", "10.60", "plate", "50", "Fresh shrimp with basil and greens"],
-      ["Onion Rings", "Beverages", "4.50", "8.50", "serving", "100", "Crispy fried onion rings"],
-      ["Chicken Burger", "Soup", "6.50", "10.50", "piece", "60", "Juicy grilled chicken burger"],
-      ["Vegetable Pizza", "Pizza", "9.00", "15.00", "piece", "40", "Mixed vegetable pizza"],
+      ["Sample Item 1", categories[0].name, "6.00", "10.60", "plate", "50", "Example item description"],
+      ["Sample Item 2", categories[0].name, "4.50", "8.50", "serving", "100", "Example item description"],
     ];
+
+    // Add more examples if there are more categories
+    if (categories.length > 1) {
+      sampleData.push(["Sample Item 3", categories[1].name, "6.50", "10.50", "piece", "60", "Example item description"]);
+    }
+    if (categories.length > 2) {
+      sampleData.push(["Sample Item 4", categories[2].name, "9.00", "15.00", "piece", "40", "Example item description"]);
+    }
     
     const worksheet = XLSX.utils.aoa_to_sheet(sampleData);
     const workbook = XLSX.utils.book_new();
@@ -448,7 +486,7 @@ export default function ItemManage() {
     
     toast({
       title: "Success",
-      description: "Sample Excel template downloaded",
+      description: `Sample template downloaded with your categories: ${categories.map(c => c.name).join(', ')}`,
     });
   };
 

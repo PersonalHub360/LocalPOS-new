@@ -7,7 +7,12 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Smaller Product Cards** (NEW): Reduced product box size in Item Management
+  - **Fixed Import Items** (NEW): Import functionality now works correctly
+    - Sample template now uses YOUR actual categories instead of fake ones
+    - Better error messages showing exactly why items were skipped
+    - Detailed console logs for debugging import issues
+    - Validation for all required fields
+  - **Smaller Product Cards**: Reduced product box size in Item Management
     - Grid changed: 2-3-4-5-6 columns (mobile to 2xl screens)
     - Reduced spacing and padding for compact view
     - Smaller icons and buttons
