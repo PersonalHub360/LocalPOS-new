@@ -39,6 +39,19 @@ function getDateRange(filter: string, customDate?: string): { startDate: Date; e
         startDate: startOfWeek,
         endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
       };
+    case "this-month":
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return {
+        startDate: startOfMonth,
+        endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
+      };
+    case "last-month":
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return {
+        startDate: startOfLastMonth,
+        endDate: endOfLastMonth,
+      };
     case "custom":
       if (customDate) {
         const custom = new Date(customDate);

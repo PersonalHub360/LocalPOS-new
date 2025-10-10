@@ -7,10 +7,11 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Enhanced Date Filters** (NEW): More date filtering options
-    - Added "This Month" filter - shows all items created this month
-    - Added "Last Month" filter - shows all items created last month
-    - Complete date options: All Time, Today, Yesterday, This Month, Last Month, Custom Date
+  - **Enhanced Date Filters** (NEW): More date filtering options everywhere
+    - Added "This Month" filter - shows data for the current month
+    - Added "Last Month" filter - shows data for the previous month
+    - Applied to Dashboard, Item Management, and all reporting features
+    - Complete date options: All Time, Today, Yesterday, This Week, This Month, Last Month, Custom Date
     - Calendar picker for custom date selection
   - **Change Item Images Anytime**: Easy image management
     - Added "Change Image" button when editing items with images

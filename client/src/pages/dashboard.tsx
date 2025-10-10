@@ -130,6 +130,8 @@ export default function Dashboard() {
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="yesterday">Yesterday</SelectItem>
               <SelectItem value="this-week">This Week</SelectItem>
+              <SelectItem value="this-month">This Month</SelectItem>
+              <SelectItem value="last-month">Last Month</SelectItem>
               <SelectItem value="custom">Custom Date</SelectItem>
             </SelectContent>
           </Select>
