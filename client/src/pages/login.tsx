@@ -9,8 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Utensils, Info } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Utensils } from "lucide-react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -58,16 +57,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center auth-gradient p-4">
+      <Card className="w-full max-w-md glass-card border-0">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-full">
-              <Utensils className="h-10 w-10 text-primary" />
+            <div className="bg-white/20 p-3 rounded-full backdrop-blur-sm">
+              <Utensils className="h-10 w-10 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Restaurant POS</CardTitle>
-          <CardDescription>Sign in to your account to continue</CardDescription>
+          <CardTitle className="text-2xl text-white">Restaurant POS</CardTitle>
+          <CardDescription className="text-white/80">Sign in to your account to continue</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -77,7 +76,7 @@ export default function Login() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Username</FormLabel>
+                    <FormLabel className="text-white">Username</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -85,9 +84,10 @@ export default function Login() {
                         placeholder="Enter your username"
                         autoComplete="username"
                         disabled={loginMutation.isPending}
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 focus:ring-white/30"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-200" />
                   </FormItem>
                 )}
               />
@@ -96,7 +96,7 @@ export default function Login() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-white">Password</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -105,39 +105,23 @@ export default function Login() {
                         placeholder="Enter your password"
                         autoComplete="current-password"
                         disabled={loginMutation.isPending}
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 focus:ring-white/30"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-200" />
                   </FormItem>
                 )}
               />
               <Button
                 type="submit"
                 data-testid="button-login"
-                className="w-full"
+                className="w-full bg-white text-primary hover:bg-white/90 font-semibold"
                 disabled={loginMutation.isPending}
               >
                 {loginMutation.isPending ? "Signing in..." : "Sign in"}
               </Button>
             </form>
           </Form>
-          
-          <Alert className="mt-6 bg-primary/5 border-primary/20" data-testid="alert-credentials">
-            <Info className="h-4 w-4 text-primary" />
-            <AlertDescription className="ml-2">
-              <div className="space-y-1">
-                <p className="font-medium text-foreground">Default Login Credentials:</p>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Username:</span>
-                  <code className="px-2 py-1 bg-background rounded text-foreground font-mono">admin</code>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Password:</span>
-                  <code className="px-2 py-1 bg-background rounded text-foreground font-mono">admin123</code>
-                </div>
-              </div>
-            </AlertDescription>
-          </Alert>
         </CardContent>
       </Card>
     </div>

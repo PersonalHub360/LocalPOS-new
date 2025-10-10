@@ -1,272 +1,39 @@
 # BondPos POS System
 
 ## Overview
-A comprehensive Point of Sale (POS) system for restaurants featuring product catalog management, order processing, table tracking, and payment handling. Built with React, Express, and in-memory storage.
-
-## Current State
-- **Status**: In Development (Phase 8: Authentication System Complete)
-- **Last Updated**: October 10, 2025
-- **Recent Changes**: 
-  - **Enhanced Login Page** (NEW): Prominent credential display
-    - Beautiful info alert showing default username and password
-    - Username: `admin` and Password: `admin123` displayed in styled code boxes
-    - Info icon and clean layout for easy visibility
-    - Perfect for development and demo purposes
-  - **Enhanced Date Filters**: More date filtering options everywhere
-    - Added "This Month" filter - shows data for the current month
-    - Added "Last Month" filter - shows data for the previous month
-    - Applied to Dashboard, Item Management, and all reporting features
-    - Complete date options: All Time, Today, Yesterday, This Week, This Month, Last Month, Custom Date
-    - Calendar picker for custom date selection
-  - **Change Item Images Anytime**: Easy image management
-    - Added "Change Image" button when editing items with images
-    - Can replace item images without removing and re-uploading
-    - Clear buttons: "Change Image" and "Remove"
-    - Upload new images or use image URLs
-  - **Fixed Import Items**: Import functionality now fully working
-    - Fixed "PayloadTooLargeError" - increased server limit to 50MB for image uploads
-    - Sample template now uses YOUR actual categories instead of fake ones
-    - Better error messages showing exactly why items were skipped
-    - Detailed console logs for debugging import issues
-    - Validation for all required fields
-    - Can now import items with images without errors!
-  - **Smaller Product Cards**: Reduced product box size in Item Management
-    - Grid changed: 2-3-4-5-6 columns (mobile to 2xl screens)
-    - Reduced spacing and padding for compact view
-    - Smaller icons and buttons
-    - More items visible on screen
-  - **Dark Sidebar**: Updated sidebar to dark blue-gray color
-    - Sidebar color changed to #2c3e42 (dark blue-gray)
-    - White text for optimal contrast on dark background
-    - Professional dark theme sidebar
-  - **Dual Currency Receipt**: Receipt/slip now displays both currencies
-    - USD and KHR (Cambodian Riel) displayed on all prices
-    - Exchange rate: 1 USD = 4,100 KHR
-    - Both currencies shown for item prices, subtotal, discount, and total
-    - Clean dual-line format: USD on top, KHR below
-  - **Colorful UI Design**: Complete vibrant color makeover
-    - Blue-Purple-Green gradient header with glassmorphic buttons
-    - Dark blue professional sidebar with bright blue accents
-    - Vibrant color palette: Primary Blue, Secondary Purple, Accent Green
-    - Colorful chart colors and card variants
-    - Subtle gradient background throughout the app
-    - Modern glassmorphic design elements
-  - **Production Login Fix**: Fixed session authentication for production
-    - Added `trust proxy` setting for production deployments behind reverse proxy
-    - Configured `sameSite: "none"` cookie attribute for production
-    - Sessions now work correctly in production environment
-  - **Authentication System**: Complete session-based authentication with security
-    - User login page with form validation
-    - Session-based authentication using express-session
-    - Password hashing with bcrypt for security
-    - Authentication middleware protecting all API routes
-    - User information display in header with logout functionality
-    - Default admin user: username "admin", password "admin123"
-    - Unauthorized API requests return 401 status
-    - Fully tested authentication flow (login, protected routes, logout)
-  - **Complete POS Order Workflow**: Full order lifecycle with transactional safety
-    - Draft List modal with Edit/Print/Delete actions for all saved drafts
-    - Edit Draft functionality restores items to cart without data loss
-    - Receipt/Invoice Preview dialog with print functionality
-    - Payment Methods modal (ABA, Acleda, Cash, Due, Card Payment)
-    - Complete order flow: payment → receipt → save to sales with metadata
-    - Transactional draft deletion (only deletes after successful completion/save)
-    - Completed orders persist as sales records with payment details
-  - **Role Permissions System**: Fully functional permission controls in Settings → User & Access Management
-    - 4 permission switches: Access to Reports, Access to Settings, Process Refunds, Manage Inventory
-    - Backend persistence with schema validation
-    - All permissions save and load from API with proper state management
-  - **Rebranding Complete**: Changed application name from "RestroBit" to "BondPos" across all files
-    - Updated UI (sidebar, page title), documentation, schema defaults, and storage
-
-## Project Architecture
-
-### Frontend (React + TypeScript)
-- **Pages**:
-  - `/login` - User authentication page
-  - `/` - POS (Point of Sale) interface
-  - `/dashboard` - Dashboard overview
-  - `/tables` - Table Management interface
-  - `/sales` - Sales Management interface
-  - `/expenses` - Expense Management interface
-  - `/items` - Item/Inventory Management interface
-  - `/purchases` - Purchase Management interface
-  - `/hrm` - Human Resource Management interface
-  - `/reports` - Reports and analytics interface
-  - `/settings` - System settings and configuration
-- **Components**:
-  - `AuthWrapper`: Authentication wrapper that redirects to login if not authenticated
-  - `AppSidebar`: Navigation sidebar with all menu items
-  - `AppHeader`: Top header with conditional POS buttons (New, QR Menu Orders, Draft List, Table Order), user info, logout button, and theme toggle
-  - `ProductCard`: Individual product display with add-to-order functionality
-  - `OrderPanel`: Right-side order management panel with items, quantities, totals, action buttons
-  - `PaymentModal`: Payment processing dialog with 5 payment methods (ABA, Acleda, Cash, Due, Card)
-  - `DraftListModal`: Draft order management with Edit/Print/Delete actions
-  - `ReceiptPrintModal`: Invoice preview and print dialog
-- **State Management**: React hooks + TanStack Query for server state
-- **Styling**: Tailwind CSS + Shadcn UI components with orange accent colors
-
-### Backend (Express + TypeScript)
-- **Storage**: In-memory MemStorage implementation
-- **Authentication**: Session-based authentication with express-session and bcrypt password hashing
-- **API Endpoints**: RESTful API for products, categories, orders, tables, items, purchases, employees, authentication
-- **Security**: All API routes protected with authentication middleware (except /api/auth/* routes)
-- **Data Models**:
-  - Users (with username, password hash, full name, email, role, employee ID, status - full CRUD support)
-  - Categories (with name and slug - full CRUD support)
-  - Products (with prices, images, category, unit, quantity, description, createdAt - full CRUD support)
-  - Tables (with capacity, description, status tracking - full CRUD support)
-  - Orders (with items, totals, discounts, status, payment method, payment status, completed timestamp - full CRUD support)
-  - OrderItems (join table for order-product relationships)
-  - Purchases (with item details, quantity, price, purchase date - full CRUD support)
-  - Employees (with employee ID, position, department, salary, contact info, status - full CRUD support)
-  - Attendance (schema defined, ready for implementation)
-  - Leave (schema defined, ready for implementation)
-  - Payroll (schema defined, ready for implementation)
-
-### Design System
-- **Color Scheme**: Vibrant multi-color palette
-  - **Primary**: Blue (217 91% 60%) - Main actions and branding
-  - **Secondary**: Purple (280 65% 60%) - Secondary actions
-  - **Accent**: Green (142 76% 36%) - Success states and highlights
-  - **Gradient Header**: Blue → Purple → Green gradient
-- **Typography**: Inter for UI, Roboto Mono for numbers/prices
-- **Layout**: Dark sidebar + gradient header + colorful main content
-- **Background**: Subtle gradient from background to primary/5
-- **Components**: Shadcn UI with vibrant colorful styling
-- **Sidebar**: Dark blue-gray (#2c3e42) with white text
-
-## Features
-
-### Implemented (MVP)
-- [x] **Authentication System** - Secure user authentication with:
-  - Session-based authentication using express-session
-  - Password hashing with bcrypt
-  - Login page with form validation
-  - Authentication middleware protecting all API routes
-  - User info display and logout in header
-  - Default admin user (username: admin, password: admin123)
-  - Redirect to login when not authenticated
-  - Full security testing (unauthorized requests return 401)
-- [x] Product catalog with category filtering
-- [x] Real-time order management
-- [x] Quantity adjustment with +/- controls
-- [x] Order total calculations (subtotal, discounts, total)
-- [x] Table selection and dining option selection
-- [x] **Complete POS Order Workflow**:
-  - Draft order saving with persistent storage
-  - Draft List modal (view all drafts, Edit/Print/Delete actions)
-  - Edit Draft (restores items to cart with transactional safety)
-  - Receipt/Invoice preview with print functionality
-  - Payment Methods modal (ABA, Acleda, Cash, Due, Card Payment)
-  - Complete order flow: payment selection → receipt print → save to sales
-  - Transactional safety: drafts only deleted after successful completion
-  - Sales records: completed orders with payment metadata (method, status, timestamp)
-- [x] Product search functionality
-- [x] KOT (Kitchen Order Ticket) printing
-- [x] **Item Management** - Comprehensive inventory management with:
-  - Add/Edit items with image URL, name, category, price, unit, quantity, description
-  - Category management (create, edit, delete categories)
-  - Search by item name or description
-  - Filter by category and date (All Time, Today, Yesterday, Custom Date)
-  - Items grid view with responsive cards
-  - Import items from Excel (.xlsx, .xls) or CSV files
-  - Download sample Excel template with example data
-  - Export items to CSV format
-  - Import tracking with detailed feedback (imported/skipped counts)
-  - Full CRUD operations with validation
-- [x] **Purchase Management** - Complete purchase order management with:
-  - Add/Edit purchases with item name, category, quantity, unit, price, purchase date, optional image
-  - Category management for purchases
-  - Search by item name
-  - Filter by category and date (All Time, Today, Yesterday, Custom Date)
-  - Import purchases from Excel (.xlsx, .xls) or CSV files
-  - Download sample Excel template with proper structure and example data
-  - Export purchases to CSV format
-  - View and print purchase receipts
-  - Full CRUD operations with validation and error handling
-- [x] **Table Management** - Complete table management system with:
-  - Add/Edit tables with table number, capacity, description
-  - View table details
-  - Status tracking (available/occupied)
-  - Delete tables
-  - Full CRUD operations with validation
-- [x] **HRM (Human Resource Management)** - Employee management foundation with:
-  - **Employee Management Module** (Fully Functional):
-    - Add/Edit employees with employee ID, name, position, department, email, phone, joining date, salary, photo URL, status
-    - View employee details in formatted dialog
-    - Delete employees with confirmation
-    - Employee list table with all details and status badges
-    - Form validation with Zod schemas
-    - Active/Inactive status tracking
-    - Import employees from Excel (.xlsx, .xls) or CSV files
-    - Export employees to CSV format
-    - Download employee sample template with proper structure and example data
-    - Upload employee schedules via Excel file
-    - Download schedule sample template with shift timings and day-off examples
-    - Full CRUD operations
-  - **Module Structure** (Ready for Implementation):
-    - Attendance Management tab (track check-in/out, mark present/absent, export reports)
-    - Leave Management tab (apply for leave, approve/reject requests, track leave balance)
-    - Payroll & Salary tab (manage salary records, generate payslips, calculate bonuses/deductions)
-    - Reports & Analytics tab (export HR summaries)
-  - Database schemas defined for all modules (employees, attendance, leave, payroll)
-  - Tab-based navigation with icons for easy module access
-
-### Navigation Structure (Sidebar)
-- Dashboard - Overview and key metrics
-- POS - Point of Sale interface (fully functional)
-- Table - Table management
-- Sales manage - Sales activities and records
-- Expense Manage - Business expense tracking
-- Item Manage - Inventory and menu items
-- Purchase Manage - Purchase orders and vendors
-- HRM - Human resource management
-- Reports - Business reports and analytics
-- Settings - System configuration
-
-- [x] **Comprehensive Reporting System** - Full-featured reports dashboard with:
-  - Report type selector (Sales, Inventory, Payments, Discounts, Refunds, Staff Performance)
-  - Date range filters (Today, Yesterday, Last 7 Days, Last Month, Custom Range with date pickers)
-  - Summary KPI tiles (Total Revenue, Transactions, Average Sale Value, Total Discounts)
-  - Payment methods breakdown with percentage distribution
-  - Detailed transaction tables with sortable columns
-  - Export to CSV functionality
-  - Print report capability
-  - Filter and view transaction details
-- [x] **System Settings** - Complete settings configuration with 10 sections:
-  - General Settings: Business info, logo, address, contact, date/time format, terminal ID
-  - Payment Methods: Enable/disable payment options (Cash, Card, ABA, Acleda, Credit), set defaults, min/max amounts
-  - Tax & Discount: VAT/service tax rates, default discounts, percentage/fixed amount options
-  - Receipt & Invoice: Custom header/footer text, logo, auto-print, tax breakdown, invoice numbering
-  - User & Access Management: Add/remove staff, assign roles (Manager, Cashier), set permissions
-  - Printer & Hardware: Configure receipt/kitchen printers, barcode scanner, cash drawer, paper size
-  - Currency & Localization: Default currency (USD, KHR, EUR, GBP), language, decimal places, rounding rules
-  - Backup & Data Management: Auto-backup frequency, storage options (local/cloud), manual backup/restore
-  - Notifications & Alerts: Low stock alerts, sale notifications, discount alerts, system updates
-  - Customization & Themes: Color themes, layout preferences (grid/list), font size, compact mode
-
-### Future Enhancements
-- [ ] Dashboard with sales analytics (page created, needs implementation)
-- [ ] Sales management features:
-  - View all completed orders (sales records)
-  - Filter by date range, payment method, dining option
-  - Export sales data to CSV
-  - Refund processing with permission controls
-- [ ] Expense tracking system (page created, needs implementation)
-- [ ] HRM additional modules:
-  - [ ] Attendance Management - Daily attendance tracking with check-in/out times
-  - [ ] Leave Management - Leave application and approval workflow
-  - [ ] Payroll & Salary - Salary records and payslip generation
-  - [ ] HR Reports & Analytics - Export attendance, leave, and payroll summaries
-
-## Development Notes
-- Using in-memory storage (no database persistence)
-- Orange accent color (#EA580C) matches BondPos branding
-- Responsive design optimized for tablet and desktop use
-- All interactive elements have proper data-testid attributes for testing
+BondPos is a comprehensive Point of Sale (POS) system designed for restaurants, offering robust features for product catalog management, real-time order processing, table tracking, and secure payment handling. The system aims to streamline restaurant operations with its intuitive interface and powerful backend, improving efficiency and customer service. Key capabilities include a complete POS order workflow, detailed item and purchase management, a comprehensive HRM system, and a full-featured reporting suite. The project emphasizes a modern, vibrant UI with a glassmorphic design, focusing on user experience and transactional safety.
 
 ## User Preferences
 - Clean, professional UI matching modern POS systems
 - Fast, efficient order processing workflow
 - Touch-friendly interface for tablet use
+
+## System Architecture
+
+### UI/UX Decisions
+The system features a vibrant, modern UI with a multi-color palette (Blue, Purple, Green) and a glassmorphic design aesthetic. It includes a gradient header, a dark blue-gray sidebar, and subtle gradient backgrounds throughout. Typography uses Inter for UI text and Roboto Mono for numerical displays. Shadcn UI components are heavily utilized, styled with an orange accent color to align with BondPos branding. The design is responsive, optimized for tablet and desktop use.
+
+### Technical Implementations
+- **Frontend**: Built with React and TypeScript, leveraging React hooks and TanStack Query for state management. Styling is handled with Tailwind CSS and Shadcn UI.
+- **Backend**: Developed using Express and TypeScript.
+- **Authentication**: Session-based authentication is implemented using `express-session` and `bcrypt` for password hashing, securing all API routes with middleware.
+- **Storage**: Currently uses an in-memory `MemStorage` implementation for all data.
+- **API**: Provides RESTful APIs for managing products, categories, orders, tables, items, purchases, employees, and authentication.
+- **Core Workflows**: Includes a complete POS order workflow with draft management, receipt printing, and multiple payment methods. Comprehensive CRUD operations are supported across all management modules (Items, Purchases, Tables, Employees).
+- **Permissions**: Role-based permissions system with granular controls for reports, settings, refunds, and inventory.
+
+### Feature Specifications
+- **Authentication**: Secure login, session management, password hashing, and protected API routes.
+- **POS Order Workflow**: Draft saving, editing, receipt generation, diverse payment methods (Cash, Card, ABA, Acleda, Due), and transactional safety for order completion.
+- **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV).
+- **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export.
+- **Table Management**: CRUD for tables, capacity tracking, and status management.
+- **HRM**: Full employee management (CRUD, import/export, schedule upload). Schemas defined for Attendance, Leave, and Payroll modules.
+- **Reporting System**: Comprehensive reports for Sales, Inventory, Payments, Discounts, Refunds, and Staff Performance with various date filters and export options.
+- **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization.
+
+## External Dependencies
+- **Frontend Libraries**: React, TypeScript, TanStack Query, Tailwind CSS, Shadcn UI.
+- **Backend Libraries**: Express, TypeScript, `express-session`, `bcrypt`.
+- **Payment Gateways**: Conceptual integration with ABA, Acleda (specific APIs not detailed, but mentioned as payment methods).
+- **Import/Export**: Relies on functionality to process Excel (.xlsx, .xls) and CSV files for data import and export.
