@@ -25,6 +25,8 @@ const DATE_FILTER_OPTIONS = [
   { label: "All Time", value: "all" },
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
+  { label: "This Month", value: "thisMonth" },
+  { label: "Last Month", value: "lastMonth" },
   { label: "Custom Date", value: "custom" },
 ];
 
@@ -55,24 +57,35 @@ export default function ItemManage() {
     const matchesCategory = selectedCategory === "all" || product.categoryId === selectedCategory;
     
     let matchesDate = true;
+    const productDate = new Date(product.createdAt);
+    productDate.setHours(0, 0, 0, 0);
+    
     if (dateFilter === "today") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const productDate = new Date(product.createdAt);
-      productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === today.getTime();
     } else if (dateFilter === "yesterday") {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
-      const productDate = new Date(product.createdAt);
-      productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === yesterday.getTime();
+    } else if (dateFilter === "thisMonth") {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      endOfMonth.setHours(23, 59, 59, 999);
+      matchesDate = productDate.getTime() >= startOfMonth.getTime() && productDate.getTime() <= endOfMonth.getTime();
+    } else if (dateFilter === "lastMonth") {
+      const now = new Date();
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      startOfLastMonth.setHours(0, 0, 0, 0);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      endOfLastMonth.setHours(23, 59, 59, 999);
+      matchesDate = productDate.getTime() >= startOfLastMonth.getTime() && productDate.getTime() <= endOfLastMonth.getTime();
     } else if (dateFilter === "custom" && customDate) {
       const selectedDate = new Date(customDate);
       selectedDate.setHours(0, 0, 0, 0);
-      const productDate = new Date(product.createdAt);
-      productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === selectedDate.getTime();
     }
 

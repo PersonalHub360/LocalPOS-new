@@ -7,7 +7,12 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Change Item Images Anytime** (NEW): Easy image management
+  - **Enhanced Date Filters** (NEW): More date filtering options
+    - Added "This Month" filter - shows all items created this month
+    - Added "Last Month" filter - shows all items created last month
+    - Complete date options: All Time, Today, Yesterday, This Month, Last Month, Custom Date
+    - Calendar picker for custom date selection
+  - **Change Item Images Anytime**: Easy image management
     - Added "Change Image" button when editing items with images
     - Can replace item images without removing and re-uploading
     - Clear buttons: "Change Image" and "Remove"
