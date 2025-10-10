@@ -155,19 +155,19 @@ function AppHeader() {
 
   return (
     <>
-      <header className="h-16 border-b border-border bg-background px-6 flex items-center gap-4">
-        <SidebarTrigger data-testid="button-sidebar-toggle" />
+      <header className="h-16 border-b border-border bg-gradient-to-r from-primary via-secondary to-accent px-6 flex items-center gap-4">
+        <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white hover:bg-white/20" />
         <div className="flex-1" />
         {isPOSPage && (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2" data-testid="button-new-order">
+            <Button variant="outline" size="sm" className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30" data-testid="button-new-order">
               <Plus className="w-4 h-4" />
               New
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
-              className="gap-2" 
+              className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30" 
               onClick={() => setQrOrdersOpen(true)}
               data-testid="button-menu-orders"
             >
@@ -179,11 +179,11 @@ function AppHeader() {
               size="sm" 
               onClick={() => setDraftListModalOpen(true)}
               data-testid="button-draft-list"
-              className="gap-2"
+              className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
             >
               Draft List
               {draftOrders.length > 0 && (
-                <Badge variant="secondary" className="ml-1" data-testid="badge-draft-count">
+                <Badge variant="secondary" className="ml-1 bg-white text-primary" data-testid="badge-draft-count">
                   {draftOrders.length}
                 </Badge>
               )}
@@ -193,11 +193,11 @@ function AppHeader() {
               size="sm" 
               onClick={() => setTableOrderModalOpen(true)}
               data-testid="button-table-order"
-              className="gap-2"
+              className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
             >
               Table Order
               {tables.length > 0 && (
-                <Badge variant="secondary" className="ml-1" data-testid="badge-table-count">
+                <Badge variant="secondary" className="ml-1 bg-white text-accent" data-testid="badge-table-count">
                   {tables.length}
                 </Badge>
               )}
@@ -206,7 +206,7 @@ function AppHeader() {
         )}
         {user && (
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-user-info">
+            <div className="flex items-center gap-2 text-sm text-white font-medium" data-testid="text-user-info">
               <User className="w-4 h-4" />
               <span>{user.fullName || user.username}</span>
             </div>
@@ -216,7 +216,7 @@ function AppHeader() {
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               data-testid="button-logout"
-              className="gap-2"
+              className="gap-2 text-white hover:bg-white/20"
             >
               <LogOut className="w-4 h-4" />
               Logout
@@ -268,7 +268,7 @@ function AuthenticatedApp() {
         <AppSidebar />
         <div className="flex flex-col flex-1">
           <AppHeader />
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-hidden bg-gradient-to-br from-background via-background to-primary/5">
             <Router />
           </main>
         </div>

@@ -25,6 +25,7 @@ export function ThemeToggle() {
       size="icon"
       onClick={toggleTheme}
       data-testid="button-theme-toggle"
+      className="text-white hover:bg-white/20"
     >
       {theme === "light" ? (
         <Moon className="h-5 w-5" />
