@@ -4,12 +4,12 @@ import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Utensils } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -21,6 +21,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -57,54 +58,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 modern-login-bg items-center justify-center p-12">
-        <div className="max-w-md text-white space-y-6 animate-fade-in-up">
-          <div className="flex items-center gap-3">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Utensils className="h-8 w-8 text-white" />
+    <div className="min-h-screen flex items-center justify-center wavy-login-bg p-4">
+      <div className="w-full max-w-5xl wavy-card animate-fade-in-scale">
+        {/* Wave Decorations */}
+        <div className="wave-decoration wave-top" />
+        <div className="wave-decoration wave-bottom" />
+        
+        {/* Content */}
+        <div className="relative z-10 grid md:grid-cols-2 gap-8 p-8 md:p-12">
+          {/* Left Side - Login Form */}
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Hello!</h1>
+              <p className="text-muted-foreground">Sign in to your account</p>
             </div>
-            <h1 className="text-5xl font-bold">BondPos</h1>
-          </div>
-          <p className="text-xl text-white/90 leading-relaxed">
-            Modern Point of Sale System for your business
-          </p>
-          <div className="space-y-3 pt-4">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-white/80" />
-              <p className="text-white/80">Fast & Efficient Order Processing</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-white/80" />
-              <p className="text-white/80">Real-time Inventory Management</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-white/80" />
-              <p className="text-white/80">Comprehensive Reporting</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <Card className="w-full max-w-md modern-login-card shadow-2xl border animate-fade-in-up">
-          <CardHeader className="space-y-2 pb-6">
-            <div className="flex lg:hidden items-center justify-center gap-2 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                <Utensils className="h-6 w-6 text-white" />
-              </div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                BondPos
-              </h1>
-            </div>
-            <CardTitle className="text-3xl font-bold text-center">Welcome Back</CardTitle>
-            <CardDescription className="text-center text-base">
-              Enter your credentials to access your account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                 <FormField
@@ -112,54 +80,82 @@ export default function Login() {
                   name="username"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-medium">Username</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          data-testid="input-username"
-                          placeholder="Enter your username"
-                          autoComplete="username"
-                          disabled={loginMutation.isPending}
-                          className="modern-input h-12 text-base"
-                        />
+                        <div className="input-with-icon">
+                          <div className="input-icon">
+                            <Mail className="w-4 h-4" />
+                          </div>
+                          <Input
+                            {...field}
+                            data-testid="input-username"
+                            placeholder="Username"
+                            autoComplete="username"
+                            disabled={loginMutation.isPending}
+                          />
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-base font-medium">Password</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          data-testid="input-password"
-                          type="password"
-                          placeholder="Enter your password"
-                          autoComplete="current-password"
-                          disabled={loginMutation.isPending}
-                          className="modern-input h-12 text-base"
-                        />
+                        <div className="input-with-icon">
+                          <div className="input-icon">
+                            <Lock className="w-4 h-4" />
+                          </div>
+                          <Input
+                            {...field}
+                            data-testid="input-password"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Password"
+                            autoComplete="current-password"
+                            disabled={loginMutation.isPending}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            data-testid="button-toggle-password"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="w-5 h-5" />
+                            ) : (
+                              <Eye className="w-5 h-5" />
+                            )}
+                          </button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <Button
                   type="submit"
                   data-testid="button-login"
-                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity"
+                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600 text-white shadow-lg shadow-purple-500/30"
                   disabled={loginMutation.isPending}
                 >
-                  {loginMutation.isPending ? "Signing in..." : "Sign in"}
+                  {loginMutation.isPending ? "SIGNING IN..." : "SIGN IN"}
                 </Button>
               </form>
             </Form>
-          </CardContent>
-        </Card>
+          </div>
+
+          {/* Right Side - Welcome Message */}
+          <div className="flex flex-col items-center justify-center text-center space-y-4 py-8">
+            <h2 className="text-4xl font-bold">Welcome Back!</h2>
+            <p className="text-muted-foreground max-w-sm leading-relaxed">
+              Access your BondPos dashboard to manage orders, track inventory, and view comprehensive reports for your business.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -339,49 +339,108 @@
     inset: -1px;
   }
 
-  /* Modern Login Page */
-  .modern-login-bg {
-    background: linear-gradient(135deg, 
-      hsl(217, 91%, 60%) 0%,
-      hsl(280, 65%, 60%) 100%);
+  /* Wavy Login Page */
+  .wavy-login-bg {
+    background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
     position: relative;
   }
 
-  .dark .modern-login-bg {
-    background: linear-gradient(135deg, 
-      hsl(217, 91%, 35%) 0%,
-      hsl(280, 65%, 35%) 100%);
+  .dark .wavy-login-bg {
+    background: linear-gradient(135deg, #1e1b4b 0%, #2e1065 100%);
   }
 
-  .modern-login-card {
-    background: hsl(var(--card));
+  .wavy-card {
+    background: white;
+    border-radius: 2rem;
+    box-shadow: 0 20px 60px rgba(139, 92, 246, 0.15);
+    position: relative;
+    overflow: hidden;
     transition: all 0.3s ease;
   }
 
-  .modern-login-card:hover {
-    transform: translateY(-2px);
+  .dark .wavy-card {
+    background: hsl(var(--card));
   }
 
-  .modern-input {
+  .wavy-card:hover {
+    box-shadow: 0 25px 70px rgba(139, 92, 246, 0.25);
+  }
+
+  .wave-decoration {
+    position: absolute;
+    background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+  }
+
+  .wave-top {
+    top: 0;
+    right: 0;
+    width: 45%;
+    height: 35%;
+    border-bottom-left-radius: 60% 40%;
+  }
+
+  .wave-bottom {
+    bottom: 0;
+    right: 0;
+    width: 50%;
+    height: 40%;
+    border-top-left-radius: 60% 45%;
+  }
+
+  .input-with-icon {
+    position: relative;
+  }
+
+  .input-with-icon input {
+    padding-left: 3.5rem;
+    background: #f8f9ff;
+    border: none;
+    height: 3.5rem;
+    border-radius: 0.75rem;
     transition: all 0.2s ease;
   }
 
-  .modern-input:focus {
-    transform: scale(1.01);
+  .dark .input-with-icon input {
+    background: hsl(var(--muted));
   }
 
-  @keyframes fadeInUp {
+  .input-with-icon input:focus {
+    background: white;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  }
+
+  .dark .input-with-icon input:focus {
+    background: hsl(var(--card));
+  }
+
+  .input-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+    border-radius: 0.5rem;
+    color: white;
+    pointer-events: none;
+  }
+
+  @keyframes fadeInScale {
     from {
       opacity: 0;
-      transform: translateY(20px);
+      transform: scale(0.95);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
+      transform: scale(1);
     }
   }
 
-  .animate-fade-in-up {
-    animation: fadeInUp 0.6s ease-out;
+  .animate-fade-in-scale {
+    animation: fadeInScale 0.5s ease-out;
   }
 }

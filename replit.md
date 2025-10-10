@@ -13,7 +13,7 @@ BondPos is a comprehensive Point of Sale (POS) system designed for restaurants, 
 ### UI/UX Decisions
 The system features a vibrant, modern UI with a multi-color palette (Blue, Purple, Green) and a contemporary design aesthetic. It includes a gradient header, a dark blue-gray sidebar, and subtle gradient backgrounds throughout. Typography uses Inter for UI text and Roboto Mono for numerical displays. Shadcn UI components are heavily utilized, styled with an orange accent color to align with BondPos branding. The design is responsive, optimized for tablet and desktop use.
 
-**Login Page**: Modern split-screen design with gradient branding panel (desktop) and clean white card form. Features smooth animations, larger input fields, and responsive layout that adapts beautifully to mobile and desktop screens.
+**Login Page**: Elegant wavy card design with purple gradient decorative waves. Features a centered card with "Hello!" greeting on the left and "Welcome Back!" message on the right. Input fields have purple gradient icons (Mail, Lock) with light backgrounds. Includes show/hide password toggle and purple gradient sign-in button. Fully responsive with smooth fade-in-scale animation.
 
 ### Technical Implementations
 - **Frontend**: Built with React and TypeScript, leveraging React hooks and TanStack Query for state management. Styling is handled with Tailwind CSS and Shadcn UI.
