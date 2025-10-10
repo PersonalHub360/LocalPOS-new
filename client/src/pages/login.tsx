@@ -139,7 +139,7 @@ export default function Login() {
                 <Button
                   type="submit"
                   data-testid="button-login"
-                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600 text-white shadow-lg shadow-purple-500/30"
+                  className="w-full h-12 text-base font-semibold bg-gradient-to-r from-purple-300 to-purple-200 hover:from-purple-400 hover:to-purple-300 text-purple-900 shadow-lg shadow-purple-300/40"
                   disabled={loginMutation.isPending}
                 >
                   {loginMutation.isPending ? "SIGNING IN..." : "SIGN IN"}
