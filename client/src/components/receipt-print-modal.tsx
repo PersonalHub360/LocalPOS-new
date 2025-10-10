@@ -78,7 +78,7 @@ export function ReceiptPrintModal({
                   BondPos
                 </h2>
               </div>
-              <p className="text-sm text-muted-foreground font-medium">Restaurant POS System</p>
+              <p className="text-sm text-muted-foreground font-medium">Point of Sale System</p>
               <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="w-3 h-3" />
                 <span>{format(new Date(), "MMM dd, yyyy HH:mm")}</span>

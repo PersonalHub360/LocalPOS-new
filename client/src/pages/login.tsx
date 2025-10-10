@@ -65,7 +65,7 @@ export default function Login() {
               <Utensils className="h-10 w-10 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl text-white">Restaurant POS</CardTitle>
+          <CardTitle className="text-2xl text-white">BondPos</CardTitle>
           <CardDescription className="text-white/80">Sign in to your account to continue</CardDescription>
         </CardHeader>
         <CardContent>
