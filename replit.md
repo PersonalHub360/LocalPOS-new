@@ -7,7 +7,12 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Enhanced Date Filters** (NEW): More date filtering options everywhere
+  - **Enhanced Login Page** (NEW): Prominent credential display
+    - Beautiful info alert showing default username and password
+    - Username: `admin` and Password: `admin123` displayed in styled code boxes
+    - Info icon and clean layout for easy visibility
+    - Perfect for development and demo purposes
+  - **Enhanced Date Filters**: More date filtering options everywhere
     - Added "This Month" filter - shows data for the current month
     - Added "Last Month" filter - shows data for the previous month
     - Applied to Dashboard, Item Management, and all reporting features

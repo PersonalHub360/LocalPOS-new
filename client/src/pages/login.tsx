@@ -9,7 +9,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Utensils } from "lucide-react";
+import { Utensils, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -120,9 +121,23 @@ export default function Login() {
               </Button>
             </form>
           </Form>
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            <p>Default credentials: admin / admin123</p>
-          </div>
+          
+          <Alert className="mt-6 bg-primary/5 border-primary/20" data-testid="alert-credentials">
+            <Info className="h-4 w-4 text-primary" />
+            <AlertDescription className="ml-2">
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">Default Login Credentials:</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Username:</span>
+                  <code className="px-2 py-1 bg-background rounded text-foreground font-mono">admin</code>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Password:</span>
+                  <code className="px-2 py-1 bg-background rounded text-foreground font-mono">admin123</code>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
     </div>
