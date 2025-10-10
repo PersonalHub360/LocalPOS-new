@@ -631,22 +631,43 @@ export default function ItemManage() {
                       <FormLabel>Item Image (optional)</FormLabel>
                       
                       {imagePreview ? (
-                        <div className="relative w-full h-48 rounded-md overflow-hidden border">
-                          <img
-                            src={imagePreview}
-                            alt="Preview"
-                            className="w-full h-full object-cover"
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="absolute top-2 right-2"
-                            onClick={handleRemoveImage}
-                            data-testid="button-remove-image"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
+                        <div className="space-y-3">
+                          <div className="relative w-full h-48 rounded-md overflow-hidden border">
+                            <img
+                              src={imagePreview}
+                              alt="Preview"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              id="item-image-change"
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleImageUpload}
+                              data-testid="input-image-change"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => document.getElementById('item-image-change')?.click()}
+                              data-testid="button-change-image"
+                            >
+                              <ImagePlus className="w-4 h-4 mr-2" />
+                              Change Image
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              onClick={handleRemoveImage}
+                              data-testid="button-remove-image"
+                            >
+                              <X className="w-4 h-4 mr-2" />
+                              Remove
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <div className="space-y-3">

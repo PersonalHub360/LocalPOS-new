@@ -7,7 +7,12 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Fixed Import Items** (NEW): Import functionality now fully working
+  - **Change Item Images Anytime** (NEW): Easy image management
+    - Added "Change Image" button when editing items with images
+    - Can replace item images without removing and re-uploading
+    - Clear buttons: "Change Image" and "Remove"
+    - Upload new images or use image URLs
+  - **Fixed Import Items**: Import functionality now fully working
     - Fixed "PayloadTooLargeError" - increased server limit to 50MB for image uploads
     - Sample template now uses YOUR actual categories instead of fake ones
     - Better error messages showing exactly why items were skipped
