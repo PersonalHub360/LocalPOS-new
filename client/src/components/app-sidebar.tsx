@@ -9,17 +9,22 @@ import {
   UserCog,
   BarChart3,
   Settings,
-  Utensils,
-  User,
+  ChevronRight,
+  Store,
 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { cn } from "@/lib/utils";
 
 const menuItems = [
   {
@@ -79,56 +84,60 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-            <Utensils className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-bold text-sidebar-foreground">
-            RestaurantPOS
-          </span>
-        </div>
-      </SidebarHeader>
-      <SidebarContent className="px-3 py-4">
-        <div className="space-y-1">
-          {menuItems.map((item) => {
-            const isActive = location === item.url;
-            const Icon = item.icon;
-            
-            return (
-              <Link
-                key={item.title}
-                href={item.url}
-                data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <div
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-all cursor-pointer hover-elevate active-elevate-2",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-sidebar-foreground"
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">
-                    {item.title}
-                  </span>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Store className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">BondPos</span>
+                  <span className="truncate text-xs">Restaurant POS</span>
                 </div>
               </Link>
-            );
-          })}
-        </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Platform</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {menuItems.map((item) => {
+                const isActive = location === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-3 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-md hover-elevate cursor-pointer" data-testid="sidebar-profile">
-          <div className="w-9 h-9 rounded-md bg-primary flex items-center justify-center">
-            <User className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Admin User</p>
-            <p className="text-xs text-muted-foreground truncate">Restaurant Manager</p>
-          </div>
-        </div>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" data-testid="sidebar-profile">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <span className="text-xs font-semibold">AD</span>
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold">Admin</span>
+                <span className="truncate text-xs">admin@bondpos.com</span>
+              </div>
+              <ChevronRight className="ml-auto size-4" />
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
