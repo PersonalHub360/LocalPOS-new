@@ -32,6 +32,17 @@ interface ReceiptPrintModalProps {
   onPrint: () => void;
 }
 
+// Exchange rate: 1 USD = 4100 KHR (Cambodian Riel)
+const USD_TO_KHR = 4100;
+
+function formatDualCurrency(usdAmount: number) {
+  const khrAmount = usdAmount * USD_TO_KHR;
+  return {
+    usd: `$${usdAmount.toFixed(2)}`,
+    khr: `${khrAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}៛`
+  };
+}
+
 export function ReceiptPrintModal({
   open,
   onClose,
@@ -48,7 +59,7 @@ export function ReceiptPrintModal({
       <DialogContent className="sm:max-w-md" data-testid="modal-receipt-print">
         <DialogHeader className="space-y-3 pb-2">
           <div className="flex items-center justify-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
               <Receipt className="w-5 h-5 text-primary-foreground" />
             </div>
             <DialogTitle className="text-xl">Receipt Preview</DialogTitle>
@@ -57,13 +68,13 @@ export function ReceiptPrintModal({
 
         <div className="space-y-4 py-4" id="receipt-content">
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-orange-600/5 rounded-lg -z-10" />
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-lg -z-10" />
             <div className="text-center space-y-2 py-6 px-4">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-orange-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                   <Utensils className="w-4 h-4 text-primary-foreground" />
                 </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-orange-600 bg-clip-text text-transparent">
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
                   BondPos
                 </h2>
               </div>
@@ -110,30 +121,42 @@ export function ReceiptPrintModal({
               <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
             </div>
             <div className="space-y-3">
-              {order.items.map((item, index) => (
-                <div 
-                  key={index} 
-                  className="bg-accent/30 rounded-lg p-3 hover-elevate transition-all" 
-                  data-testid={`receipt-item-${index}`}
-                >
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate">{item.product.name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {item.quantity}x
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          ${parseFloat(item.price).toFixed(2)} each
-                        </span>
+              {order.items.map((item, index) => {
+                const itemPrice = parseFloat(item.price);
+                const itemTotal = parseFloat(item.total);
+                const priceFormatted = formatDualCurrency(itemPrice);
+                const totalFormatted = formatDualCurrency(itemTotal);
+                
+                return (
+                  <div 
+                    key={index} 
+                    className="bg-accent/30 rounded-lg p-3 hover-elevate transition-all" 
+                    data-testid={`receipt-item-${index}`}
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{item.product.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs font-mono">
+                            {item.quantity}x
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {priceFormatted.usd} / {priceFormatted.khr}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-mono font-bold text-primary text-sm">
+                          {totalFormatted.usd}
+                        </p>
+                        <p className="font-mono text-xs text-muted-foreground">
+                          {totalFormatted.khr}
+                        </p>
                       </div>
                     </div>
-                    <span className="font-mono font-bold text-primary shrink-0">
-                      ${parseFloat(item.total).toFixed(2)}
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -142,25 +165,33 @@ export function ReceiptPrintModal({
           <div className="space-y-2 px-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal:</span>
-              <span className="font-mono font-medium">${order.subtotal.toFixed(2)}</span>
+              <div className="text-right">
+                <p className="font-mono font-medium">{formatDualCurrency(order.subtotal).usd}</p>
+                <p className="font-mono text-xs text-muted-foreground">{formatDualCurrency(order.subtotal).khr}</p>
+              </div>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Discount:</span>
-              <span className="font-mono font-medium text-green-600">
-                ${order.discount.toFixed(2)}
-              </span>
+              <div className="text-right">
+                <p className="font-mono font-medium text-accent">
+                  {formatDualCurrency(order.discount).usd}
+                </p>
+                <p className="font-mono text-xs text-muted-foreground">{formatDualCurrency(order.discount).khr}</p>
+              </div>
             </div>
             
             <div className="border-t-2 border-dashed border-border pt-3 mt-3">
-              <div className="bg-gradient-to-r from-primary/10 via-orange-600/10 to-primary/10 rounded-lg p-3">
+              <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg p-4">
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-lg">Total:</span>
-                  <span 
-                    className="font-mono font-bold text-2xl bg-gradient-to-r from-primary to-orange-600 bg-clip-text text-transparent" 
-                    data-testid="receipt-total"
-                  >
-                    ${order.total.toFixed(2)}
-                  </span>
+                  <div className="text-right" data-testid="receipt-total">
+                    <p className="font-mono font-bold text-2xl bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                      {formatDualCurrency(order.total).usd}
+                    </p>
+                    <p className="font-mono font-semibold text-sm text-muted-foreground">
+                      {formatDualCurrency(order.total).khr}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -191,7 +222,7 @@ export function ReceiptPrintModal({
           </Button>
           <Button 
             onClick={handlePrint} 
-            className="gap-2 bg-gradient-to-r from-primary to-orange-600 hover:from-primary/90 hover:to-orange-600/90" 
+            className="gap-2 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90" 
             data-testid="button-print-receipt"
           >
             <Printer className="w-4 h-4" />

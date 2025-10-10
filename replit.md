@@ -7,7 +7,12 @@ A comprehensive Point of Sale (POS) system for restaurants featuring product cat
 - **Status**: In Development (Phase 8: Authentication System Complete)
 - **Last Updated**: October 10, 2025
 - **Recent Changes**: 
-  - **Colorful UI Design** (NEW): Complete vibrant color makeover
+  - **Dual Currency Receipt** (NEW): Receipt/slip now displays both currencies
+    - USD and KHR (Cambodian Riel) displayed on all prices
+    - Exchange rate: 1 USD = 4,100 KHR
+    - Both currencies shown for item prices, subtotal, discount, and total
+    - Clean dual-line format: USD on top, KHR below
+  - **Colorful UI Design**: Complete vibrant color makeover
     - Blue-Purple-Green gradient header with glassmorphic buttons
     - Dark blue professional sidebar with bright blue accents
     - Vibrant color palette: Primary Blue, Secondary Purple, Accent Green
