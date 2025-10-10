@@ -874,7 +874,7 @@ export default function ItemManage() {
             <h2 className="text-xl font-semibold">Items ({filteredProducts.length})</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
             {filteredProducts.map((product) => {
               const category = categories.find(c => c.id === product.categoryId);
               return (
@@ -888,11 +888,11 @@ export default function ItemManage() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-accent">
-                        <Utensils className="w-12 h-12 text-muted-foreground" />
+                        <Utensils className="w-10 h-10 text-muted-foreground" />
                       </div>
                     )}
                   </div>
-                  <CardContent className="p-4 space-y-3">
+                  <CardContent className="p-3 space-y-2">
                     <div>
                       <h3 className="font-semibold truncate" data-testid={`text-item-name-${product.id}`}>{product.name}</h3>
                       {category && (
@@ -922,15 +922,15 @@ export default function ItemManage() {
                       </p>
                     )}
 
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-1 pt-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 text-xs"
                         onClick={() => handleEditItem(product)}
                         data-testid={`button-edit-item-${product.id}`}
                       >
-                        <Edit className="w-4 h-4 mr-1" />
+                        <Edit className="w-3 h-3 mr-1" />
                         Edit
                       </Button>
                       <Button
@@ -940,7 +940,7 @@ export default function ItemManage() {
                         disabled={deleteItemMutation.isPending}
                         data-testid={`button-delete-item-${product.id}`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
                   </CardContent>
