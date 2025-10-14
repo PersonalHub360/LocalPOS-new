@@ -30,7 +30,7 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 - **Sales Management**: Complete order history display with detailed item breakdown. View, Edit, and Print functions show all order items (Product Name, Quantity, Price, Discount, Total) along with order summary (Subtotal, Discount, Total, Total in KHR with ៛ symbol). Fixed product name display issue. Export functionality to Excel and PDF formats. Exchange rate: 1 USD = 4,100 KHR.
 - **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV).
 - **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export.
-- **Table Management**: CRUD for tables, capacity tracking, and status management.
+- **Table Management**: CRUD for tables, capacity tracking, and status management. Enhanced print with order items display (Product Name, Quantity, Price, Discount, Total) and Total in KHR conversion. For occupied tables: Edit Items (navigate to POS), Add Items (dialog to add new items), Print Directly (print current order), and Complete Order (finish order and mark table available).
 - **HRM**: Full employee management (CRUD, import/export, schedule upload). Schemas defined for Attendance, Leave, and Payroll modules.
 - **Reporting System**: Comprehensive reports for Sales, Inventory, Payments, Discounts, Refunds, and Staff Performance with various date filters and export options.
 - **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization.

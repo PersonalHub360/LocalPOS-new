@@ -278,6 +278,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/tables/:id/order", async (req, res) => {
+    try {
+      const table = await storage.getTable(req.params.id);
+      if (!table) {
+        return res.status(404).json({ error: "Table not found" });
+      }
+      
+      const order = await storage.getTableCurrentOrder(req.params.id);
+      if (!order) {
+        return res.json(null);
+      }
+      
+      const items = await storage.getOrderItemsWithProducts(order.id);
+      const itemsWithProductName = items.map(item => ({
+        ...item,
+        productName: item.product.name,
+      }));
+      
+      res.json({ ...order, items: itemsWithProductName });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch table order" });
+    }
+  });
+
   app.post("/api/tables", async (req, res) => {
     try {
       const validatedData = insertTableSchema.parse(req.body);
@@ -373,6 +397,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(itemsWithProductName);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch order items" });
+    }
+  });
+
+  app.post("/api/orders/:id/items", async (req, res) => {
+    try {
+      const order = await storage.getOrder(req.params.id);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      const { productId, quantity, price, total } = req.body;
+      if (!productId || !quantity || !price || !total) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const orderItem = await storage.createOrderItem({
+        orderId: req.params.id,
+        productId,
+        quantity: quantity.toString(),
+        price,
+        total,
+      });
+
+      const allItems = await storage.getOrderItems(req.params.id);
+      const newSubtotal = allItems.reduce((sum, item) => sum + parseFloat(item.total), 0).toFixed(2);
+      const currentDiscount = parseFloat(order.discount) || 0;
+      const newTotal = (parseFloat(newSubtotal) - currentDiscount).toFixed(2);
+
+      await storage.updateOrder(req.params.id, {
+        subtotal: newSubtotal,
+        total: newTotal,
+      });
+
+      res.status(201).json(orderItem);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to add item to order" });
     }
   });
 

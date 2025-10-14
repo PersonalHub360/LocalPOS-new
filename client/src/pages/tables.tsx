@@ -8,22 +8,33 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertTableSchema, type Table as TableType } from "@shared/schema";
+import { insertTableSchema, type Table as TableType, type Product } from "@shared/schema";
 import type { z } from "zod";
-import { Plus, Edit, Trash2, Eye, Printer, Users } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, Printer, Users, ShoppingCart, CheckCircle, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 export default function Tables() {
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [addItemsDialogOpen, setAddItemsDialogOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<TableType | null>(null);
   const [viewingTable, setViewingTable] = useState<TableType | null>(null);
+  const [selectedTableForItems, setSelectedTableForItems] = useState<TableType | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<string>("");
+  const [quantity, setQuantity] = useState<string>("1");
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const { data: tables = [] } = useQuery<TableType[]>({
     queryKey: ["/api/tables"],
+  });
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
   });
 
   const tableForm = useForm<z.infer<typeof insertTableSchema>>({
@@ -135,36 +146,278 @@ export default function Tables() {
     setViewDialogOpen(true);
   };
 
-  const handlePrintTable = (table: TableType) => {
-    const printContent = `
-      <html>
-        <head>
-          <title>Table Information - ${table.tableNumber}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            h1 { color: #EA580C; }
-            .details { margin: 20px 0; }
-            .details p { margin: 8px 0; }
-            .label { font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <h1>Table Information</h1>
-          <div class="details">
-            <p><span class="label">Table Number:</span> ${table.tableNumber}</p>
-            <p><span class="label">Capacity:</span> ${table.capacity || 'Not specified'}</p>
-            <p><span class="label">Description:</span> ${table.description || 'No description'}</p>
-            <p><span class="label">Status:</span> ${table.status}</p>
-          </div>
-        </body>
-      </html>
-    `;
+  const handleEditItems = async (table: TableType) => {
+    try {
+      const response = await fetch(`/api/tables/${table.id}/order`);
+      const orderData = await response.json();
+      
+      if (orderData && orderData.id) {
+        setLocation("/");
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('loadDraft', { 
+            detail: { orderId: orderData.id } 
+          }));
+        }, 100);
+      } else {
+        toast({
+          title: "No Order Found",
+          description: "This table has no active order",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load order",
+        variant: "destructive",
+      });
+    }
+  };
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.print();
+  const handleOpenAddItems = (table: TableType) => {
+    setSelectedTableForItems(table);
+    setSelectedProduct("");
+    setQuantity("1");
+    setAddItemsDialogOpen(true);
+  };
+
+  const addItemMutation = useMutation({
+    mutationFn: async ({ orderId, productId, quantity }: { orderId: string; productId: string; quantity: number }) => {
+      const product = products.find(p => p.id === productId);
+      if (!product) throw new Error("Product not found");
+      
+      return await apiRequest("POST", `/api/orders/${orderId}/items`, {
+        productId,
+        quantity,
+        price: product.price,
+        total: (parseFloat(product.price) * quantity).toFixed(2),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      setAddItemsDialogOpen(false);
+      toast({
+        title: "Success",
+        description: "Item added to order successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add item",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddItem = async () => {
+    if (!selectedProduct) {
+      toast({
+        title: "Error",
+        description: "Please select a product",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!quantity || parseInt(quantity) < 1) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid quantity",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedTableForItems) {
+      toast({
+        title: "Error",
+        description: "No table selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tables/${selectedTableForItems.id}/order`);
+      const orderData = await response.json();
+      
+      if (orderData && orderData.id) {
+        addItemMutation.mutate({
+          orderId: orderData.id,
+          productId: selectedProduct,
+          quantity: parseInt(quantity),
+        });
+      } else {
+        toast({
+          title: "No Order Found",
+          description: "This table has no active order",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add item",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePrintDirectly = async (table: TableType) => {
+    await handlePrintTable(table);
+  };
+
+  const completeOrderMutation = useMutation({
+    mutationFn: async ({ orderId, tableId }: { orderId: string; tableId: string }) => {
+      await apiRequest("PATCH", `/api/orders/${orderId}/status`, { status: "completed" });
+      return await apiRequest("PATCH", `/api/tables/${tableId}/status`, { status: "available" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      toast({
+        title: "Success",
+        description: "Order completed and table is now available",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to complete order",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCompleteOrder = async (table: TableType) => {
+    try {
+      const response = await fetch(`/api/tables/${table.id}/order`);
+      const orderData = await response.json();
+      
+      if (orderData && orderData.id) {
+        completeOrderMutation.mutate({
+          orderId: orderData.id,
+          tableId: table.id,
+        });
+      } else {
+        toast({
+          title: "No Order Found",
+          description: "This table has no active order",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to complete order",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePrintTable = async (table: TableType) => {
+    try {
+      const response = await fetch(`/api/tables/${table.id}/order`);
+      const orderData = await response.json();
+
+      let orderItemsSection = '';
+      let orderSummarySection = '';
+
+      if (orderData && orderData.items && orderData.items.length > 0) {
+        const itemsRows = orderData.items.map((item: any) => `
+          <tr>
+            <td>${item.productName}</td>
+            <td style="text-align: center;">${item.quantity}</td>
+            <td style="text-align: right;">$${item.price}</td>
+            <td style="text-align: center;">-</td>
+            <td style="text-align: right;">$${item.total}</td>
+          </tr>
+        `).join('');
+
+        const totalUSD = parseFloat(orderData.total);
+        const totalKHR = (totalUSD * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+        orderItemsSection = `
+          <h3>Order Items</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Product Name</th>
+                <th class="text-center">Quantity</th>
+                <th class="text-right">Price</th>
+                <th class="text-center">Discount</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsRows}
+            </tbody>
+          </table>
+        `;
+
+        orderSummarySection = `
+          <div class="summary">
+            <p><strong>Subtotal:</strong> $${orderData.subtotal}</p>
+            <p><strong>Discount:</strong> $${orderData.discount}</p>
+            <p class="total"><strong>Total:</strong> $${orderData.total}</p>
+            <p class="total-khr"><strong>Total in KHR:</strong> ៛${totalKHR}</p>
+            <hr>
+            <p><strong>Pay by:</strong> ${orderData.paymentMethod || "N/A"}</p>
+            <p><strong>Payment Status:</strong> ${orderData.paymentStatus}</p>
+          </div>
+        `;
+      }
+
+      const printContent = `
+        <html>
+          <head>
+            <title>Table Information - ${table.tableNumber}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+              h1 { color: #EA580C; margin-bottom: 20px; }
+              h3 { margin-top: 20px; }
+              .details { margin: 20px 0; }
+              .details p { margin: 8px 0; }
+              .label { font-weight: bold; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+              th { background-color: #f3f4f6; font-weight: 600; }
+              .text-center { text-align: center; }
+              .text-right { text-align: right; }
+              .summary { margin-top: 20px; text-align: right; }
+              .summary p { margin: 8px 0; }
+              .total { font-weight: bold; font-size: 1.3em; color: #ea580c; }
+              .total-khr { color: #666; font-size: 0.95em; margin-top: 4px; }
+              hr { margin: 20px 0; border: none; border-top: 2px solid #e5e7eb; }
+            </style>
+          </head>
+          <body>
+            <h1>Table Information</h1>
+            <div class="details">
+              <p><span class="label">Table Number:</span> ${table.tableNumber}</p>
+              <p><span class="label">Capacity:</span> ${table.capacity || 'Not specified'}</p>
+              <p><span class="label">Description:</span> ${table.description || 'No description'}</p>
+              <p><span class="label">Status:</span> ${table.status}</p>
+            </div>
+            ${orderItemsSection}
+            ${orderSummarySection}
+          </body>
+        </html>
+      `;
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    } catch (error) {
+      console.error("Error printing table:", error);
+      toast({
+        title: "Error",
+        description: "Failed to print table information",
+        variant: "destructive",
+      });
     }
   };
 
@@ -301,40 +554,81 @@ export default function Tables() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2 justify-center">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleViewTable(table)}
-                                data-testid={`button-view-${table.id}`}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleEditTable(table)}
-                                data-testid={`button-edit-${table.id}`}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handlePrintTable(table)}
-                                data-testid={`button-print-${table.id}`}
-                              >
-                                <Printer className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => deleteTableMutation.mutate(table.id)}
-                                data-testid={`button-delete-${table.id}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
+                            {table.status === 'occupied' ? (
+                              <div className="flex gap-2 justify-center">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleEditItems(table)}
+                                  data-testid={`button-edit-items-${table.id}`}
+                                  title="Edit Items"
+                                >
+                                  <ShoppingCart className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleOpenAddItems(table)}
+                                  data-testid={`button-add-items-${table.id}`}
+                                  title="Add Items"
+                                >
+                                  <PlusCircle className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handlePrintDirectly(table)}
+                                  data-testid={`button-print-directly-${table.id}`}
+                                  title="Print Directly"
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleCompleteOrder(table)}
+                                  data-testid={`button-complete-order-${table.id}`}
+                                  title="Complete Order"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2 justify-center">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleViewTable(table)}
+                                  data-testid={`button-view-${table.id}`}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handleEditTable(table)}
+                                  data-testid={`button-edit-${table.id}`}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => handlePrintTable(table)}
+                                  data-testid={`button-print-${table.id}`}
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => deleteTableMutation.mutate(table.id)}
+                                  data-testid={`button-delete-${table.id}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))
@@ -378,6 +672,62 @@ export default function Tables() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addItemsDialogOpen} onOpenChange={setAddItemsDialogOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-add-items">
+          <DialogHeader>
+            <DialogTitle>Add Items to Order</DialogTitle>
+            <DialogDescription>
+              {selectedTableForItems && `Add items to Table ${selectedTableForItems.tableNumber}'s order`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Product</label>
+              <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                <SelectTrigger data-testid="select-product">
+                  <SelectValue placeholder="Select a product" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name} - ${product.price}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Quantity</label>
+              <Input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Enter quantity"
+                data-testid="input-quantity"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setAddItemsDialogOpen(false)}
+              data-testid="button-cancel-add-items"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddItem}
+              disabled={addItemMutation.isPending}
+              data-testid="button-submit-add-items"
+            >
+              Add Item
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

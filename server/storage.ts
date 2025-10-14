@@ -69,6 +69,7 @@ export interface IStorage {
   createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem>;
   deleteOrderItems(orderId: string): Promise<boolean>;
   getOrderItemsWithProducts(orderId: string): Promise<(OrderItem & { product: Product })[]>;
+  getTableCurrentOrder(tableId: string): Promise<Order | undefined>;
   
   getDashboardStats(startDate: Date, endDate: Date): Promise<{
     todaySales: number;
@@ -775,6 +776,13 @@ export class MemStorage implements IStorage {
         return { ...item, product };
       })
       .filter((item): item is OrderItem & { product: Product } => item !== null);
+  }
+
+  async getTableCurrentOrder(tableId: string): Promise<Order | undefined> {
+    const orders = Array.from(this.orders.values()).filter(
+      (order) => order.tableId === tableId && (order.status === "draft" || order.status === "in-progress")
+    );
+    return orders.length > 0 ? orders[0] : undefined;
   }
 
   async getDashboardStats(startDate: Date, endDate: Date): Promise<{
