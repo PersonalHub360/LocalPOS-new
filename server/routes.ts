@@ -366,7 +366,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const items = await storage.getOrderItemsWithProducts(order.id);
-      res.json(items);
+      const itemsWithProductName = items.map(item => ({
+        ...item,
+        productName: item.product.name,
+      }));
+      res.json(itemsWithProductName);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch order items" });
     }

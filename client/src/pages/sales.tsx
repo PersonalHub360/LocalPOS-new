@@ -160,11 +160,16 @@ export default function SalesManage() {
       const itemsRows = items.map(item => `
         <tr>
           <td>${item.productName}</td>
-          <td>${item.quantity}</td>
-          <td>$${item.price}</td>
-          <td>$${item.total}</td>
+          <td style="text-align: center;">${item.quantity}</td>
+          <td style="text-align: right;">$${item.price}</td>
+          <td style="text-align: center;">-</td>
+          <td style="text-align: right;">$${item.total}</td>
         </tr>
       `).join('');
+
+      // Calculate total in KHR (1 USD = 4,100 KHR)
+      const totalUSD = parseFloat(sale.total);
+      const totalKHR = (totalUSD * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
       const content = `
         <!DOCTYPE html>
@@ -179,9 +184,12 @@ export default function SalesManage() {
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
               th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
               th { background-color: #f3f4f6; font-weight: 600; }
+              .text-center { text-align: center; }
+              .text-right { text-align: right; }
               .summary { margin-top: 20px; text-align: right; }
               .summary p { margin: 8px 0; }
               .total { font-weight: bold; font-size: 1.3em; color: #ea580c; }
+              .total-khr { color: #666; font-size: 0.95em; margin-top: 4px; }
               hr { margin: 20px 0; border: none; border-top: 2px solid #e5e7eb; }
             </style>
           </head>
@@ -200,9 +208,10 @@ export default function SalesManage() {
               <thead>
                 <tr>
                   <th>Product Name</th>
-                  <th>Quantity</th>
-                  <th>Price</th>
-                  <th>Total</th>
+                  <th class="text-center">Quantity</th>
+                  <th class="text-right">Price</th>
+                  <th class="text-center">Discount</th>
+                  <th class="text-right">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,6 +223,7 @@ export default function SalesManage() {
               <p><strong>Subtotal:</strong> $${sale.subtotal}</p>
               <p><strong>Discount:</strong> $${sale.discount}</p>
               <p class="total"><strong>Total:</strong> $${sale.total}</p>
+              <p class="total-khr"><strong>Total in KHR:</strong> ៛${totalKHR}</p>
               <hr>
               <p><strong>Pay by:</strong> ${sale.paymentMethod || "N/A"}</p>
               <p><strong>Payment Status:</strong> ${sale.paymentStatus}</p>

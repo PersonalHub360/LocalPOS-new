@@ -27,7 +27,7 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 ### Feature Specifications
 - **Authentication**: Secure login, session management, password hashing, and protected API routes.
 - **POS Order Workflow**: Draft saving, editing, receipt generation, diverse payment methods (Cash, Card, ABA, Acleda, Due), and transactional safety for order completion.
-- **Sales Management**: Complete order history display with detailed item breakdown. View, Edit, and Print functions show all order items (Product Name, Quantity, Price, Total) along with order summary (Subtotal, Discount, Total). Export functionality to Excel and PDF formats.
+- **Sales Management**: Complete order history display with detailed item breakdown. View, Edit, and Print functions show all order items (Product Name, Quantity, Price, Discount, Total) along with order summary (Subtotal, Discount, Total, Total in KHR with ៛ symbol). Fixed product name display issue. Export functionality to Excel and PDF formats. Exchange rate: 1 USD = 4,100 KHR.
 - **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV).
 - **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export.
 - **Table Management**: CRUD for tables, capacity tracking, and status management.
