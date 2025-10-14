@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,16 @@ import { Calendar } from "@/components/ui/calendar";
 
 type DateFilterType = "all" | "today" | "yesterday" | "custom";
 
+interface OrderItemWithProduct {
+  id: string;
+  orderId: string;
+  productId: string;
+  quantity: number;
+  price: string;
+  total: string;
+  productName: string;
+}
+
 export default function SalesManage() {
   const [viewSale, setViewSale] = useState<Order | null>(null);
   const [editSale, setEditSale] = useState<Order | null>(null);
@@ -65,6 +75,7 @@ export default function SalesManage() {
   const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [orderItems, setOrderItems] = useState<OrderItemWithProduct[]>([]);
   const { toast } = useToast();
 
   const { data: sales = [], isLoading } = useQuery<Order[]>({
@@ -113,43 +124,115 @@ export default function SalesManage() {
     },
   });
 
-  const handlePrint = (sale: Order) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+  // Fetch order items when viewing or editing a sale
+  useEffect(() => {
+    const fetchOrderItems = async (orderId: string) => {
+      try {
+        const response = await fetch(`/api/orders/${orderId}/items`);
+        if (!response.ok) throw new Error("Failed to fetch order items");
+        const data = await response.json();
+        setOrderItems(data);
+      } catch (error) {
+        console.error("Error fetching order items:", error);
+        setOrderItems([]);
+      }
+    };
 
-    const content = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Sale Receipt - INV-${sale.orderNumber}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            h1 { color: #ea580c; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-            .total { font-weight: bold; font-size: 1.2em; }
-          </style>
-        </head>
-        <body>
-          <h1>Sale Receipt</h1>
-          <p><strong>Sale ID:</strong> ${sale.id}</p>
-          <p><strong>Invoice No:</strong> INV-${sale.orderNumber}</p>
-          <p><strong>Date:</strong> ${format(new Date(sale.createdAt), "PPpp")}</p>
-          <p><strong>Customer:</strong> ${sale.customerName || "Walk-in Customer"}</p>
-          <p><strong>Dining Option:</strong> ${sale.diningOption}</p>
-          <hr>
-          <p><strong>Subtotal:</strong> $${sale.subtotal}</p>
-          <p><strong>Discount:</strong> $${sale.discount}</p>
-          <p class="total"><strong>Total:</strong> $${sale.total}</p>
-          <p><strong>Pay by:</strong> ${sale.paymentMethod || "N/A"}</p>
-          <p><strong>Payment Status:</strong> ${sale.paymentStatus}</p>
-        </body>
-      </html>
-    `;
+    if (viewSale) {
+      fetchOrderItems(viewSale.id);
+    } else if (editSale) {
+      fetchOrderItems(editSale.id);
+    } else {
+      setOrderItems([]);
+    }
+  }, [viewSale, editSale]);
 
-    printWindow.document.write(content);
-    printWindow.document.close();
-    printWindow.print();
+  const handlePrint = async (sale: Order) => {
+    try {
+      // Fetch order items
+      const response = await fetch(`/api/orders/${sale.id}/items`);
+      if (!response.ok) throw new Error("Failed to fetch order items");
+      const items: OrderItemWithProduct[] = await response.json();
+
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) return;
+
+      const itemsRows = items.map(item => `
+        <tr>
+          <td>${item.productName}</td>
+          <td>${item.quantity}</td>
+          <td>$${item.price}</td>
+          <td>$${item.total}</td>
+        </tr>
+      `).join('');
+
+      const content = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Sale Receipt - INV-${sale.orderNumber}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+              h1 { color: #ea580c; margin-bottom: 20px; }
+              .header-info { margin-bottom: 20px; }
+              .header-info p { margin: 5px 0; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+              th { background-color: #f3f4f6; font-weight: 600; }
+              .summary { margin-top: 20px; text-align: right; }
+              .summary p { margin: 8px 0; }
+              .total { font-weight: bold; font-size: 1.3em; color: #ea580c; }
+              hr { margin: 20px 0; border: none; border-top: 2px solid #e5e7eb; }
+            </style>
+          </head>
+          <body>
+            <h1>Sale Receipt</h1>
+            <div class="header-info">
+              <p><strong>Sale ID:</strong> ${sale.id}</p>
+              <p><strong>Invoice No:</strong> INV-${sale.orderNumber}</p>
+              <p><strong>Date:</strong> ${format(new Date(sale.createdAt), "PPpp")}</p>
+              <p><strong>Customer:</strong> ${sale.customerName || "Walk-in Customer"}</p>
+              <p><strong>Dining Option:</strong> ${sale.diningOption}</p>
+            </div>
+            
+            <h3>Order Items</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Product Name</th>
+                  <th>Quantity</th>
+                  <th>Price</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsRows}
+              </tbody>
+            </table>
+
+            <div class="summary">
+              <p><strong>Subtotal:</strong> $${sale.subtotal}</p>
+              <p><strong>Discount:</strong> $${sale.discount}</p>
+              <p class="total"><strong>Total:</strong> $${sale.total}</p>
+              <hr>
+              <p><strong>Pay by:</strong> ${sale.paymentMethod || "N/A"}</p>
+              <p><strong>Payment Status:</strong> ${sale.paymentStatus}</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(content);
+      printWindow.document.close();
+      printWindow.print();
+    } catch (error) {
+      console.error("Error printing receipt:", error);
+      toast({
+        title: "Error",
+        description: "Failed to print receipt",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleUpdate = () => {
@@ -493,13 +576,13 @@ export default function SalesManage() {
 
       {/* View Dialog */}
       <Dialog open={!!viewSale} onOpenChange={() => setViewSale(null)}>
-        <DialogContent data-testid="dialog-view-sale">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-view-sale">
           <DialogHeader>
             <DialogTitle>Sale Details</DialogTitle>
             <DialogDescription>View complete sale information</DialogDescription>
           </DialogHeader>
           {viewSale && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground">Sale ID</Label>
@@ -526,24 +609,63 @@ export default function SalesManage() {
                   <p className="font-medium" data-testid="view-dining-option">{viewSale.diningOption}</p>
                 </div>
                 <div>
+                  <Label className="text-muted-foreground">Payment Method</Label>
+                  <p className="font-medium capitalize" data-testid="view-pay-by">{viewSale.paymentMethod || "N/A"}</p>
+                </div>
+              </div>
+
+              {/* Order Items Table */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Order Items</Label>
+                {orderItems.length > 0 ? (
+                  <div className="border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product Name</TableHead>
+                          <TableHead className="text-right">Quantity</TableHead>
+                          <TableHead className="text-right">Price</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orderItems.map((item) => (
+                          <TableRow key={item.id} data-testid={`view-item-${item.id}`}>
+                            <TableCell data-testid={`view-item-name-${item.id}`}>{item.productName}</TableCell>
+                            <TableCell className="text-right" data-testid={`view-item-qty-${item.id}`}>{item.quantity}</TableCell>
+                            <TableCell className="text-right" data-testid={`view-item-price-${item.id}`}>${item.price}</TableCell>
+                            <TableCell className="text-right" data-testid={`view-item-total-${item.id}`}>${item.total}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Loading items...</p>
+                )}
+              </div>
+
+              {/* Order Summary */}
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between">
                   <Label className="text-muted-foreground">Subtotal</Label>
                   <p className="font-medium" data-testid="view-subtotal">${viewSale.subtotal}</p>
                 </div>
-                <div>
+                <div className="flex justify-between">
                   <Label className="text-muted-foreground">Discount</Label>
                   <p className="font-medium" data-testid="view-discount">${viewSale.discount}</p>
                 </div>
-                <div>
-                  <Label className="text-muted-foreground">Total</Label>
+                <div className="flex justify-between border-t pt-2">
+                  <Label className="text-lg font-semibold">Total</Label>
                   <p className="font-bold text-lg" data-testid="view-total">${viewSale.total}</p>
                 </div>
-                <div>
-                  <Label className="text-muted-foreground">Pay by</Label>
-                  <p className="font-medium capitalize" data-testid="view-pay-by">{viewSale.paymentMethod || "N/A"}</p>
-                </div>
-                <div>
+                <div className="flex justify-between">
                   <Label className="text-muted-foreground">Payment Status</Label>
-                  <p className="font-medium" data-testid="view-payment-status">{viewSale.paymentStatus}</p>
+                  <p className="font-medium" data-testid="view-payment-status">
+                    <span className={`px-2 py-1 rounded-md text-xs font-medium ${getPaymentStatusBadge(viewSale.paymentStatus)}`}>
+                      {viewSale.paymentStatus}
+                    </span>
+                  </p>
                 </div>
               </div>
             </div>
@@ -556,60 +678,110 @@ export default function SalesManage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editSale} onOpenChange={() => setEditSale(null)}>
-        <DialogContent data-testid="dialog-edit-sale">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-sale">
           <DialogHeader>
             <DialogTitle>Edit Sale</DialogTitle>
             <DialogDescription>Modify sale details</DialogDescription>
           </DialogHeader>
           {editSale && (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="customer-name">Customer Name</Label>
-                <Input
-                  id="customer-name"
-                  data-testid="input-edit-customer-name"
-                  value={editSale.customerName || ""}
-                  onChange={(e) =>
-                    setEditSale({ ...editSale, customerName: e.target.value })
-                  }
-                />
+            <div className="space-y-6">
+              {/* Editable Fields */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="customer-name">Customer Name</Label>
+                  <Input
+                    id="customer-name"
+                    data-testid="input-edit-customer-name"
+                    value={editSale.customerName || ""}
+                    onChange={(e) =>
+                      setEditSale({ ...editSale, customerName: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="payment-status">Payment Status</Label>
+                  <Select
+                    value={editSale.paymentStatus}
+                    onValueChange={(value) =>
+                      setEditSale({ ...editSale, paymentStatus: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-edit-payment-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="status">Order Status</Label>
+                  <Select
+                    value={editSale.status}
+                    onValueChange={(value) =>
+                      setEditSale({ ...editSale, status: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-edit-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="confirmed">Confirmed</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="payment-status">Payment Status</Label>
-                <Select
-                  value={editSale.paymentStatus}
-                  onValueChange={(value) =>
-                    setEditSale({ ...editSale, paymentStatus: value })
-                  }
-                >
-                  <SelectTrigger data-testid="select-edit-payment-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              {/* Order Items (Read-only) */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Order Items</Label>
+                {orderItems.length > 0 ? (
+                  <div className="border rounded-md bg-muted/30">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product Name</TableHead>
+                          <TableHead className="text-right">Quantity</TableHead>
+                          <TableHead className="text-right">Price</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orderItems.map((item) => (
+                          <TableRow key={item.id} data-testid={`edit-item-${item.id}`}>
+                            <TableCell data-testid={`edit-item-name-${item.id}`}>{item.productName}</TableCell>
+                            <TableCell className="text-right" data-testid={`edit-item-qty-${item.id}`}>{item.quantity}</TableCell>
+                            <TableCell className="text-right" data-testid={`edit-item-price-${item.id}`}>${item.price}</TableCell>
+                            <TableCell className="text-right" data-testid={`edit-item-total-${item.id}`}>${item.total}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Loading items...</p>
+                )}
               </div>
-              <div>
-                <Label htmlFor="status">Order Status</Label>
-                <Select
-                  value={editSale.status}
-                  onValueChange={(value) =>
-                    setEditSale({ ...editSale, status: value })
-                  }
-                >
-                  <SelectTrigger data-testid="select-edit-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              {/* Order Summary (Read-only) */}
+              <div className="border-t pt-4 space-y-2 bg-muted/20 p-4 rounded-md">
+                <div className="flex justify-between">
+                  <Label className="text-muted-foreground">Subtotal</Label>
+                  <p className="font-medium">${editSale.subtotal}</p>
+                </div>
+                <div className="flex justify-between">
+                  <Label className="text-muted-foreground">Discount</Label>
+                  <p className="font-medium">${editSale.discount}</p>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <Label className="text-lg font-semibold">Total</Label>
+                  <p className="font-bold text-lg">${editSale.total}</p>
+                </div>
               </div>
             </div>
           )}

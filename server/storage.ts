@@ -400,6 +400,30 @@ export class MemStorage implements IStorage {
     sampleOrders.forEach((order) => this.orders.set(order.id, order));
     this.orderCounter = 9;
 
+    // Order items for completed sales
+    const saleOrderItems: OrderItem[] = [
+      // sale-1 items (subtotal: 45.50, discount: 5.00, total: 40.50)
+      { id: randomUUID(), orderId: "sale-1", productId: "1", quantity: 2, price: "10.60", total: "21.20" },
+      { id: randomUUID(), orderId: "sale-1", productId: "5", quantity: 1, price: "10.50", total: "10.50" },
+      { id: randomUUID(), orderId: "sale-1", productId: "21", quantity: 3, price: "4.60", total: "13.80" },
+      
+      // sale-2 items (subtotal: 32.00, total: 32.00)
+      { id: randomUUID(), orderId: "sale-2", productId: "7", quantity: 2, price: "10.50", total: "21.00" },
+      { id: randomUUID(), orderId: "sale-2", productId: "15", quantity: 1, price: "11.00", total: "11.00" },
+      
+      // sale-3 items (subtotal: 68.75, discount: 10.00, total: 58.75)
+      { id: randomUUID(), orderId: "sale-3", productId: "3", quantity: 3, price: "10.50", total: "31.50" },
+      { id: randomUUID(), orderId: "sale-3", productId: "10", quantity: 1, price: "15.00", total: "15.00" },
+      { id: randomUUID(), orderId: "sale-3", productId: "12", quantity: 1, price: "9.00", total: "9.00" },
+      { id: randomUUID(), orderId: "sale-3", productId: "23", quantity: 2, price: "3.50", total: "7.00" },
+      { id: randomUUID(), orderId: "sale-3", productId: "24", quantity: 2, price: "3.125", total: "6.25" },
+      
+      // sale-5 items (subtotal: 28.50, discount: 2.00, total: 26.50)
+      { id: randomUUID(), orderId: "sale-5", productId: "8", quantity: 2, price: "10.50", total: "21.00" },
+      { id: randomUUID(), orderId: "sale-5", productId: "22", quantity: 1, price: "4.50", total: "4.50" },
+      { id: randomUUID(), orderId: "sale-5", productId: "25", quantity: 1, price: "3.00", total: "3.00" },
+    ];
+
     const qrOrderItems: OrderItem[] = [
       { id: randomUUID(), orderId: "qr-order-1", productId: "5", quantity: 2, price: "10.50", total: "21.00" },
       { id: randomUUID(), orderId: "qr-order-1", productId: "10", quantity: 1, price: "15.00", total: "15.00" },
@@ -414,6 +438,8 @@ export class MemStorage implements IStorage {
       { id: randomUUID(), orderId: "qr-order-3", productId: "22", quantity: 2, price: "4.50", total: "9.00" },
     ];
 
+    // Add all order items to storage
+    saleOrderItems.forEach((item) => this.orderItems.set(item.id, item));
     qrOrderItems.forEach((item) => this.orderItems.set(item.id, item));
 
     const expenseCategories: ExpenseCategory[] = [
