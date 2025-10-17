@@ -41,6 +41,7 @@ export default function ExpenseManage() {
     unit: "Kg",
     quantity: "1",
     total: "",
+    slipImage: "",
   });
   
   const [categoryFormData, setCategoryFormData] = useState({
@@ -151,6 +152,7 @@ export default function ExpenseManage() {
       unit: "Kg",
       quantity: "1",
       total: "",
+      slipImage: "",
     });
   };
 
@@ -165,6 +167,31 @@ export default function ExpenseManage() {
     const amt = parseFloat(amount) || 0;
     const qty = parseFloat(quantity) || 0;
     return (amt * qty).toFixed(2);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please upload an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      if (isEdit && editExpense) {
+        setEditExpense({ ...editExpense, slipImage: base64String });
+      } else {
+        setExpenseFormData({ ...expenseFormData, slipImage: base64String });
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleExpenseFormChange = (field: string, value: string) => {
@@ -191,6 +218,7 @@ export default function ExpenseManage() {
       unit: expenseFormData.unit,
       quantity: expenseFormData.quantity,
       total: expenseFormData.total || calculateTotal(expenseFormData.amount, expenseFormData.quantity),
+      slipImage: expenseFormData.slipImage || undefined,
     });
   };
 
@@ -207,6 +235,7 @@ export default function ExpenseManage() {
         unit: editExpense.unit,
         quantity: editExpense.quantity,
         total: editExpense.total,
+        slipImage: editExpense.slipImage || undefined,
       },
     });
   };
