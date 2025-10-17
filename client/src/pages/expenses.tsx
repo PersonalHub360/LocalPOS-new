@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen, Upload, X } from "lucide-react";
 import { format } from "date-fns";
 import type { Expense, ExpenseCategory } from "@shared/schema";
 
@@ -644,6 +644,42 @@ export default function ExpenseManage() {
                 data-testid="input-total"
               />
             </div>
+            <div className="col-span-2">
+              <Label htmlFor="slip-image">Upload Slip/Invoice (Optional)</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="slip-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e)}
+                    className="flex-1"
+                    data-testid="input-slip-image"
+                  />
+                  {expenseFormData.slipImage && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setExpenseFormData({ ...expenseFormData, slipImage: "" })}
+                      data-testid="button-remove-slip"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+                {expenseFormData.slipImage && (
+                  <div className="border rounded-lg p-2">
+                    <img 
+                      src={expenseFormData.slipImage} 
+                      alt="Slip preview" 
+                      className="max-h-40 mx-auto rounded"
+                      data-testid="img-slip-preview"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddExpenseDialog(false)} data-testid="button-cancel-expense">
@@ -816,6 +852,42 @@ export default function ExpenseManage() {
                   className="bg-muted"
                   data-testid="input-edit-total"
                 />
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="edit-slip-image">Upload Slip/Invoice (Optional)</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="edit-slip-image"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, true)}
+                      className="flex-1"
+                      data-testid="input-edit-slip-image"
+                    />
+                    {editExpense.slipImage && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setEditExpense({ ...editExpense, slipImage: "" })}
+                        data-testid="button-remove-edit-slip"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  {editExpense.slipImage && (
+                    <div className="border rounded-lg p-2">
+                      <img 
+                        src={editExpense.slipImage} 
+                        alt="Slip preview" 
+                        className="max-h-40 mx-auto rounded"
+                        data-testid="img-edit-slip-preview"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
