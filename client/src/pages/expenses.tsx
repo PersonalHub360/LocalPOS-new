@@ -255,6 +255,8 @@ export default function ExpenseManage() {
               th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
               th { background-color: #f5f5f5; }
               .total { font-size: 1.2em; font-weight: bold; }
+              .slip-image { margin-top: 20px; text-align: center; }
+              .slip-image img { max-width: 500px; max-height: 400px; border: 1px solid #ddd; border-radius: 8px; }
             </style>
           </head>
           <body>
@@ -269,6 +271,12 @@ export default function ExpenseManage() {
               <tr><th>Quantity</th><td>${expense.quantity}</td></tr>
               <tr><th class="total">Total</th><td class="total">$${expense.total}</td></tr>
             </table>
+            ${expense.slipImage ? `
+              <div class="slip-image">
+                <h3>Slip/Invoice</h3>
+                <img src="${expense.slipImage}" alt="Expense slip" />
+              </div>
+            ` : ''}
           </body>
         </html>
       `);
@@ -739,6 +747,19 @@ export default function ExpenseManage() {
                   <p className="font-bold text-lg" data-testid="view-expense-total">${viewExpense.total}</p>
                 </div>
               </div>
+              {viewExpense.slipImage && (
+                <div>
+                  <Label className="text-muted-foreground">Slip/Invoice</Label>
+                  <div className="border rounded-lg p-2 mt-2">
+                    <img 
+                      src={viewExpense.slipImage} 
+                      alt="Expense slip" 
+                      className="max-h-60 mx-auto rounded"
+                      data-testid="img-view-slip"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
