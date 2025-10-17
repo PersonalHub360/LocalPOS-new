@@ -14,9 +14,8 @@ import { Plus, Grid3x3, LogOut, User } from "lucide-react";
 import { QRMenuOrdersModal } from "@/components/qr-menu-orders-modal";
 import { DraftListModal } from "@/components/draft-list-modal";
 import { ReceiptPrintModal } from "@/components/receipt-print-modal";
-import { TableOrderModal } from "@/components/table-order-modal";
 import { useToast } from "@/hooks/use-toast";
-import type { Order, OrderItem, Product, Table } from "@shared/schema";
+import type { Order } from "@shared/schema";
 import POS from "@/pages/pos";
 import Dashboard from "@/pages/dashboard";
 import Tables from "@/pages/tables";
@@ -62,7 +61,6 @@ function AppHeader() {
   const isPOSPage = location === "/";
   const [qrOrdersOpen, setQrOrdersOpen] = useState(false);
   const [draftListModalOpen, setDraftListModalOpen] = useState(false);
-  const [tableOrderModalOpen, setTableOrderModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const { toast } = useToast();
@@ -87,14 +85,6 @@ function AppHeader() {
 
   const { data: orders = [] } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
-  });
-
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-  });
-
-  const { data: tables = [] } = useQuery<Table[]>({
-    queryKey: ["/api/tables"],
   });
 
   const draftOrders = orders.filter((order) => order.status === "draft");
@@ -188,20 +178,6 @@ function AppHeader() {
                 </Badge>
               )}
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setTableOrderModalOpen(true)}
-              data-testid="button-table-order"
-              className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
-            >
-              Table Order
-              {tables.length > 0 && (
-                <Badge variant="secondary" className="ml-1 bg-white text-accent" data-testid="badge-table-count">
-                  {tables.length}
-                </Badge>
-              )}
-            </Button>
           </div>
         )}
         {user && (
@@ -233,11 +209,6 @@ function AppHeader() {
         onEditDraft={handleEditDraft}
         onPrintDraft={handlePrintDraft}
         onDeleteDraft={handleDeleteDraft}
-      />
-      <TableOrderModal
-        open={tableOrderModalOpen}
-        onClose={() => setTableOrderModalOpen(false)}
-        tables={tables}
       />
       {receiptData && (
         <ReceiptPrintModal
