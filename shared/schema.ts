@@ -118,6 +118,7 @@ export const expenses = pgTable("expenses", {
   unit: text("unit").notNull(),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  slipImage: text("slip_image"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
