@@ -32,7 +32,7 @@ import type { Order, Product, OrderItem } from "@shared/schema";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway";
+type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway" | "aba" | "acleda" | "cash" | "due" | "card";
 type DateFilter = "today" | "yesterday" | "7days" | "month" | "custom";
 
 interface OrderItemWithProduct extends OrderItem {
@@ -116,6 +116,30 @@ export default function Reports() {
         }
       }
 
+      // For payment method-specific reports, filter by payment method
+      if (reportType === "aba" && sale.paymentMethod !== "ABA") {
+        return false;
+      }
+      if (reportType === "acleda" && sale.paymentMethod !== "Acleda") {
+        return false;
+      }
+      if (reportType === "cash" && sale.paymentMethod !== "Cash") {
+        return false;
+      }
+      if (reportType === "due" && sale.paymentMethod !== "Due") {
+        return false;
+      }
+      if (reportType === "card" && sale.paymentMethod !== "Card") {
+        return false;
+      }
+
+      // Apply payment status filter for payment method-specific reports
+      if ((reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card")) {
+        if (paymentStatusFilter !== "all" && sale.paymentStatus !== paymentStatusFilter) {
+          return false;
+        }
+      }
+
       return true;
     });
   };
@@ -191,9 +215,19 @@ export default function Reports() {
   const handleExportPDF = () => {
     const doc = new jsPDF();
     
+    // Get report title based on type
+    const reportTitles: Record<string, string> = {
+      gateway: "Payment Gateway Report",
+      aba: "ABA Payment Report",
+      acleda: "Acleda Payment Report",
+      cash: "Cash Payment Report",
+      due: "Due Payment Report",
+      card: "Card Payment Report"
+    };
+    
     // Add header
     doc.setFontSize(18);
-    doc.text("Payment Gateway Report", 14, 20);
+    doc.text(reportTitles[reportType] || "Payment Report", 14, 20);
     
     doc.setFontSize(11);
     doc.text(`Generated: ${format(new Date(), "MMM dd, yyyy HH:mm")}`, 14, 28);
@@ -451,7 +485,7 @@ export default function Reports() {
               <Printer className="w-4 h-4 mr-2" />
               Print
             </Button>
-            {reportType === "gateway" && (
+            {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && (
               <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
                 <Download className="w-4 h-4 mr-2" />
                 Export PDF
@@ -482,6 +516,11 @@ export default function Reports() {
                     <SelectItem value="inventory">Inventory</SelectItem>
                     <SelectItem value="payments">Payments</SelectItem>
                     <SelectItem value="gateway">Payment Gateway</SelectItem>
+                    <SelectItem value="aba">ABA</SelectItem>
+                    <SelectItem value="acleda">Acleda</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="due">Due</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
                     <SelectItem value="discounts">Discounts</SelectItem>
                     <SelectItem value="refunds">Refunds</SelectItem>
                     <SelectItem value="staff">Staff Performance</SelectItem>
@@ -566,6 +605,25 @@ export default function Reports() {
                   </Select>
                 </div>
 
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Payment Status</label>
+                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                    <SelectTrigger data-testid="select-payment-status">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {(reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Payment Status</label>
                   <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
