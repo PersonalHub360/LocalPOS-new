@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +8,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { 
   Download, 
   Printer, 
@@ -20,15 +23,27 @@ import {
   CreditCard,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Edit,
+  X
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Order } from "@shared/schema";
+import type { Order, Product, OrderItem } from "@shared/schema";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway";
 type DateFilter = "today" | "yesterday" | "7days" | "month" | "custom";
+
+interface OrderItemWithProduct extends OrderItem {
+  productName: string;
+  discount: string;
+}
+
+interface OrderWithItems extends Order {
+  items: OrderItemWithProduct[];
+  tableNumber?: string;
+}
 
 export default function Reports() {
   const [reportType, setReportType] = useState<ReportType>("sales");
@@ -37,6 +52,10 @@ export default function Reports() {
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
+  const [, setLocation] = useLocation();
 
   const { data: sales = [] } = useQuery<Order[]>({
     queryKey: ["/api/sales"],
@@ -44,6 +63,10 @@ export default function Reports() {
 
   const { data: orders = [] } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+  });
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
   });
 
   const getFilteredSales = () => {
@@ -217,6 +240,202 @@ export default function Reports() {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleViewOrder = async (order: Order) => {
+    setLoadingOrderDetails(true);
+    try {
+      const response = await fetch(`/api/orders/${order.id}/items`);
+      const items = await response.json();
+      
+      const itemsWithDetails: OrderItemWithProduct[] = items.map((item: any) => ({
+        ...item,
+        productName: item.product?.name || products.find(p => p.id === item.productId)?.name || 'Unknown Product',
+        discount: item.discount || "0"
+      }));
+
+      const orderWithItems: OrderWithItems = {
+        ...order,
+        items: itemsWithDetails
+      };
+
+      setSelectedOrder(orderWithItems);
+      setViewDialogOpen(true);
+    } catch (error) {
+      console.error("Failed to fetch order details:", error);
+    } finally {
+      setLoadingOrderDetails(false);
+    }
+  };
+
+  const handleEditOrder = (orderId: string) => {
+    setLocation(`/sales`);
+  };
+
+  const handlePrintOrder = async (order: Order) => {
+    try {
+      const response = await fetch(`/api/orders/${order.id}/items`);
+      const items = await response.json();
+      
+      const itemsWithDetails: OrderItemWithProduct[] = items.map((item: any) => ({
+        ...item,
+        productName: item.product?.name || products.find(p => p.id === item.productId)?.name || 'Unknown Product',
+        discount: item.discount || "0"
+      }));
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const subtotal = parseFloat(order.subtotal);
+      const discount = parseFloat(order.discount);
+      const total = parseFloat(order.total);
+      const totalKHR = total * 4100;
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Order Receipt #${order.orderNumber}</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: 'Courier New', monospace;
+                padding: 20px;
+                max-width: 400px;
+                margin: 0 auto;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 20px;
+                border-bottom: 2px dashed #000;
+                padding-bottom: 10px;
+              }
+              .header h1 {
+                font-size: 24px;
+                margin-bottom: 5px;
+              }
+              .header p {
+                font-size: 12px;
+                margin: 2px 0;
+              }
+              .order-info {
+                margin: 15px 0;
+                font-size: 12px;
+              }
+              .order-info div {
+                display: flex;
+                justify-content: space-between;
+                margin: 5px 0;
+              }
+              .items {
+                margin: 15px 0;
+                border-top: 2px dashed #000;
+                border-bottom: 2px dashed #000;
+                padding: 10px 0;
+              }
+              .item {
+                margin: 8px 0;
+                font-size: 12px;
+              }
+              .item-header {
+                display: flex;
+                justify-content: space-between;
+                font-weight: bold;
+              }
+              .item-details {
+                display: flex;
+                justify-content: space-between;
+                font-size: 11px;
+                color: #555;
+                margin-top: 2px;
+              }
+              .totals {
+                margin: 15px 0;
+                font-size: 13px;
+              }
+              .totals div {
+                display: flex;
+                justify-content: space-between;
+                margin: 5px 0;
+              }
+              .totals .total-line {
+                font-weight: bold;
+                font-size: 16px;
+                margin-top: 10px;
+                padding-top: 10px;
+                border-top: 2px solid #000;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 20px;
+                font-size: 11px;
+                border-top: 2px dashed #000;
+                padding-top: 10px;
+              }
+              @media print {
+                body { padding: 10px; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>BondPos</h1>
+              <p>Restaurant POS System</p>
+              <p>Receipt</p>
+            </div>
+
+            <div class="order-info">
+              <div><span>Order #:</span><span>${order.orderNumber}</span></div>
+              <div><span>Date:</span><span>${format(new Date(order.createdAt), "MMM dd, yyyy HH:mm")}</span></div>
+              ${order.customerName ? `<div><span>Customer:</span><span>${order.customerName}</span></div>` : ''}
+              ${order.customerPhone ? `<div><span>Phone:</span><span>${order.customerPhone}</span></div>` : ''}
+              <div><span>Payment:</span><span>${order.paymentMethod || 'N/A'}</span></div>
+              <div><span>Status:</span><span>${order.status.toUpperCase()}</span></div>
+            </div>
+
+            <div class="items">
+              <h3 style="margin-bottom: 10px; font-size: 14px;">Order Items</h3>
+              ${itemsWithDetails.map(item => `
+                <div class="item">
+                  <div class="item-header">
+                    <span>${item.productName}</span>
+                    <span>$${(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
+                  </div>
+                  <div class="item-details">
+                    <span>${item.quantity} x $${parseFloat(item.price).toFixed(2)}</span>
+                    ${parseFloat(item.discount) > 0 ? `<span>Discount: $${parseFloat(item.discount).toFixed(2)}</span>` : '<span></span>'}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="totals">
+              <div><span>Subtotal:</span><span>$${subtotal.toFixed(2)}</span></div>
+              ${discount > 0 ? `<div><span>Discount:</span><span>-$${discount.toFixed(2)}</span></div>` : ''}
+              <div class="total-line"><span>Total (USD):</span><span>$${total.toFixed(2)}</span></div>
+              <div><span>Total (KHR):</span><span>៛${totalKHR.toFixed(0)}</span></div>
+            </div>
+
+            <div class="footer">
+              <p>Thank you for your business!</p>
+              <p>Powered by BondPos</p>
+            </div>
+
+            <script>
+              window.onload = function() {
+                window.print();
+                window.onafterprint = function() {
+                  window.close();
+                };
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (error) {
+      console.error("Failed to print order:", error);
+    }
   };
 
   return (
@@ -534,10 +753,29 @@ export default function Reports() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                <Button size="sm" variant="ghost" data-testid={`button-view-${sale.id}`}>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={() => handleViewOrder(sale)}
+                                  disabled={loadingOrderDetails}
+                                  data-testid={`button-view-${sale.id}`}
+                                >
                                   <Eye className="w-4 h-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" data-testid={`button-print-${sale.id}`}>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={() => handleEditOrder(sale.id)}
+                                  data-testid={`button-edit-${sale.id}`}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={() => handlePrintOrder(sale)}
+                                  data-testid={`button-print-${sale.id}`}
+                                >
                                   <FileText className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -588,10 +826,29 @@ export default function Reports() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="ghost" data-testid={`button-view-${sale.id}`}>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => handleViewOrder(sale)}
+                              disabled={loadingOrderDetails}
+                              data-testid={`button-view-${sale.id}`}
+                            >
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="ghost" data-testid={`button-print-${sale.id}`}>
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => handleEditOrder(sale.id)}
+                              data-testid={`button-edit-${sale.id}`}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => handlePrintOrder(sale)}
+                              data-testid={`button-print-${sale.id}`}
+                            >
                               <FileText className="w-4 h-4" />
                             </Button>
                           </div>
@@ -604,6 +861,115 @@ export default function Reports() {
             )}
           </CardContent>
         </Card>
+
+        <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Order Details</DialogTitle>
+              <DialogDescription>Complete order information and items</DialogDescription>
+            </DialogHeader>
+            
+            {selectedOrder && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Order Number</label>
+                    <div className="font-mono font-bold text-lg">#{selectedOrder.orderNumber}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Date & Time</label>
+                    <div className="font-medium">{format(new Date(selectedOrder.createdAt), "MMM dd, yyyy HH:mm")}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Customer Name</label>
+                    <div className="font-medium">{selectedOrder.customerName || "Walk-in"}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Phone</label>
+                    <div className="font-medium">{selectedOrder.customerPhone || "N/A"}</div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Payment Method</label>
+                    <div><Badge variant="outline" className="capitalize">{selectedOrder.paymentMethod || "N/A"}</Badge></div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Status</label>
+                    <div><Badge variant={selectedOrder.status === "completed" ? "default" : "secondary"}>{selectedOrder.status}</Badge></div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h3 className="font-semibold text-lg mb-4">Order Items</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead className="text-center">Quantity</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="text-right">Discount</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedOrder.items.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{item.productName}</TableCell>
+                          <TableCell className="text-center">{item.quantity}</TableCell>
+                          <TableCell className="text-right font-mono">${parseFloat(item.price).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-mono">${parseFloat(item.discount).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-mono font-medium">
+                            ${parseFloat(item.total).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal:</span>
+                    <span className="font-mono">${parseFloat(selectedOrder.subtotal).toFixed(2)}</span>
+                  </div>
+                  {parseFloat(selectedOrder.discount) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Discount:</span>
+                      <span className="font-mono">-${parseFloat(selectedOrder.discount).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <Separator />
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total (USD):</span>
+                    <span className="font-mono">${parseFloat(selectedOrder.total).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Total (KHR):</span>
+                    <span className="font-mono">៛{(parseFloat(selectedOrder.total) * 4100).toFixed(0)}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+                    <X className="w-4 h-4 mr-2" />
+                    Close
+                  </Button>
+                  <Button variant="outline" onClick={() => handleEditOrder(selectedOrder.id)}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Order
+                  </Button>
+                  <Button onClick={() => handlePrintOrder(selectedOrder)}>
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print Receipt
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
