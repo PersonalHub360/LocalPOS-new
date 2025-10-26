@@ -23,6 +23,7 @@ import SalesManage from "@/pages/sales";
 import ExpenseManage from "@/pages/expenses";
 import ItemManage from "@/pages/items";
 import PurchaseManage from "@/pages/purchases";
+import Inventory from "@/pages/inventory";
 import HRM from "@/pages/hrm";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/expenses" component={ExpenseManage} />
       <Route path="/items" component={ItemManage} />
       <Route path="/purchases" component={PurchaseManage} />
+      <Route path="/inventory" component={Inventory} />
       <Route path="/hrm" component={HRM} />
       <Route path="/reports" component={Reports} />
       <Route path="/settings" component={Settings} />
