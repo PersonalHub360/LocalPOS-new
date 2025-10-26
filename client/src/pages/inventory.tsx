@@ -312,46 +312,88 @@ export default function Inventory() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
+        if (jsonData.length === 0) {
+          toast({
+            title: "Import Failed",
+            description: "No data found in file",
+            variant: "destructive",
+          });
+          return;
+        }
+
         toast({
           title: "Import Started",
           description: `Processing ${jsonData.length} products...`,
         });
 
-        // Process imported data
-        jsonData.forEach(async (row: any) => {
+        // Collect all import operations
+        const importPromises = jsonData.map(async (row: any) => {
           const category = categories.find(c => c.name === row["Category"]);
-          if (category && row["Product Name"]) {
-            const productData = {
-              name: row["Product Name"],
-              price: row["Price (USD)"]?.toString() || "0",
-              quantity: row["Quantity"]?.toString() || "0",
-              unit: row["Unit"] || "Unit",
-              categoryId: category.id,
-              image: null,
-            };
-
-            await apiRequest("POST", "/api/products", productData);
+          if (!category) {
+            throw new Error(`Category "${row["Category"]}" not found for product "${row["Product Name"]}"`);
           }
+          if (!row["Product Name"]) {
+            throw new Error("Product Name is required");
+          }
+
+          const productData = {
+            name: row["Product Name"],
+            price: row["Price (USD)"]?.toString() || "0",
+            quantity: row["Quantity"]?.toString() || "0",
+            unit: row["Unit"] || "Unit",
+            categoryId: category.id,
+            image: null,
+          };
+
+          return await apiRequest("POST", "/api/products", productData);
         });
 
+        // Wait for all imports to complete
+        const results = await Promise.allSettled(importPromises);
+        
+        // Count successes and failures
+        const successful = results.filter(r => r.status === "fulfilled").length;
+        const failed = results.filter(r => r.status === "rejected").length;
+
+        // Invalidate cache after all operations complete
         queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-        toast({
-          title: "Import Successful",
-          description: "Inventory data imported successfully",
-        });
+
+        if (failed === 0) {
+          toast({
+            title: "Import Successful",
+            description: `Successfully imported ${successful} products`,
+          });
+        } else if (successful > 0) {
+          toast({
+            title: "Partial Import",
+            description: `Imported ${successful} products, ${failed} failed`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Import Failed",
+            description: "Failed to import any products. Check category names match existing categories.",
+            variant: "destructive",
+          });
+        }
       } catch (error) {
         toast({
           title: "Import Failed",
-          description: "Failed to import inventory data",
+          description: error instanceof Error ? error.message : "Failed to import inventory data",
           variant: "destructive",
         });
+      } finally {
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
       }
     };
     reader.readAsArrayBuffer(file);
