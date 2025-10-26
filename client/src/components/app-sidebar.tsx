@@ -13,6 +13,7 @@ import {
   Store,
   Receipt,
   LogOut,
+  PackageSearch,
 } from "lucide-react";
 import {
   Sidebar,
@@ -74,6 +75,11 @@ const operationsMenuItems = [
     title: "Purchases",
     url: "/purchases",
     icon: ShoppingBag,
+  },
+  {
+    title: "Inventory",
+    url: "/inventory",
+    icon: PackageSearch,
   },
 ];
 
