@@ -62,6 +62,14 @@ export default function POS() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/inventory/low-stock');
+        }
+      });
       setOrderItems([]);
       setSelectedTable(null);
       setCurrentOrderNumber(`${Math.floor(Math.random() * 100)}`);

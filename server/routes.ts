@@ -441,14 +441,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = createOrderWithItemsSchema.parse(req.body);
       const { items, ...orderData } = validatedData;
       
-      const order = await storage.createOrder(orderData);
-      
-      for (const item of items) {
-        await storage.createOrderItem({
-          ...item,
-          orderId: order.id,
-        });
-      }
+      // Use createOrderWithItems which handles inventory deduction automatically
+      const order = await storage.createOrderWithItems(orderData, items);
 
       if (orderData.tableId) {
         await storage.updateTableStatus(orderData.tableId, "occupied");

@@ -802,6 +802,36 @@ export class MemStorage implements IStorage {
     for (const item of items) {
       await this.createOrderItem({ ...item, orderId: order.id });
     }
+    
+    // If order is created as completed, automatically deduct inventory
+    if (order.status === "completed") {
+      for (const item of items) {
+        const product = this.products.get(item.productId);
+        if (product) {
+          const currentQty = parseFloat(product.quantity);
+          const soldQty = parseFloat(item.quantity);
+          const newQty = Math.max(0, currentQty - soldQty);
+          
+          product.quantity = newQty.toString();
+          this.products.set(item.productId, product);
+          
+          // Create inventory adjustment record for tracking
+          const adjustmentId = randomUUID();
+          const adjustment: InventoryAdjustment = {
+            id: adjustmentId,
+            productId: item.productId,
+            adjustmentType: "remove",
+            quantity: soldQty.toString(),
+            reason: "sale",
+            notes: `Automatic deduction from order #${order.orderNumber}`,
+            performedBy: null,
+            createdAt: new Date(),
+          };
+          this.inventoryAdjustments.set(adjustmentId, adjustment);
+        }
+      }
+    }
+    
     return order;
   }
 

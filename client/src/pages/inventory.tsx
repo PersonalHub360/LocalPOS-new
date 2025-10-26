@@ -102,6 +102,12 @@ export default function Inventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/inventory/low-stock');
+        }
+      });
       setProductDialogOpen(false);
       resetProductForm();
       toast({
@@ -124,6 +130,12 @@ export default function Inventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/inventory/low-stock');
+        }
+      });
       setProductDialogOpen(false);
       resetProductForm();
       toast({
