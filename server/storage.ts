@@ -732,6 +732,42 @@ export class MemStorage implements IStorage {
   async updateOrderStatus(id: string, status: string): Promise<Order | undefined> {
     const order = this.orders.get(id);
     if (!order) return undefined;
+    
+    // If completing an order, automatically deduct inventory
+    if (status === "completed" && order.status !== "completed") {
+      const orderItems = await this.getOrderItems(id);
+      
+      for (const item of orderItems) {
+        const product = this.products.get(item.productId);
+        if (product) {
+          const currentQty = parseFloat(product.quantity);
+          const soldQty = parseFloat(item.quantity);
+          const newQty = Math.max(0, currentQty - soldQty);
+          
+          product.quantity = newQty.toString();
+          this.products.set(item.productId, product);
+          
+          // Create inventory adjustment record for tracking
+          const adjustmentId = randomUUID();
+          const adjustment: InventoryAdjustment = {
+            id: adjustmentId,
+            productId: item.productId,
+            adjustmentType: "remove",
+            quantity: soldQty.toString(),
+            reason: "sale",
+            notes: `Automatic deduction from order #${order.orderNumber}`,
+            performedBy: null,
+            createdAt: new Date(),
+          };
+          this.inventoryAdjustments.set(adjustmentId, adjustment);
+        }
+      }
+      
+      const updated = { ...order, status, completedAt: new Date() };
+      this.orders.set(id, updated);
+      return updated;
+    }
+    
     const updated = { ...order, status };
     this.orders.set(id, updated);
     return updated;
