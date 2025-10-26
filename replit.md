@@ -33,8 +33,18 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 - **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export.
 - **Table Management**: CRUD for tables, capacity tracking, and status management. Enhanced print with order items display (Product Name, Quantity, Price, Discount, Total) and Total in KHR conversion. For occupied tables: Edit Items (navigate to POS), Add Items (dialog to add new items), Print Directly (print current order), and Complete Order (finish order and mark table available).
 - **HRM**: Full employee management (CRUD, import/export, schedule upload). Schemas defined for Attendance, Leave, and Payroll modules.
+- **Inventory Management**: Comprehensive inventory control system with four main tabs:
+  - **All Products**: Full CRUD operations for product catalog (View detailed information, Edit product details, Add new products, Delete products). Displays product name, category, price, quantity, unit, and stock status.
+  - **Stock Overview**: Real-time view of all products with current stock levels and quick stock adjustment actions.
+  - **Low Stock Alerts**: Automatic alerts for products below configurable threshold (default: 10 units). One-click restock functionality.
+  - **Adjustment History**: Complete audit trail of all stock movements with automatic and manual adjustments. Tracks date/time, product, adjustment type (add/remove/set), quantity, reason, and notes.
+  - **Export Inventory**: Export complete inventory data to Excel (.xlsx) or CSV format for reporting and backup purposes.
+  - **Import Inventory**: Bulk import inventory data from Excel/CSV files with downloadable sample template for proper formatting.
+  - **Automatic Stock Deduction**: System automatically deducts sold product quantities from inventory when orders are completed, creating adjustment records for full traceability.
+  - **Manual Adjustments**: Support for manual stock adjustments with reasons (New Purchase, Sale/Usage, Damage/Spoilage, Return, Stock Correction, Other) and optional notes.
+  - **Stock Status Indicators**: Visual badges for stock status (Out of Stock, Low Stock, In Stock) with color coding.
 - **Reporting System**: Comprehensive reports for Sales, Inventory, Payments, Discounts, Refunds, and Staff Performance with various date filters and export options.
-- **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization.
+- **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization. Includes configurable stock threshold for low stock alerts.
 
 ## External Dependencies
 - **Frontend Libraries**: React, TypeScript, TanStack Query, Tailwind CSS, Shadcn UI.
