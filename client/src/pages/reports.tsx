@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Download, 
   Printer, 
@@ -25,12 +37,14 @@ import {
   XCircle,
   Clock,
   Edit,
-  X
+  X,
+  Trash2
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Order, Product, OrderItem } from "@shared/schema";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway" | "aba" | "acleda" | "cash" | "due" | "card";
 type DateFilter = "today" | "yesterday" | "7days" | "month" | "custom";
@@ -55,7 +69,10 @@ export default function Reports() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const { data: sales = [] } = useQuery<Order[]>({
     queryKey: ["/api/sales"],
@@ -472,6 +489,62 @@ export default function Reports() {
     }
   };
 
+  const deleteMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      await Promise.all(
+        orderIds.map(id => 
+          fetch(`/api/orders/${id}`, { method: "DELETE" }).then(res => {
+            if (!res.ok) throw new Error("Failed to delete order");
+            return res;
+          })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      toast({
+        title: "Success",
+        description: `${selectedOrders.length} order(s) deleted successfully`,
+      });
+      setSelectedOrders([]);
+      setDeleteDialogOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete orders",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedOrders(filteredSales.map(sale => sale.id));
+    } else {
+      setSelectedOrders([]);
+    }
+  };
+
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedOrders([...selectedOrders, orderId]);
+    } else {
+      setSelectedOrders(selectedOrders.filter(id => id !== orderId));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedOrders.length > 0) {
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  const confirmDelete = () => {
+    deleteMutation.mutate(selectedOrders);
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-6 space-y-6">
@@ -481,6 +554,17 @@ export default function Reports() {
             <p className="text-muted-foreground mt-1">Analyze performance, sales, and profitability</p>
           </div>
           <div className="flex gap-2">
+            {selectedOrders.length > 0 && reportType === "sales" && (
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteSelected}
+                disabled={deleteMutation.isPending}
+                data-testid="button-delete-selected"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Selected ({selectedOrders.length})
+              </Button>
+            )}
             <Button variant="outline" onClick={handlePrint} data-testid="button-print-report">
               <Printer className="w-4 h-4 mr-2" />
               Print
@@ -855,6 +939,15 @@ export default function Reports() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {reportType === "sales" && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedOrders.length === filteredSales.length && filteredSales.length > 0}
+                          onCheckedChange={handleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>Date/Time</TableHead>
                     <TableHead>Order ID</TableHead>
                     <TableHead>Customer</TableHead>
@@ -867,13 +960,22 @@ export default function Reports() {
                 <TableBody>
                   {filteredSales.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={reportType === "sales" ? 8 : 7} className="text-center text-muted-foreground">
                         No transactions found for the selected period
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredSales.map((sale) => (
                       <TableRow key={sale.id} data-testid={`row-sale-${sale.id}`}>
+                        {reportType === "sales" && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedOrders.includes(sale.id)}
+                              onCheckedChange={(checked) => handleSelectOrder(sale.id, checked as boolean)}
+                              data-testid={`checkbox-order-${sale.id}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>{format(new Date(sale.createdAt), "MMM dd, yyyy HH:mm")}</TableCell>
                         <TableCell className="font-mono">#{sale.orderNumber}</TableCell>
                         <TableCell>{sale.customerName || "Walk-in"}</TableCell>
@@ -1034,6 +1136,23 @@ export default function Reports() {
             )}
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete {selectedOrders.length} selected order(s)? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
