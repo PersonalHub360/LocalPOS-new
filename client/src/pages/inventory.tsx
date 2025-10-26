@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, Plus, RefreshCw, TrendingUp, TrendingDown, Package, History, Eye, Edit, Trash2, Download, Upload, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -29,6 +30,7 @@ export default function Inventory() {
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -174,6 +176,33 @@ export default function Inventory() {
     },
   });
 
+  const bulkDeleteProductsMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(id => apiRequest("DELETE", `/api/products/${id}`)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/inventory/low-stock');
+        }
+      });
+      setSelectedProductIds([]);
+      toast({
+        title: "Success",
+        description: `${selectedProductIds.length} product(s) deleted successfully`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete product",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAdjustStock = () => {
     if (!selectedProduct || !quantity || !reason) {
       toast({
@@ -231,7 +260,7 @@ export default function Inventory() {
       quantity: product.quantity,
       unit: product.unit,
       categoryId: product.categoryId,
-      image: product.image,
+      image: product.imageUrl,
     });
     setSelectedProduct(product);
     setIsEditMode(true);
@@ -246,6 +275,27 @@ export default function Inventory() {
   const handleDeleteProduct = (product: Product) => {
     setSelectedProduct(product);
     setDeleteDialogOpen(true);
+  };
+
+  const handleSelectProduct = (productId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedProductIds([...selectedProductIds, productId]);
+    } else {
+      setSelectedProductIds(selectedProductIds.filter(id => id !== productId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedProductIds(filteredProducts.map(p => p.id));
+    } else {
+      setSelectedProductIds([]);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedProductIds.length === 0) return;
+    bulkDeleteProductsMutation.mutate(selectedProductIds);
   };
 
   const handleProductSubmit = () => {
@@ -530,10 +580,24 @@ export default function Inventory() {
                   <CardTitle>All Products</CardTitle>
                   <CardDescription>Manage your product catalog</CardDescription>
                 </div>
-                <Button onClick={handleAddProduct} className="gap-2" data-testid="button-add-product">
-                  <Plus className="w-4 h-4" />
-                  Add Product
-                </Button>
+                <div className="flex gap-2">
+                  {selectedProductIds.length > 0 && (
+                    <Button 
+                      variant="destructive" 
+                      onClick={handleBulkDelete} 
+                      className="gap-2"
+                      disabled={bulkDeleteProductsMutation.isPending}
+                      data-testid="button-delete-selected"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Selected ({selectedProductIds.length})
+                    </Button>
+                  )}
+                  <Button onClick={handleAddProduct} className="gap-2" data-testid="button-add-product">
+                    <Plus className="w-4 h-4" />
+                    Add Product
+                  </Button>
+                </div>
               </div>
               <div className="pt-4">
                 <Input
@@ -549,6 +613,14 @@ export default function Inventory() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all products"
+                        data-testid="checkbox-select-all"
+                      />
+                    </TableHead>
                     <TableHead>Product Name</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Price</TableHead>
@@ -561,7 +633,7 @@ export default function Inventory() {
                 <TableBody>
                   {filteredProducts.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
                         No products found
                       </TableCell>
                     </TableRow>
@@ -571,6 +643,14 @@ export default function Inventory() {
                       const status = getStockStatus(qty);
                       return (
                         <TableRow key={product.id} data-testid={`row-product-${product.id}`}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedProductIds.includes(product.id)}
+                              onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
+                              aria-label={`Select ${product.name}`}
+                              data-testid={`checkbox-product-${product.id}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{product.name}</TableCell>
                           <TableCell>{categories.find(c => c.id === product.categoryId)?.name || product.categoryId}</TableCell>
                           <TableCell className="text-right font-mono">${parseFloat(product.price).toFixed(2)}</TableCell>
