@@ -353,8 +353,62 @@ export class MemStorage implements IStorage {
         completedAt: new Date("2025-10-06T14:35:00"),
       },
       {
-        id: "qr-order-1",
+        id: "sale-6",
         orderNumber: "6",
+        tableId: null,
+        diningOption: "takeaway",
+        customerName: "David Lee",
+        customerPhone: null,
+        orderSource: "pos",
+        subtotal: "45.00",
+        discount: "0.00",
+        discountType: "amount",
+        total: "45.00",
+        status: "completed",
+        paymentStatus: "paid",
+        paymentMethod: "acleda",
+        createdAt: new Date("2025-10-06T15:00:00"),
+        completedAt: new Date("2025-10-06T15:15:00"),
+      },
+      {
+        id: "sale-7",
+        orderNumber: "7",
+        tableId: "6",
+        diningOption: "dine-in",
+        customerName: "Jessica Wang",
+        customerPhone: null,
+        orderSource: "pos",
+        subtotal: "72.50",
+        discount: "5.00",
+        discountType: "amount",
+        total: "67.50",
+        status: "completed",
+        paymentStatus: "paid",
+        paymentMethod: "due",
+        createdAt: new Date("2025-10-06T16:30:00"),
+        completedAt: new Date("2025-10-06T16:50:00"),
+      },
+      {
+        id: "sale-8",
+        orderNumber: "8",
+        tableId: null,
+        diningOption: "delivery",
+        customerName: "Tom Anderson",
+        customerPhone: null,
+        orderSource: "pos",
+        subtotal: "38.00",
+        discount: "0.00",
+        discountType: "amount",
+        total: "38.00",
+        status: "completed",
+        paymentStatus: "paid",
+        paymentMethod: "aba",
+        createdAt: new Date("2025-10-06T17:20:00"),
+        completedAt: new Date("2025-10-06T17:35:00"),
+      },
+      {
+        id: "qr-order-1",
+        orderNumber: "9",
         tableId: "2",
         diningOption: "dine-in",
         customerName: "James Wilson",
@@ -372,7 +426,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "qr-order-2",
-        orderNumber: "7",
+        orderNumber: "10",
         tableId: "4",
         diningOption: "dine-in",
         customerName: "Linda Martinez",
@@ -390,7 +444,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: "qr-order-3",
-        orderNumber: "8",
+        orderNumber: "11",
         tableId: null,
         diningOption: "takeaway",
         customerName: "Robert Chen",
@@ -409,7 +463,7 @@ export class MemStorage implements IStorage {
     ];
 
     sampleOrders.forEach((order) => this.orders.set(order.id, order));
-    this.orderCounter = 9;
+    this.orderCounter = 12;
 
     // Order items for completed sales
     const saleOrderItems: OrderItem[] = [
@@ -433,6 +487,22 @@ export class MemStorage implements IStorage {
       { id: randomUUID(), orderId: "sale-5", productId: "8", quantity: 2, price: "10.50", total: "21.00" },
       { id: randomUUID(), orderId: "sale-5", productId: "22", quantity: 1, price: "4.50", total: "4.50" },
       { id: randomUUID(), orderId: "sale-5", productId: "25", quantity: 1, price: "3.00", total: "3.00" },
+      
+      // sale-6 items (subtotal: 45.00, total: 45.00) - Acleda payment
+      { id: randomUUID(), orderId: "sale-6", productId: "2", quantity: 2, price: "10.50", total: "21.00" },
+      { id: randomUUID(), orderId: "sale-6", productId: "6", quantity: 1, price: "10.50", total: "10.50" },
+      { id: randomUUID(), orderId: "sale-6", productId: "20", quantity: 3, price: "4.50", total: "13.50" },
+      
+      // sale-7 items (subtotal: 72.50, discount: 5.00, total: 67.50) - Due payment
+      { id: randomUUID(), orderId: "sale-7", productId: "1", quantity: 3, price: "10.60", total: "31.80" },
+      { id: randomUUID(), orderId: "sale-7", productId: "9", quantity: 2, price: "10.50", total: "21.00" },
+      { id: randomUUID(), orderId: "sale-7", productId: "14", quantity: 1, price: "11.00", total: "11.00" },
+      { id: randomUUID(), orderId: "sale-7", productId: "23", quantity: 2, price: "3.50", total: "7.00" },
+      
+      // sale-8 items (subtotal: 38.00, total: 38.00) - ABA payment
+      { id: randomUUID(), orderId: "sale-8", productId: "4", quantity: 2, price: "10.50", total: "21.00" },
+      { id: randomUUID(), orderId: "sale-8", productId: "11", quantity: 1, price: "9.00", total: "9.00" },
+      { id: randomUUID(), orderId: "sale-8", productId: "21", quantity: 2, price: "4.00", total: "8.00" },
     ];
 
     const qrOrderItems: OrderItem[] = [

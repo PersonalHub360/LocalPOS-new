@@ -134,19 +134,19 @@ export default function Reports() {
       }
 
       // For payment method-specific reports, filter by payment method
-      if (reportType === "aba" && sale.paymentMethod !== "ABA") {
+      if (reportType === "aba" && sale.paymentMethod !== "aba") {
         return false;
       }
-      if (reportType === "acleda" && sale.paymentMethod !== "Acleda") {
+      if (reportType === "acleda" && sale.paymentMethod !== "acleda") {
         return false;
       }
-      if (reportType === "cash" && sale.paymentMethod !== "Cash") {
+      if (reportType === "cash" && sale.paymentMethod !== "cash") {
         return false;
       }
-      if (reportType === "due" && sale.paymentMethod !== "Due") {
+      if (reportType === "due" && sale.paymentMethod !== "due") {
         return false;
       }
-      if (reportType === "card" && sale.paymentMethod !== "Card") {
+      if (reportType === "card" && sale.paymentMethod !== "card") {
         return false;
       }
 
@@ -680,11 +680,11 @@ export default function Reports() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Methods</SelectItem>
-                      <SelectItem value="Cash">Cash</SelectItem>
-                      <SelectItem value="Card">Card</SelectItem>
-                      <SelectItem value="ABA">ABA</SelectItem>
-                      <SelectItem value="Acleda">Acleda</SelectItem>
-                      <SelectItem value="Due">Due</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="card">Card</SelectItem>
+                      <SelectItem value="aba">ABA</SelectItem>
+                      <SelectItem value="acleda">Acleda</SelectItem>
+                      <SelectItem value="due">Due</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
