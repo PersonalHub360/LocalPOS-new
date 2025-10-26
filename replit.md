@@ -44,7 +44,8 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
   - **Automatic Stock Deduction**: System automatically deducts sold product quantities from inventory when orders are completed, creating adjustment records for full traceability.
   - **Manual Adjustments**: Support for manual stock adjustments with reasons (New Purchase, Sale/Usage, Damage/Spoilage, Return, Stock Correction, Other) and optional notes.
   - **Stock Status Indicators**: Visual badges for stock status (Out of Stock, Low Stock, In Stock) with color coding.
-- **Reporting System**: Comprehensive reports for Sales, Inventory, Payments, Discounts, Refunds, and Staff Performance with various date filters and export options.
+- **Reporting System**: Comprehensive reports for Sales, Inventory, Payments, Payment Gateway, Discounts, Refunds, and Staff Performance with various date filters and export options.
+  - **Payment Gateway Report**: Specialized report view displaying detailed transaction information with payment gateway-specific fields including Transaction ID, Date/Time, Payment Method, Amount (USD/KHR), Payment Status with status icons (CheckCircle for paid/successful, Clock for pending, XCircle for failed), and Payer Information. Features multi-criteria filtering by payment method (Cash, Card, ABA, Acleda, Due) and payment status (Pending, Paid, Failed). Supports both CSV and PDF export with formatted tables and summary statistics.
 - **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization. Includes configurable stock threshold for low stock alerts.
 
 ## External Dependencies
