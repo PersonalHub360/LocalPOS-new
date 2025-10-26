@@ -29,6 +29,8 @@ import {
   type InsertSettings,
   type User,
   type InsertUser,
+  type InventoryAdjustment,
+  type InsertInventoryAdjustment,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -139,6 +141,12 @@ export interface IStorage {
   getSettings(): Promise<Settings | undefined>;
   updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
   
+  getInventoryAdjustments(): Promise<InventoryAdjustment[]>;
+  getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined>;
+  getInventoryAdjustmentsByProduct(productId: string): Promise<InventoryAdjustment[]>;
+  createInventoryAdjustment(adjustment: InsertInventoryAdjustment): Promise<InventoryAdjustment>;
+  getLowStockProducts(threshold: number): Promise<Product[]>;
+  
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -164,6 +172,7 @@ export class MemStorage implements IStorage {
   private staffSalaries: Map<string, StaffSalary>;
   private users: Map<string, User>;
   private settings: Settings | null;
+  private inventoryAdjustments: Map<string, InventoryAdjustment>;
   private orderCounter: number = 20;
 
   constructor() {
@@ -182,6 +191,7 @@ export class MemStorage implements IStorage {
     this.staffSalaries = new Map();
     this.users = new Map();
     this.settings = null;
+    this.inventoryAdjustments = new Map();
     this.seedData();
   }
 
@@ -1362,6 +1372,62 @@ export class MemStorage implements IStorage {
     if (!isValid) return null;
     
     return user;
+  }
+
+  async getInventoryAdjustments(): Promise<InventoryAdjustment[]> {
+    return Array.from(this.inventoryAdjustments.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    );
+  }
+
+  async getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined> {
+    return this.inventoryAdjustments.get(id);
+  }
+
+  async getInventoryAdjustmentsByProduct(productId: string): Promise<InventoryAdjustment[]> {
+    return Array.from(this.inventoryAdjustments.values())
+      .filter(adj => adj.productId === productId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async createInventoryAdjustment(insertAdjustment: InsertInventoryAdjustment): Promise<InventoryAdjustment> {
+    const id = randomUUID();
+    const adjustment: InventoryAdjustment = {
+      ...insertAdjustment,
+      id,
+      notes: insertAdjustment.notes ?? null,
+      performedBy: insertAdjustment.performedBy ?? null,
+      createdAt: new Date(),
+    };
+    
+    this.inventoryAdjustments.set(id, adjustment);
+    
+    // Update product quantity
+    const product = this.products.get(insertAdjustment.productId);
+    if (product) {
+      const currentQty = parseFloat(product.quantity);
+      const adjustQty = parseFloat(insertAdjustment.quantity);
+      let newQty: number;
+      
+      if (insertAdjustment.adjustmentType === "add") {
+        newQty = currentQty + adjustQty;
+      } else if (insertAdjustment.adjustmentType === "remove") {
+        newQty = currentQty - adjustQty;
+      } else {
+        newQty = adjustQty; // set
+      }
+      
+      product.quantity = Math.max(0, newQty).toString();
+      this.products.set(insertAdjustment.productId, product);
+    }
+    
+    return adjustment;
+  }
+
+  async getLowStockProducts(threshold: number): Promise<Product[]> {
+    return Array.from(this.products.values())
+      .filter(p => parseFloat(p.quantity) <= threshold)
+      .sort((a, b) => parseFloat(a.quantity) - parseFloat(b.quantity));
   }
 }
 
