@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema } from "@shared/schema";
+import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema } from "@shared/schema";
 import { z } from "zod";
 
 const createOrderWithItemsSchema = insertOrderSchema.extend({
@@ -802,6 +802,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete purchase" });
+    }
+  });
+
+  app.get("/api/inventory/adjustments", async (req, res) => {
+    try {
+      const { productId } = req.query;
+      const adjustments = productId
+        ? await storage.getInventoryAdjustmentsByProduct(productId as string)
+        : await storage.getInventoryAdjustments();
+      res.json(adjustments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch inventory adjustments" });
+    }
+  });
+
+  app.get("/api/inventory/low-stock", async (req, res) => {
+    try {
+      const threshold = parseInt(req.query.threshold as string) || 10;
+      const lowStockProducts = await storage.getLowStockProducts(threshold);
+      res.json(lowStockProducts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch low stock products" });
+    }
+  });
+
+  app.post("/api/inventory/adjustments", async (req, res) => {
+    try {
+      const validatedData = insertInventoryAdjustmentSchema.parse(req.body);
+      const adjustment = await storage.createInventoryAdjustment(validatedData);
+      res.status(201).json(adjustment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid adjustment data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create inventory adjustment" });
     }
   });
 
