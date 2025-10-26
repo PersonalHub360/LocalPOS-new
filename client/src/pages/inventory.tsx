@@ -41,7 +41,7 @@ export default function Inventory() {
   const stockThreshold = settings?.stockThreshold || 10;
 
   const { data: lowStockProducts = [] } = useQuery<Product[]>({
-    queryKey: ["/api/inventory/low-stock", { threshold: stockThreshold }],
+    queryKey: [`/api/inventory/low-stock?threshold=${stockThreshold}`],
   });
 
   const createAdjustmentMutation = useMutation({
@@ -51,7 +51,12 @@ export default function Inventory() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/low-stock"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/inventory/low-stock');
+        }
+      });
       setAdjustmentDialogOpen(false);
       setSelectedProduct(null);
       setQuantity("");
@@ -81,10 +86,22 @@ export default function Inventory() {
       return;
     }
 
+    const trimmedQuantity = quantity.trim();
+    const numQuantity = parseFloat(trimmedQuantity);
+    
+    if (isNaN(numQuantity) || numQuantity <= 0 || !/^\d+(\.\d+)?$/.test(trimmedQuantity)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid positive number for quantity",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createAdjustmentMutation.mutate({
       productId: selectedProduct.id,
       adjustmentType,
-      quantity,
+      quantity: trimmedQuantity,
       reason,
       notes: notes || undefined,
     });
