@@ -174,7 +174,7 @@ export default function Reports() {
   const handleExportCSV = () => {
     let csvContent;
     
-    if (reportType === "gateway") {
+    if (reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") {
       csvContent = [
         ["Transaction ID", "Date/Time", "Payment Method", "Amount (USD)", "Amount (KHR)", "Status", "Payment Status", "Customer", "Phone"].join(","),
         ...filteredSales.map(sale => [
@@ -726,15 +726,21 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>
-                  {reportType === "gateway" ? "Payment Gateway Transactions" : `Detailed ${reportType === "sales" ? "Sales" : "Transaction"} Report`}
+                  {reportType === "gateway" ? "Payment Gateway Transactions" : 
+                   reportType === "aba" ? "ABA Payment Transactions" :
+                   reportType === "acleda" ? "Acleda Payment Transactions" :
+                   reportType === "cash" ? "Cash Payment Transactions" :
+                   reportType === "due" ? "Due Payment Transactions" :
+                   reportType === "card" ? "Card Payment Transactions" :
+                   `Detailed ${reportType === "sales" ? "Sales" : "Transaction"} Report`}
                 </CardTitle>
                 <CardDescription>
-                  {reportType === "gateway" 
-                    ? "Complete transaction details with payment gateway information" 
+                  {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card")
+                    ? "Complete transaction details with payment information" 
                     : "View all transactions in the selected date range"}
                 </CardDescription>
               </div>
-              {reportType === "gateway" && filteredSales.length > 0 && (
+              {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && filteredSales.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="gap-1">
                     <CreditCard className="w-3 h-3" />
@@ -745,7 +751,7 @@ export default function Reports() {
             </div>
           </CardHeader>
           <CardContent>
-            {reportType === "gateway" ? (
+            {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") ? (
               <div className="space-y-4">
                 <Table>
                   <TableHeader>
