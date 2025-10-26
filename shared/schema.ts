@@ -342,6 +342,25 @@ export const insertSettingsSchema = createInsertSchema(settings).omit({
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 export type Settings = typeof settings.$inferSelect;
 
+export const inventoryAdjustments = pgTable("inventory_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull(),
+  adjustmentType: text("adjustment_type").notNull(),
+  quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  notes: text("notes"),
+  performedBy: varchar("performed_by"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertInventoryAdjustmentSchema = createInsertSchema(inventoryAdjustments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertInventoryAdjustment = z.infer<typeof insertInventoryAdjustmentSchema>;
+export type InventoryAdjustment = typeof inventoryAdjustments.$inferSelect;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
