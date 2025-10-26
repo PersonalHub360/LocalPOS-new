@@ -940,7 +940,7 @@ export default function Inventory() {
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
+                    <SelectItem key={cat.id} value={cat.id} data-testid={`option-category-${cat.name.toLowerCase()}`}>
                       {cat.name}
                     </SelectItem>
                   ))}
