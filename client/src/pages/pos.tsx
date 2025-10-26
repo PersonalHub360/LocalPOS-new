@@ -61,8 +61,12 @@ export default function POS() {
       return await apiRequest("POST", "/api/orders", orderData);
     },
     onSuccess: () => {
+      // Invalidate orders and products
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      
+      // Invalidate inventory queries
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
       queryClient.invalidateQueries({ 
         predicate: (query) => {
@@ -70,6 +74,15 @@ export default function POS() {
           return typeof key === 'string' && key.includes('/api/inventory/low-stock');
         }
       });
+      
+      // Invalidate all dashboard queries for real-time updates
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/dashboard');
+        }
+      });
+      
       setOrderItems([]);
       setSelectedTable(null);
       setCurrentOrderNumber(`${Math.floor(Math.random() * 100)}`);

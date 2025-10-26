@@ -195,6 +195,7 @@ export default function Tables() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       setAddItemsDialogOpen(false);
       toast({
         title: "Success",
@@ -274,7 +275,29 @@ export default function Tables() {
       return await apiRequest("PATCH", `/api/tables/${tableId}/status`, { status: "available" });
     },
     onSuccess: () => {
+      // Invalidate tables, orders, and sales
       queryClient.invalidateQueries({ queryKey: ["/api/tables"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      
+      // Invalidate inventory queries
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/inventory/low-stock');
+        }
+      });
+      
+      // Invalidate all dashboard queries for real-time updates
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/dashboard');
+        }
+      });
+      
       toast({
         title: "Success",
         description: "Order completed and table is now available",

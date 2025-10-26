@@ -23,7 +23,11 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 - **API**: Provides RESTful APIs for managing products, categories, orders, tables, items, purchases, employees, and authentication.
 - **Core Workflows**: Includes a complete POS order workflow with draft management, receipt printing, and multiple payment methods. Comprehensive CRUD operations are supported across all management modules (Items, Purchases, Tables, Employees).
 - **Permissions**: Role-based permissions system with granular controls for reports, settings, refunds, and inventory.
-- **Cache Invalidation Pattern**: React Query cache invalidation ensures real-time UI updates without manual refresh. All inventory-affecting mutations (order completion, product CRUD, stock adjustments) invalidate: `/api/products`, `/api/inventory/adjustments`, and low-stock queries (via predicate matching on key prefix `/api/inventory/low-stock`). This pattern guarantees synchronized data across POS, Inventory, and reporting modules.
+- **Cache Invalidation Pattern**: React Query cache invalidation ensures real-time UI updates without manual refresh. 
+  - **Order Creation/Completion** (POS, Tables): Invalidates `/api/orders`, `/api/products`, `/api/sales`, `/api/inventory/adjustments`, low-stock queries, and all dashboard queries (using predicate matching on `/api/dashboard` prefix)
+  - **Stock Adjustments** (Inventory): Invalidates `/api/products`, `/api/inventory/adjustments`, and low-stock queries
+  - **Product CRUD** (Inventory): Invalidates `/api/products` and low-stock queries
+  - This pattern guarantees synchronized data across POS, Inventory, Dashboard, and Reporting modules without manual page refresh
 
 ### Feature Specifications
 - **Authentication**: Secure login, session management, password hashing, and protected API routes.
