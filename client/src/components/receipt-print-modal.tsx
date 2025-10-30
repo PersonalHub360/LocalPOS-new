@@ -29,6 +29,7 @@ interface ReceiptPrintModalProps {
     tableId?: string | null;
     diningOption: string;
     paymentSplits?: string;
+    changeDue?: number;
   };
   onPrint: () => void;
 }
@@ -235,6 +236,27 @@ export function ReceiptPrintModal({
               }
               return null;
             })()}
+
+            {order.changeDue && order.changeDue > 0 && (
+              <div className="border-t-2 border-dashed border-border pt-3 mt-3">
+                <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-lg text-green-700 dark:text-green-400">Change Due:</span>
+                    <div className="text-right" data-testid="receipt-change-due">
+                      <p className="font-mono font-bold text-2xl text-green-700 dark:text-green-400">
+                        {formatDualCurrency(order.changeDue).usd}
+                      </p>
+                      <p className="font-mono font-semibold text-sm text-green-600 dark:text-green-500">
+                        {formatDualCurrency(order.changeDue).khr}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Return this amount to customer
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="border-t-2 border-dashed border-border pt-4 mt-4">

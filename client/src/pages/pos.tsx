@@ -410,6 +410,11 @@ export default function POS() {
     const total = subtotal - discountAmount;
     const draftIdToDelete = currentDraftId;
 
+    const totalPaidAmount = paymentSplits && paymentSplits.length > 0
+      ? paymentSplits.reduce((sum, split) => sum + split.amount, 0)
+      : amountPaid;
+    const changeDue = totalPaidAmount > total ? totalPaidAmount - total : 0;
+
     const orderData: any = {
       tableId: selectedTable,
       diningOption,
@@ -455,6 +460,7 @@ export default function POS() {
       tableId: selectedTable,
       diningOption,
       paymentSplits: paymentSplits && paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : undefined,
+      changeDue: changeDue > 0 ? changeDue : undefined,
     });
 
     setPaymentModalOpen(false);
