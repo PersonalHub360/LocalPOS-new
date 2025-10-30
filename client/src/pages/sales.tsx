@@ -87,6 +87,7 @@ export default function SalesManage() {
   const [summaryDateFilter, setSummaryDateFilter] = useState<DateFilterType>("all");
   const [summaryStartDate, setSummaryStartDate] = useState<Date | undefined>(undefined);
   const [summaryEndDate, setSummaryEndDate] = useState<Date | undefined>(undefined);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
   const { toast} = useToast();
 
   const { data: sales = [], isLoading } = useQuery<Order[]>({
@@ -642,84 +643,107 @@ export default function SalesManage() {
                 <CardDescription>Individual item sales summary</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Select value={summaryDateFilter} onValueChange={(value: DateFilterType) => setSummaryDateFilter(value)}>
-                    <SelectTrigger className="w-[180px]" data-testid="select-summary-date-filter">
-                      <SelectValue placeholder="Filter by date" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Time</SelectItem>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="yesterday">Yesterday</SelectItem>
-                      <SelectItem value="custom">Custom Range</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <Select value={summaryDateFilter} onValueChange={(value: DateFilterType) => setSummaryDateFilter(value)}>
+                      <SelectTrigger className="w-[180px]" data-testid="select-summary-date-filter">
+                        <SelectValue placeholder="Filter by date" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="yesterday">Yesterday</SelectItem>
+                        <SelectItem value="custom">Custom Range</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                  {summaryDateFilter === "custom" && (
-                    <>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-start-date">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {summaryStartDate ? format(summaryStartDate, "PPP") : "Start Date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={summaryStartDate}
-                            onSelect={setSummaryStartDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                    {summaryDateFilter === "custom" && (
+                      <>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-start-date">
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {summaryStartDate ? format(summaryStartDate, "PPP") : "Start Date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={summaryStartDate}
+                              onSelect={setSummaryStartDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
 
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-end-date">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {summaryEndDate ? format(summaryEndDate, "PPP") : "End Date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={summaryEndDate}
-                            onSelect={setSummaryEndDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </>
-                  )}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-end-date">
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {summaryEndDate ? format(summaryEndDate, "PPP") : "End Date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={summaryEndDate}
+                              onSelect={setSummaryEndDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </>
+                    )}
+                  </div>
+                  
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by product name..."
+                      value={productSearchTerm}
+                      onChange={(e) => setProductSearchTerm(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-product-search"
+                    />
+                  </div>
                 </div>
 
                 {isSummaryLoading ? (
                   <p className="text-muted-foreground">Loading sales summary...</p>
-                ) : salesSummary.length === 0 ? (
-                  <p className="text-muted-foreground">No sales data available for the selected period</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead data-testid="header-product-name">Product Name</TableHead>
-                          <TableHead data-testid="header-quantity-sold">Quantity Sold</TableHead>
-                          <TableHead data-testid="header-total-revenue">Total Revenue</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {salesSummary.map((item, index) => (
-                          <TableRow key={index} data-testid={`row-summary-${index}`}>
-                            <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
-                            <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
-                            <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
+                ) : (() => {
+                  const filteredSummary = salesSummary.filter((item) =>
+                    item.product.toLowerCase().includes(productSearchTerm.toLowerCase())
+                  );
+                  
+                  return filteredSummary.length === 0 ? (
+                    <p className="text-muted-foreground">
+                      {productSearchTerm 
+                        ? `No products found matching "${productSearchTerm}"`
+                        : "No sales data available for the selected period"}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead data-testid="header-product-name">Product Name</TableHead>
+                            <TableHead data-testid="header-quantity-sold">Quantity Sold</TableHead>
+                            <TableHead data-testid="header-total-revenue">Total Revenue</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                        </TableHeader>
+                        <TableBody>
+                          {filteredSummary.map((item, index) => (
+                            <TableRow key={index} data-testid={`row-summary-${index}`}>
+                              <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
+                              <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
+                              <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
