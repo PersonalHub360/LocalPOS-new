@@ -47,8 +47,7 @@ import autoTable from "jspdf-autotable";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
 type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "aba" | "acleda" | "cash" | "due" | "card";
-type PaymentReportType = "gateway" | "payment-history" | "none";
-type DateFilter = "today" | "yesterday" | "7days" | "month" | "custom";
+type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "custom";
 
 interface OrderItemWithProduct extends OrderItem {
   productName: string;
@@ -62,11 +61,9 @@ interface OrderWithItems extends Order {
 
 export default function Reports() {
   const [reportType, setReportType] = useState<ReportType>("sales");
-  const [paymentReportType, setPaymentReportType] = useState<PaymentReportType>("none");
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -100,11 +97,13 @@ export default function Reports() {
         startDate.setDate(now.getDate() - 1);
         startDate.setHours(0, 0, 0, 0);
         break;
-      case "7days":
-        startDate.setDate(now.getDate() - 7);
+      case "thismonth":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
         break;
-      case "month":
-        startDate.setMonth(now.getMonth() - 1);
+      case "lastmonth":
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "custom":
         if (customStartDate) {
@@ -125,36 +124,11 @@ export default function Reports() {
 
       if (!dateMatch) return false;
 
-      // For gateway report, apply payment filters
-      if (paymentReportType === "gateway") {
-        if (paymentMethodFilter !== "all" && sale.paymentMethod !== paymentMethodFilter) {
-          return false;
-        }
-        if (paymentStatusFilter !== "all" && sale.paymentStatus !== paymentStatusFilter) {
-          return false;
-        }
-      }
-
-      // For payment method-specific reports, filter by payment method
-      if (reportType === "aba" && sale.paymentMethod !== "aba") {
-        return false;
-      }
-      if (reportType === "acleda" && sale.paymentMethod !== "acleda") {
-        return false;
-      }
-      if (reportType === "cash" && sale.paymentMethod !== "cash") {
-        return false;
-      }
-      if (reportType === "due" && sale.paymentMethod !== "due") {
-        return false;
-      }
-      if (reportType === "card" && sale.paymentMethod !== "card") {
-        return false;
-      }
-
-      // Apply payment status filter for payment method-specific reports
-      if ((reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card")) {
-        if (paymentStatusFilter !== "all" && sale.paymentStatus !== paymentStatusFilter) {
+      // Apply payment status filter
+      if (paymentStatusFilter !== "all") {
+        // Map "completed" to "paid" for backward compatibility
+        const statusToCheck = paymentStatusFilter === "completed" ? "paid" : paymentStatusFilter;
+        if (sale.paymentStatus !== statusToCheck) {
           return false;
         }
       }
@@ -216,36 +190,19 @@ export default function Reports() {
   };
 
   const handleExportCSV = () => {
-    let csvContent;
-    
-    if (paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") {
-      csvContent = [
-        ["Transaction ID", "Date/Time", "Payment Method", "Amount (USD)", "Amount (KHR)", "Status", "Payment Status", "Customer", "Phone"].join(","),
-        ...filteredSales.map(sale => [
-          sale.orderNumber,
-          format(new Date(sale.createdAt), "yyyy-MM-dd HH:mm"),
-          sale.paymentMethod || "N/A",
-          parseFloat(sale.total).toFixed(2),
-          (parseFloat(sale.total) * 4100).toFixed(0),
-          sale.status,
-          sale.paymentStatus,
-          sale.customerName || "Walk-in",
-          sale.customerPhone || "N/A"
-        ].join(","))
-      ].join("\n");
-    } else {
-      csvContent = [
-        ["Date", "Order Number", "Customer", "Total", "Payment Method", "Status"].join(","),
-        ...filteredSales.map(sale => [
-          format(new Date(sale.createdAt), "yyyy-MM-dd HH:mm"),
-          sale.orderNumber,
-          sale.customerName || "N/A",
-          sale.total,
-          sale.paymentMethod || "N/A",
-          sale.status
-        ].join(","))
-      ].join("\n");
-    }
+    const csvContent = [
+      ["Date", "Order Number", "Customer", "Total (USD)", "Total (KHR)", "Payment Method", "Payment Status", "Status"].join(","),
+      ...filteredSales.map(sale => [
+        format(new Date(sale.createdAt), "yyyy-MM-dd HH:mm"),
+        sale.orderNumber,
+        sale.customerName || "Walk-in",
+        parseFloat(sale.total).toFixed(2),
+        (parseFloat(sale.total) * 4100).toFixed(0),
+        sale.paymentMethod || "N/A",
+        sale.paymentStatus || "N/A",
+        sale.status
+      ].join(","))
+    ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -261,17 +218,16 @@ export default function Reports() {
     
     // Get report title based on type
     const reportTitles: Record<string, string> = {
-      gateway: "Payment Gateway Report",
-      aba: "ABA Payment Report",
-      acleda: "Acleda Payment Report",
-      cash: "Cash Payment Report",
-      due: "Due Payment Report",
-      card: "Card Payment Report"
+      sales: "Sales Report",
+      inventory: "Inventory Report",
+      discounts: "Discounts Report",
+      refunds: "Refunds Report",
+      staff: "Staff Performance Report"
     };
     
     // Add header
     doc.setFontSize(18);
-    doc.text(reportTitles[reportType] || "Payment Report", 14, 20);
+    doc.text(reportTitles[reportType] || "POS Report", 14, 20);
     
     doc.setFontSize(11);
     doc.text(`Generated: ${format(new Date(), "MMM dd, yyyy HH:mm")}`, 14, 28);
@@ -291,14 +247,14 @@ export default function Reports() {
       sale.paymentMethod || "N/A",
       `$${parseFloat(sale.total).toFixed(2)}`,
       `៛${(parseFloat(sale.total) * 4100).toFixed(0)}`,
-      sale.paymentStatus,
+      sale.paymentStatus || "N/A",
       sale.customerName || "Walk-in"
     ]);
     
     // Add table
     autoTable(doc, {
       startY: 55,
-      head: [["Transaction ID", "Date/Time", "Method", "USD", "KHR", "Status", "Customer"]],
+      head: [["Order #", "Date/Time", "Method", "USD", "KHR", "Payment Status", "Customer"]],
       body: tableData,
       styles: { fontSize: 8 },
       headStyles: { fillColor: [59, 130, 246] },
@@ -313,7 +269,7 @@ export default function Reports() {
       }
     });
     
-    doc.save(`payment-gateway-report-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    doc.save(`${reportType}-report-${format(new Date(), "yyyy-MM-dd")}.pdf`);
   };
 
   const handlePrint = () => {
@@ -596,12 +552,10 @@ export default function Reports() {
               <Printer className="w-4 h-4 mr-2" />
               Print
             </Button>
-            {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && (
-              <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
-                <Download className="w-4 h-4 mr-2" />
-                Export PDF
-              </Button>
-            )}
+            <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
             <Button onClick={handleExportCSV} data-testid="button-export-csv">
               <Download className="w-4 h-4 mr-2" />
               Export CSV
@@ -615,29 +569,7 @@ export default function Reports() {
             <CardDescription>Select report type and date range</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Report Type</label>
-                <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
-                  <SelectTrigger data-testid="select-report-type">
-                    <SelectValue placeholder="Select report type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sales">Sales</SelectItem>
-                    <SelectItem value="inventory">Inventory</SelectItem>
-                    <SelectItem value="payments">Payments</SelectItem>
-                    <SelectItem value="aba">ABA</SelectItem>
-                    <SelectItem value="acleda">Acleda</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="due">Due</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="discounts">Discounts</SelectItem>
-                    <SelectItem value="refunds">Refunds</SelectItem>
-                    <SelectItem value="staff">Staff Performance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Date Range</label>
                 <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as DateFilter)}>
@@ -647,79 +579,44 @@ export default function Reports() {
                   <SelectContent>
                     <SelectItem value="today">Today</SelectItem>
                     <SelectItem value="yesterday">Yesterday</SelectItem>
-                    <SelectItem value="7days">Last 7 Days</SelectItem>
-                    <SelectItem value="month">Last Month</SelectItem>
-                    <SelectItem value="custom">Custom Range</SelectItem>
+                    <SelectItem value="thismonth">This Month</SelectItem>
+                    <SelectItem value="lastmonth">Last Month</SelectItem>
+                    <SelectItem value="custom">Custom Date</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">Payment Report</label>
-                <Select value={paymentReportType} onValueChange={(value) => setPaymentReportType(value as PaymentReportType)}>
-                  <SelectTrigger data-testid="select-payment-report-type">
-                    <SelectValue placeholder="Select payment report" />
+                <label className="text-sm font-medium mb-2 block">Report Type</label>
+                <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
+                  <SelectTrigger data-testid="select-report-type">
+                    <SelectValue placeholder="Select report type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="gateway">Payment Gateway</SelectItem>
-                    <SelectItem value="payment-history">Payments History</SelectItem>
+                    <SelectItem value="sales">Sales</SelectItem>
+                    <SelectItem value="inventory">Inventory</SelectItem>
+                    <SelectItem value="discounts">Discounts</SelectItem>
+                    <SelectItem value="refunds">Refunds</SelectItem>
+                    <SelectItem value="staff">Staff Performance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {paymentReportType === "gateway" && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Payment Method</label>
-                    <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-                      <SelectTrigger data-testid="select-payment-method">
-                        <SelectValue placeholder="All Methods" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Methods</SelectItem>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="card">Card</SelectItem>
-                        <SelectItem value="aba">ABA</SelectItem>
-                        <SelectItem value="acleda">Acleda</SelectItem>
-                        <SelectItem value="due">Due</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Payment Status</label>
-                    <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
-                      <SelectTrigger data-testid="select-payment-status">
-                        <SelectValue placeholder="All Statuses" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="paid">Paid</SelectItem>
-                        <SelectItem value="failed">Failed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-
-              {(reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card" || paymentReportType === "payment-history") && (
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Payment Status</label>
-                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
-                    <SelectTrigger data-testid="select-payment-status">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="failed">Failed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payment Status</label>
+                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                  <SelectTrigger data-testid="select-payment-status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="due">Due</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               {dateFilter === "custom" && (
                 <>
@@ -843,147 +740,24 @@ export default function Reports() {
           </Card>
         )}
 
-        {paymentReportType === "payment-history" && (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment Methods Summary</CardTitle>
-                <CardDescription>Total payments collected through each payment method</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {["aba", "acleda", "cash", "card", "due"].map((method) => {
-                    const methodData = paymentTotals[method] || { total: 0, count: 0, paid: 0, pending: 0, failed: 0 };
-                    return (
-                      <Card key={method}>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium capitalize">{method === "aba" ? "ABA" : method === "acleda" ? "Acleda" : method}</CardTitle>
-                          <CreditCard className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold" data-testid={`text-${method}-total`}>
-                            ${methodData.total.toFixed(2)}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {methodData.count} transactions
-                          </p>
-                          <div className="mt-3 space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-green-600">Paid:</span>
-                              <span className="font-medium">${methodData.paid.toFixed(2)}</span>
-                            </div>
-                            {methodData.pending > 0 && (
-                              <div className="flex justify-between text-xs">
-                                <span className="text-yellow-600">Pending:</span>
-                                <span className="font-medium">${methodData.pending.toFixed(2)}</span>
-                              </div>
-                            )}
-                            {methodData.failed > 0 && (
-                              <div className="flex justify-between text-xs">
-                                <span className="text-red-600">Failed:</span>
-                                <span className="font-medium">${methodData.failed.toFixed(2)}</span>
-                              </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Outstanding Dues</CardTitle>
-                <CardDescription>Pending and unpaid "Pay Later" transactions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-900">
-                    <div>
-                      <h3 className="font-semibold text-lg">Total Outstanding</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {outstandingDues.length} pending payments
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold" data-testid="text-outstanding-total">
-                        ${totalOutstanding.toFixed(2)}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        ៛{(totalOutstanding * 4100).toFixed(0)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {outstandingDues.length > 0 ? (
-                    <div className="border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Order #</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Customer</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead>Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {outstandingDues.map((order) => (
-                            <TableRow key={order.id} data-testid={`row-outstanding-${order.id}`}>
-                              <TableCell className="font-mono font-medium">#{order.orderNumber}</TableCell>
-                              <TableCell className="whitespace-nowrap">
-                                {format(new Date(order.createdAt), "MMM dd, yyyy")}
-                              </TableCell>
-                              <TableCell>{order.customerName || "Walk-in"}</TableCell>
-                              <TableCell className="text-right font-mono">
-                                ${parseFloat(order.total).toFixed(2)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {order.paymentStatus}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
-                      <p className="font-medium">All dues have been collected!</p>
-                      <p className="text-sm">No outstanding payments at this time.</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </>
-        )}
 
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>
-                  {paymentReportType === "gateway" ? "Payment Gateway Transactions" : 
-                   reportType === "aba" ? "ABA Payment Transactions" :
-                   reportType === "acleda" ? "Acleda Payment Transactions" :
-                   reportType === "cash" ? "Cash Payment Transactions" :
-                   reportType === "due" ? "Due Payment Transactions" :
-                   reportType === "card" ? "Card Payment Transactions" :
-                   `Detailed ${reportType === "sales" ? "Sales" : "Transaction"} Report`}
+                  {reportType === "sales" ? "Sales Report" :
+                   reportType === "inventory" ? "Inventory Report" :
+                   reportType === "discounts" ? "Discounts Report" :
+                   reportType === "refunds" ? "Refunds Report" :
+                   reportType === "staff" ? "Staff Performance Report" :
+                   "Transaction Report"}
                 </CardTitle>
                 <CardDescription>
-                  {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card")
-                    ? "Complete transaction details with payment information" 
-                    : "View all transactions in the selected date range"}
+                  View all transactions in the selected date range
                 </CardDescription>
               </div>
-              {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && filteredSales.length > 0 && (
+              {filteredSales.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="gap-1">
                     <CreditCard className="w-3 h-3" />
@@ -994,7 +768,7 @@ export default function Reports() {
             </div>
           </CardHeader>
           <CardContent>
-            {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") ? (
+            {reportType === "sales" ? (
               <div className="space-y-4">
                 <Table>
                   <TableHeader>
@@ -1098,20 +872,12 @@ export default function Reports() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {reportType === "sales" && (
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedOrders.length === filteredSales.length && filteredSales.length > 0}
-                          onCheckedChange={handleSelectAll}
-                          data-testid="checkbox-select-all"
-                        />
-                      </TableHead>
-                    )}
                     <TableHead>Date/Time</TableHead>
                     <TableHead>Order ID</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Total Amount</TableHead>
                     <TableHead>Payment Method</TableHead>
+                    <TableHead>Payment Status</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -1119,22 +885,13 @@ export default function Reports() {
                 <TableBody>
                   {filteredSales.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={reportType === "sales" ? 8 : 7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground">
                         No transactions found for the selected period
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredSales.map((sale) => (
                       <TableRow key={sale.id} data-testid={`row-sale-${sale.id}`}>
-                        {reportType === "sales" && (
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedOrders.includes(sale.id)}
-                              onCheckedChange={(checked) => handleSelectOrder(sale.id, checked as boolean)}
-                              data-testid={`checkbox-order-${sale.id}`}
-                            />
-                          </TableCell>
-                        )}
                         <TableCell>{format(new Date(sale.createdAt), "MMM dd, yyyy HH:mm")}</TableCell>
                         <TableCell className="font-mono">#{sale.orderNumber}</TableCell>
                         <TableCell>{sale.customerName || "Walk-in"}</TableCell>
@@ -1142,6 +899,15 @@ export default function Reports() {
                         <TableCell>
                           <Badge variant="outline" className="capitalize">
                             {sale.paymentMethod || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            sale.paymentStatus === "paid" ? "default" : 
+                            sale.paymentStatus === "pending" ? "secondary" : 
+                            "destructive"
+                          }>
+                            {sale.paymentStatus || "N/A"}
                           </Badge>
                         </TableCell>
                         <TableCell>
