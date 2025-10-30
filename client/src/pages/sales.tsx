@@ -297,6 +297,7 @@ export default function SalesManage() {
       data: {
         customerName: editSale.customerName,
         paymentStatus: editSale.paymentStatus,
+        paymentMethod: editSale.paymentMethod,
         status: editSale.status,
       },
     });
@@ -908,6 +909,33 @@ export default function SalesManage() {
                       <SelectItem value="confirmed">Confirmed</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Process Payment Section */}
+              <div className="border-t pt-4">
+                <Label className="text-base font-semibold mb-4 block">Process Payment</Label>
+                <div>
+                  <Label htmlFor="payment-method">Payment Method (Pay by)</Label>
+                  <Select
+                    value={editSale.paymentMethod || ""}
+                    onValueChange={(value) =>
+                      setEditSale({ ...editSale, paymentMethod: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-edit-payment-method">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="aba">ABA</SelectItem>
+                      <SelectItem value="acleda">Acleda</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="due">Due</SelectItem>
+                      <SelectItem value="card">Card</SelectItem>
+                      <SelectItem value="cash_aba">Cash And ABA</SelectItem>
+                      <SelectItem value="cash_acleda">Cash And Acleda</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
