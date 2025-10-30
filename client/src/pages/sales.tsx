@@ -236,6 +236,37 @@ export default function SalesManage() {
       const totalUSD = parseFloat(sale.total);
       const totalKHR = (totalUSD * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
+      // Parse payment splits if available
+      let paymentDetails = `<p><strong>Pay by:</strong> ${sale.paymentMethod || "N/A"}</p>`;
+      if (sale.paymentSplits) {
+        try {
+          const splits: PaymentSplit[] = JSON.parse(sale.paymentSplits);
+          if (splits.length > 0) {
+            const splitsHtml = splits.map(split => {
+              const methodLabel = getPaymentMethodLabel(split.method);
+              const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+              return `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                  <span>${methodLabel}:</span>
+                  <span><strong>$${split.amount.toFixed(2)}</strong> (៛${amountKHR})</span>
+                </div>
+              `;
+            }).join('');
+            paymentDetails = `
+              <div style="margin-top: 10px;">
+                <p style="margin-bottom: 10px;"><strong>Payment Split:</strong></p>
+                <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; background-color: #f9fafb;">
+                  ${splitsHtml}
+                </div>
+              </div>
+            `;
+          }
+        } catch (error) {
+          // If parsing fails, fall back to default payment method display
+          console.error("Failed to parse payment splits:", error);
+        }
+      }
+
       const content = `
         <!DOCTYPE html>
         <html>
@@ -290,7 +321,7 @@ export default function SalesManage() {
               <p class="total"><strong>Total:</strong> $${sale.total}</p>
               <p class="total-khr"><strong>Total in KHR:</strong> ៛${totalKHR}</p>
               <hr>
-              <p><strong>Pay by:</strong> ${sale.paymentMethod || "N/A"}</p>
+              ${paymentDetails}
               <p><strong>Payment Status:</strong> ${sale.paymentStatus}</p>
             </div>
           </body>
