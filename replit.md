@@ -61,10 +61,16 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
     - **Report Type**: Sales, Inventory, Discounts, Refunds, Staff Performance
     - **Payment Status**: All Statuses, Completed, Pending, Due, Failed
     - **Payment Gateway**: All Gateways, Cash, Card, ABA, Acleda, Due, Cash And ABA, Cash And Acleda
-  - **Account History**: Dedicated section displaying total sales amount breakdown by payment method (ABA, Acleda, Cash, Due, Card, Cash And ABA, Cash And Acleda). Shows transaction count and total amount in both USD and KHR for each payment method, respecting all active filters (date range, payment status, payment gateway).
+  - **Account History**: Dedicated section displaying total sales amount breakdown by payment method (ABA, Acleda, Cash, Due, Card, Cash And ABA, Cash And Acleda). Shows transaction count and total amount in both USD and KHR for each payment method in a responsive grid layout, respecting all active filters (date range, payment status, payment gateway).
   - **Sales Report**: Displays detailed transaction list with checkboxes for bulk selection and deletion. Includes Date/Time, Order ID, Customer, Total Amount, Payment Method, Payment Status, Status, and action buttons (View, Edit, Print). Export to CSV and PDF formats available.
   - **Other Reports**: Display transaction information in table format with columns for Date/Time, Order ID, Customer, Total Amount, Payment Method, Payment Status, Status, and Actions. All reports respect selected date range and payment status filters.
   - **Export Functionality**: All reports support CSV and PDF export with comprehensive transaction details including dual currency display (USD/KHR at 1:4,100 exchange rate).
+- **Bank Statement**: Dedicated payment dashboard module for tracking sales by payment method.
+  - **Payment Dashboard**: Grid view displaying sales breakdown for all payment methods (ABA, Acleda, Cash, Due, Card, Cash And ABA, Cash And Acleda). Each card shows total sales in USD/KHR, transaction count, and method-specific color-coded icons.
+  - **Date Filtering**: Flexible date range selection (Today, Yesterday, This Month, Last Month, Custom Date Range) to analyze payment trends over specific periods.
+  - **Summary Statistics**: Overview cards showing total revenue (USD/KHR), total completed transactions, and average transaction value.
+  - **Export Capability**: Export bank statement data for accounting and reconciliation purposes.
+  - **Real-time Updates**: Automatically reflects completed transactions and respects selected date filters.
 - **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization. Includes configurable stock threshold for low stock alerts.
 
 ## External Dependencies

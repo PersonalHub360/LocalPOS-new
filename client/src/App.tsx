@@ -26,6 +26,7 @@ import PurchaseManage from "@/pages/purchases";
 import Inventory from "@/pages/inventory";
 import HRM from "@/pages/hrm";
 import Reports from "@/pages/reports";
+import BankStatement from "@/pages/bank-statement";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
 import NotFound from "@/pages/not-found";
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/inventory" component={Inventory} />
       <Route path="/hrm" component={HRM} />
       <Route path="/reports" component={Reports} />
+      <Route path="/bank-statement" component={BankStatement} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

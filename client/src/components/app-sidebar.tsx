@@ -14,6 +14,7 @@ import {
   Receipt,
   LogOut,
   PackageSearch,
+  Landmark,
 } from "lucide-react";
 import {
   Sidebar,
@@ -93,6 +94,11 @@ const managementMenuItems = [
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
+  },
+  {
+    title: "Bank Statement",
+    url: "/bank-statement",
+    icon: Landmark,
   },
   {
     title: "Settings",
