@@ -46,7 +46,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
-type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway" | "aba" | "acleda" | "cash" | "due" | "card" | "payment-history";
+type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "aba" | "acleda" | "cash" | "due" | "card";
+type PaymentReportType = "gateway" | "payment-history" | "none";
 type DateFilter = "today" | "yesterday" | "7days" | "month" | "custom";
 
 interface OrderItemWithProduct extends OrderItem {
@@ -61,6 +62,7 @@ interface OrderWithItems extends Order {
 
 export default function Reports() {
   const [reportType, setReportType] = useState<ReportType>("sales");
+  const [paymentReportType, setPaymentReportType] = useState<PaymentReportType>("none");
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
@@ -124,7 +126,7 @@ export default function Reports() {
       if (!dateMatch) return false;
 
       // For gateway report, apply payment filters
-      if (reportType === "gateway") {
+      if (paymentReportType === "gateway") {
         if (paymentMethodFilter !== "all" && sale.paymentMethod !== paymentMethodFilter) {
           return false;
         }
@@ -216,7 +218,7 @@ export default function Reports() {
   const handleExportCSV = () => {
     let csvContent;
     
-    if (reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") {
+    if (paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") {
       csvContent = [
         ["Transaction ID", "Date/Time", "Payment Method", "Amount (USD)", "Amount (KHR)", "Status", "Payment Status", "Customer", "Phone"].join(","),
         ...filteredSales.map(sale => [
@@ -594,7 +596,7 @@ export default function Reports() {
               <Printer className="w-4 h-4 mr-2" />
               Print
             </Button>
-            {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && (
+            {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && (
               <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
                 <Download className="w-4 h-4 mr-2" />
                 Export PDF
@@ -613,7 +615,7 @@ export default function Reports() {
             <CardDescription>Select report type and date range</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Report Type</label>
                 <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
@@ -624,8 +626,6 @@ export default function Reports() {
                     <SelectItem value="sales">Sales</SelectItem>
                     <SelectItem value="inventory">Inventory</SelectItem>
                     <SelectItem value="payments">Payments</SelectItem>
-                    <SelectItem value="payment-history">Payments History</SelectItem>
-                    <SelectItem value="gateway">Payment Gateway</SelectItem>
                     <SelectItem value="aba">ABA</SelectItem>
                     <SelectItem value="acleda">Acleda</SelectItem>
                     <SelectItem value="cash">Cash</SelectItem>
@@ -654,7 +654,21 @@ export default function Reports() {
                 </Select>
               </div>
 
-              {reportType === "gateway" && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payment Report Type</label>
+                <Select value={paymentReportType} onValueChange={(value) => setPaymentReportType(value as PaymentReportType)}>
+                  <SelectTrigger data-testid="select-payment-report-type">
+                    <SelectValue placeholder="Select payment report" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="gateway">Payment Gateway</SelectItem>
+                    <SelectItem value="payment-history">Payments History</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {paymentReportType === "gateway" && (
                 <>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Payment Method</label>
@@ -690,7 +704,7 @@ export default function Reports() {
                 </>
               )}
 
-              {(reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card" || reportType === "payment-history") && (
+              {(reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card" || paymentReportType === "payment-history") && (
                 <div>
                   <label className="text-sm font-medium mb-2 block">Payment Status</label>
                   <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
@@ -829,7 +843,7 @@ export default function Reports() {
           </Card>
         )}
 
-        {reportType === "payment-history" && (
+        {paymentReportType === "payment-history" && (
           <>
             <Card>
               <CardHeader>
@@ -955,7 +969,7 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>
-                  {reportType === "gateway" ? "Payment Gateway Transactions" : 
+                  {paymentReportType === "gateway" ? "Payment Gateway Transactions" : 
                    reportType === "aba" ? "ABA Payment Transactions" :
                    reportType === "acleda" ? "Acleda Payment Transactions" :
                    reportType === "cash" ? "Cash Payment Transactions" :
@@ -964,12 +978,12 @@ export default function Reports() {
                    `Detailed ${reportType === "sales" ? "Sales" : "Transaction"} Report`}
                 </CardTitle>
                 <CardDescription>
-                  {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card")
+                  {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card")
                     ? "Complete transaction details with payment information" 
                     : "View all transactions in the selected date range"}
                 </CardDescription>
               </div>
-              {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && filteredSales.length > 0 && (
+              {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && filteredSales.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="gap-1">
                     <CreditCard className="w-3 h-3" />
@@ -980,7 +994,7 @@ export default function Reports() {
             </div>
           </CardHeader>
           <CardContent>
-            {(reportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") ? (
+            {(paymentReportType === "gateway" || reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") ? (
               <div className="space-y-4">
                 <Table>
                   <TableHeader>
