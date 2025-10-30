@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -93,8 +93,8 @@ export default function SalesManage() {
     queryKey: ["/api/orders"],
   });
 
-  // Get date range for sales summary
-  const getSummaryDateRange = () => {
+  // Get date range for sales summary - memoize to prevent infinite re-renders
+  const summaryDateRange = useMemo(() => {
     const now = new Date();
     let start = new Date(0);
     let end = now;
@@ -111,13 +111,19 @@ export default function SalesManage() {
       end = endOfDay(summaryEndDate);
     }
 
-    return { start, end };
-  };
-
-  const summaryDateRange = getSummaryDateRange();
+    return { start: start.toISOString(), end: end.toISOString() };
+  }, [summaryDateFilter, summaryStartDate, summaryEndDate]);
   
   const { data: salesSummary = [], isLoading: isSummaryLoading } = useQuery<SalesSummaryItem[]>({
-    queryKey: ["/api/sales/summary", summaryDateRange.start.toISOString(), summaryDateRange.end.toISOString()],
+    queryKey: ["/api/sales/summary", summaryDateRange.start, summaryDateRange.end],
+    queryFn: async () => {
+      const url = `/api/sales/summary?startDate=${summaryDateRange.start}&endDate=${summaryDateRange.end}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${await res.text()}`);
+      }
+      return res.json();
+    },
   });
 
   const updateMutation = useMutation({
