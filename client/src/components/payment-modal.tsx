@@ -83,16 +83,6 @@ export function PaymentModal({
       return;
     }
 
-    const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
-    if (totalPaid + amount > total) {
-      toast({
-        title: "Payment Exceeds Total",
-        description: `Total payments ($${(totalPaid + amount).toFixed(2)}) cannot exceed order total ($${total.toFixed(2)})`,
-        variant: "destructive",
-      });
-      return;
-    }
-
     setPaymentSplits([...paymentSplits, { method: newPaymentMethod, amount }]);
     setNewPaymentAmount("");
   };
@@ -103,6 +93,7 @@ export function PaymentModal({
 
   const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
   const remaining = total - totalPaid;
+  const changeDue = totalPaid > total ? totalPaid - total : 0;
 
   const getPaymentMethodLabel = (method: string) => {
     const found = paymentMethods.find(m => m.value === method);
@@ -259,10 +250,26 @@ export function PaymentModal({
                     <span className="text-muted-foreground">Total Paid:</span>
                     <span className="font-mono">${totalPaid.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm font-semibold">
-                    <span>Remaining:</span>
-                    <span className="font-mono text-primary">${remaining.toFixed(2)}</span>
-                  </div>
+                  {changeDue > 0 ? (
+                    <div className="border-t pt-2 mt-2">
+                      <div className="flex justify-between text-sm font-semibold">
+                        <span className="text-green-600">Change Due:</span>
+                        <span className="font-mono text-green-600" data-testid="text-change-due">
+                          ${changeDue.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        (Return ${changeDue.toFixed(2)} to customer)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>Remaining:</span>
+                      <span className={`font-mono ${remaining === 0 ? 'text-green-600' : 'text-primary'}`}>
+                        ${remaining.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
