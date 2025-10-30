@@ -25,9 +25,10 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 - **Permissions**: Role-based permissions system with granular controls for reports, settings, refunds, and inventory.
 - **Cache Invalidation Pattern**: React Query cache invalidation ensures real-time UI updates without manual refresh. 
   - **Order Creation/Completion** (POS, Tables): Invalidates `/api/orders`, `/api/products`, `/api/sales`, `/api/inventory/adjustments`, low-stock queries, and all dashboard queries (using predicate matching on `/api/dashboard` prefix)
+  - **Purchase Creation** (Purchase Management): Invalidates `/api/purchases`, `/api/products`, `/api/inventory/adjustments` to reflect automatic inventory increases
   - **Stock Adjustments** (Inventory): Invalidates `/api/products`, `/api/inventory/adjustments`, and low-stock queries
   - **Product CRUD** (Inventory): Invalidates `/api/products` and low-stock queries
-  - This pattern guarantees synchronized data across POS, Inventory, Dashboard, and Reporting modules without manual page refresh
+  - This pattern guarantees synchronized data across POS, Purchase, Inventory, Dashboard, and Reporting modules without manual page refresh
 
 ### Feature Specifications
 - **Authentication**: Secure login, session management, password hashing, and protected API routes.
@@ -52,7 +53,7 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
   - **Summary Statistics**: Three colorful stat cards displaying Total Expenses (orange gradient), Average Expense (purple gradient), and Categories Count (blue gradient) with icons and enhanced shadows.
   - **Colorful UI**: Vibrant gradient backgrounds on headers, tabs, and stat cards. Gradient title text (orange to pink) and gradient action buttons for better visual appeal.
   - **Enhanced Design**: Border accents, shadow effects, and responsive grid layout (1-3 columns) for summary cards.
-- **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export.
+- **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export. **Inventory Integration**: Purchases can be linked to existing products in inventory. When a purchase is created with a productId, the system automatically increases the product's stock quantity and creates an inventory adjustment record with type "add" and reason "purchase" for full audit trail. Product selector auto-populates item name, unit, and category fields for streamlined data entry.
 - **Table Management**: CRUD for tables, capacity tracking, and status management. Enhanced print with order items display (Product Name, Quantity, Price, Discount, Total) and Total in KHR conversion. For occupied tables: Edit Items (navigate to POS), Add Items (dialog to add new items), Print Directly (print current order), and Complete Order (finish order and mark table available).
 - **HRM**: Full employee management (CRUD, import/export, schedule upload). Schemas defined for Attendance, Leave, and Payroll modules.
 - **Inventory Management**: Comprehensive inventory control system with four main tabs:
