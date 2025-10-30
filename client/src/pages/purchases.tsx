@@ -836,14 +836,10 @@ export default function PurchaseManage() {
                               <SelectItem value="none">None (Custom Purchase)</SelectItem>
                               {products.map((product) => (
                                 <SelectItem key={product.id} value={product.id}>
-                                  <div className="flex items-center gap-2">
-                                    <Package className="w-4 h-4" />
-                                    {product.name} ({product.unit})
-                                  </div>
+                                  {product.name} ({product.unit})
                                 </SelectItem>
                               ))}
-                            </SelectContent>
-                          </Select>
+                            </SelectContent>                          </Select>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
                             Select a product to automatically update its inventory when purchase is created
