@@ -46,7 +46,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
-type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway" | "aba" | "acleda" | "cash" | "due" | "card";
+type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "gateway" | "aba" | "acleda" | "cash" | "due" | "card" | "payment-history";
 type DateFilter = "today" | "yesterday" | "7days" | "month" | "custom";
 
 interface OrderItemWithProduct extends OrderItem {
@@ -173,6 +173,31 @@ export default function Reports() {
     acc[method] = (acc[method] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+
+  // Calculate payment totals by method for payment history
+  const paymentTotals = sales.reduce((acc, sale) => {
+    const method = sale.paymentMethod || "unknown";
+    const total = parseFloat(sale.total);
+    if (!acc[method]) {
+      acc[method] = { total: 0, count: 0, paid: 0, pending: 0, failed: 0 };
+    }
+    acc[method].total += total;
+    acc[method].count += 1;
+    if (sale.paymentStatus === "paid") {
+      acc[method].paid += total;
+    } else if (sale.paymentStatus === "pending") {
+      acc[method].pending += total;
+    } else if (sale.paymentStatus === "failed") {
+      acc[method].failed += total;
+    }
+    return acc;
+  }, {} as Record<string, { total: number; count: number; paid: number; pending: number; failed: number }>);
+
+  // Calculate outstanding dues (all pending/unpaid "due" payments)
+  const outstandingDues = sales.filter(
+    sale => sale.paymentMethod === "due" && sale.paymentStatus !== "paid"
+  );
+  const totalOutstanding = outstandingDues.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
 
   const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" => {
     if (status === "completed" || status === "paid" || status === "successful") return "default";
@@ -599,6 +624,7 @@ export default function Reports() {
                     <SelectItem value="sales">Sales</SelectItem>
                     <SelectItem value="inventory">Inventory</SelectItem>
                     <SelectItem value="payments">Payments</SelectItem>
+                    <SelectItem value="payment-history">Payments History</SelectItem>
                     <SelectItem value="gateway">Payment Gateway</SelectItem>
                     <SelectItem value="aba">ABA</SelectItem>
                     <SelectItem value="acleda">Acleda</SelectItem>
@@ -803,6 +829,127 @@ export default function Reports() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {reportType === "payment-history" && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Methods Summary</CardTitle>
+                <CardDescription>Total payments collected through each payment method</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {["aba", "acleda", "cash", "card", "due"].map((method) => {
+                    const methodData = paymentTotals[method] || { total: 0, count: 0, paid: 0, pending: 0, failed: 0 };
+                    return (
+                      <Card key={method}>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium capitalize">{method === "aba" ? "ABA" : method === "acleda" ? "Acleda" : method}</CardTitle>
+                          <CreditCard className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold" data-testid={`text-${method}-total`}>
+                            ${methodData.total.toFixed(2)}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {methodData.count} transactions
+                          </p>
+                          <div className="mt-3 space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-green-600">Paid:</span>
+                              <span className="font-medium">${methodData.paid.toFixed(2)}</span>
+                            </div>
+                            {methodData.pending > 0 && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-yellow-600">Pending:</span>
+                                <span className="font-medium">${methodData.pending.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {methodData.failed > 0 && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-red-600">Failed:</span>
+                                <span className="font-medium">${methodData.failed.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Outstanding Dues</CardTitle>
+                <CardDescription>Pending and unpaid "Pay Later" transactions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-900">
+                    <div>
+                      <h3 className="font-semibold text-lg">Total Outstanding</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {outstandingDues.length} pending payments
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold" data-testid="text-outstanding-total">
+                        ${totalOutstanding.toFixed(2)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        ៛{(totalOutstanding * 4100).toFixed(0)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {outstandingDues.length > 0 ? (
+                    <div className="border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Order #</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Customer</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {outstandingDues.map((order) => (
+                            <TableRow key={order.id} data-testid={`row-outstanding-${order.id}`}>
+                              <TableCell className="font-mono font-medium">#{order.orderNumber}</TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {format(new Date(order.createdAt), "MMM dd, yyyy")}
+                              </TableCell>
+                              <TableCell>{order.customerName || "Walk-in"}</TableCell>
+                              <TableCell className="text-right font-mono">
+                                ${parseFloat(order.total).toFixed(2)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {order.paymentStatus}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
+                      <p className="font-medium">All dues have been collected!</p>
+                      <p className="text-sm">No outstanding payments at this time.</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         <Card>
