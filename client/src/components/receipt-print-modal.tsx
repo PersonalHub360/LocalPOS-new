@@ -28,6 +28,7 @@ interface ReceiptPrintModalProps {
     total: number;
     tableId?: string | null;
     diningOption: string;
+    paymentSplits?: string;
   };
   onPrint: () => void;
 }
@@ -195,6 +196,45 @@ export function ReceiptPrintModal({
                 </div>
               </div>
             </div>
+
+            {order.paymentSplits && (() => {
+              try {
+                const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+                if (splits.length > 0) {
+                  const paymentMethods: Record<string, string> = {
+                    cash: "Cash",
+                    card: "Card",
+                    aba: "ABA",
+                    acleda: "Acleda",
+                    due: "Due",
+                    cash_aba: "Cash And ABA",
+                    cash_acleda: "Cash And Acleda",
+                  };
+                  return (
+                    <div className="border-t border-dashed border-border pt-3 mt-3">
+                      <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Payment Split:</h4>
+                      <div className="space-y-2">
+                        {splits.map((split, index) => {
+                          const formatted = formatDualCurrency(split.amount);
+                          return (
+                            <div key={index} className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">{paymentMethods[split.method] || split.method}:</span>
+                              <div className="text-right">
+                                <p className="font-mono font-medium">{formatted.usd}</p>
+                                <p className="font-mono text-xs text-muted-foreground">{formatted.khr}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+              } catch (error) {
+                console.error("Failed to parse payment splits:", error);
+              }
+              return null;
+            })()}
           </div>
 
           <div className="border-t-2 border-dashed border-border pt-4 mt-4">

@@ -398,7 +398,7 @@ export default function POS() {
     }
   };
 
-  const handleConfirmPayment = (paymentMethod: string, amountPaid: number) => {
+  const handleConfirmPayment = (paymentMethod: string, amountPaid: number, paymentSplits?: { method: string; amount: number }[]) => {
     const subtotal = orderItems.reduce(
       (sum, item) => sum + parseFloat(item.product.price) * item.quantity,
       0
@@ -410,7 +410,7 @@ export default function POS() {
     const total = subtotal - discountAmount;
     const draftIdToDelete = currentDraftId;
 
-    const orderData = {
+    const orderData: any = {
       tableId: selectedTable,
       diningOption,
       subtotal: subtotal.toString(),
@@ -427,6 +427,10 @@ export default function POS() {
         total: (parseFloat(item.product.price) * item.quantity).toString(),
       })),
     };
+
+    if (paymentSplits && paymentSplits.length > 0) {
+      orderData.paymentSplits = JSON.stringify(paymentSplits);
+    }
 
     createOrderMutation.mutate(orderData, {
       onSuccess: () => {
@@ -450,6 +454,7 @@ export default function POS() {
       total: total,
       tableId: selectedTable,
       diningOption,
+      paymentSplits: paymentSplits && paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : undefined,
     });
 
     setPaymentModalOpen(false);
