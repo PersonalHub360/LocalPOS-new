@@ -144,11 +144,11 @@ export default function BankStatement() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filter by Date Range</CardTitle>
+      <Card className="border-2 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+          <CardTitle className="text-xl">Filter by Date Range</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">
@@ -229,16 +229,16 @@ export default function BankStatement() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+        <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-5 w-5 text-muted-foreground" />
+            <DollarSign className="h-6 w-6 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold" data-testid="text-total-revenue">
+            <div className="text-3xl font-bold text-green-700 dark:text-green-400" data-testid="text-total-revenue">
               ${totalRevenue.toFixed(2)}
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1 font-medium">
               ៛{(totalRevenue * 4100).toFixed(0)}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
@@ -247,18 +247,18 @@ export default function BankStatement() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Total Transactions
             </CardTitle>
-            <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            <TrendingUp className="h-6 w-6 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold" data-testid="text-total-transactions">
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-400" data-testid="text-total-transactions">
               {totalTransactions}
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-1 font-medium">
               Completed orders
             </p>
             <p className="text-xs text-muted-foreground mt-2">
@@ -268,36 +268,46 @@ export default function BankStatement() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment Dashboard</CardTitle>
+      <Card className="border-2 shadow-xl">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
+          <CardTitle className="text-2xl">Payment Dashboard</CardTitle>
           <CardDescription>Sales breakdown by payment method</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {paymentMethodsData.map((method) => {
               const data = paymentTotals[method.key] || { total: 0, count: 0 };
               const Icon = method.icon;
+              const colorMap: Record<string, { border: string; bg: string; icon: string; iconBg: string }> = {
+                'bg-blue-500': { border: 'border-blue-500', bg: 'bg-blue-50 dark:bg-blue-950', icon: 'text-blue-600', iconBg: 'bg-blue-100 dark:bg-blue-900' },
+                'bg-green-500': { border: 'border-green-500', bg: 'bg-green-50 dark:bg-green-950', icon: 'text-green-600', iconBg: 'bg-green-100 dark:bg-green-900' },
+                'bg-yellow-500': { border: 'border-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-950', icon: 'text-yellow-600', iconBg: 'bg-yellow-100 dark:bg-yellow-900' },
+                'bg-orange-500': { border: 'border-orange-500', bg: 'bg-orange-50 dark:bg-orange-950', icon: 'text-orange-600', iconBg: 'bg-orange-100 dark:bg-orange-900' },
+                'bg-purple-500': { border: 'border-purple-500', bg: 'bg-purple-50 dark:bg-purple-950', icon: 'text-purple-600', iconBg: 'bg-purple-100 dark:bg-purple-900' },
+                'bg-indigo-500': { border: 'border-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950', icon: 'text-indigo-600', iconBg: 'bg-indigo-100 dark:bg-indigo-900' },
+                'bg-teal-500': { border: 'border-teal-500', bg: 'bg-teal-50 dark:bg-teal-950', icon: 'text-teal-600', iconBg: 'bg-teal-100 dark:bg-teal-900' },
+              };
+              const colorScheme = colorMap[method.color];
               return (
-                <Card key={method.key} className="p-4" data-testid={`card-${method.key}`}>
+                <Card key={method.key} className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105`} data-testid={`card-${method.key}`}>
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="capitalize">
+                      <Badge variant="outline" className="capitalize font-semibold">
                         {method.name}
                       </Badge>
-                      <div className={`p-2 rounded-lg ${method.color} bg-opacity-10`}>
-                        <Icon className={`w-4 h-4 ${method.color.replace('bg-', 'text-')}`} />
+                      <div className={`p-2 rounded-lg ${colorScheme.iconBg}`}>
+                        <Icon className={`w-4 h-4 ${colorScheme.icon}`} />
                       </div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold" data-testid={`text-${method.key}-total`}>
+                      <div className={`text-2xl font-bold ${colorScheme.icon}`} data-testid={`text-${method.key}-total`}>
                         ${data.total.toFixed(2)}
                       </div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-muted-foreground font-medium">
                         ៛{(data.total * 4100).toFixed(0)}
                       </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-muted-foreground font-medium">
                       {data.count} {data.count === 1 ? "transaction" : "transactions"}
                     </div>
                   </div>
@@ -306,7 +316,7 @@ export default function BankStatement() {
             })}
           </div>
           {Object.keys(paymentTotals).length === 0 && (
-            <div className="text-center text-muted-foreground py-8">
+            <div className="text-center text-muted-foreground py-8 font-medium">
               No completed transactions found for the selected date range
             </div>
           )}
