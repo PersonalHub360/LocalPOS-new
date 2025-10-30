@@ -65,7 +65,6 @@ export default function Reports() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
-  const [paymentsHistoryFilter, setPaymentsHistoryFilter] = useState<string>("all");
   const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -138,23 +137,6 @@ export default function Reports() {
       // Apply payment gateway filter
       if (paymentGatewayFilter !== "all") {
         if (sale.paymentMethod !== paymentGatewayFilter) {
-          return false;
-        }
-      }
-
-      // Apply payments history filter
-      if (paymentsHistoryFilter !== "all") {
-        // Filter by payment history type
-        if (paymentsHistoryFilter === "successful" && sale.paymentStatus !== "paid") {
-          return false;
-        }
-        if (paymentsHistoryFilter === "failed" && sale.paymentStatus !== "failed") {
-          return false;
-        }
-        if (paymentsHistoryFilter === "pending" && sale.paymentStatus !== "pending") {
-          return false;
-        }
-        if (paymentsHistoryFilter === "refunded" && sale.status !== "cancelled") {
           return false;
         }
       }
@@ -645,22 +627,6 @@ export default function Reports() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">Payments History</label>
-                <Select value={paymentsHistoryFilter} onValueChange={setPaymentsHistoryFilter}>
-                  <SelectTrigger data-testid="select-payments-history">
-                    <SelectValue placeholder="Select history" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All History</SelectItem>
-                    <SelectItem value="successful">Successful</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="refunded">Refunded</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
                 <label className="text-sm font-medium mb-2 block">Payment Gateway</label>
                 <Select value={paymentGatewayFilter} onValueChange={setPaymentGatewayFilter}>
                   <SelectTrigger data-testid="select-payment-gateway">
@@ -776,6 +742,36 @@ export default function Reports() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Account History</CardTitle>
+            <CardDescription>Sales amount by payment method</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(paymentTotals).map(([method, data]) => (
+                <div key={method} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className="capitalize">{method}</Badge>
+                    <span className="text-sm text-muted-foreground">{data.count} transactions</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold">${data.total.toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      ៛{(data.total * 4100).toFixed(0)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {Object.keys(paymentTotals).length === 0 && (
+                <div className="text-center text-muted-foreground py-4">
+                  No transactions found for the selected filters
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {reportType === "payments" && (
           <Card>
