@@ -1180,9 +1180,38 @@ export class MemStorage implements IStorage {
       ...insertPurchase,
       id,
       imageUrl: insertPurchase.imageUrl ?? null,
+      productId: insertPurchase.productId ?? null,
       createdAt: new Date(),
     };
     this.purchases.set(id, purchase);
+    
+    // If productId is provided, automatically add to inventory
+    if (insertPurchase.productId) {
+      const product = this.products.get(insertPurchase.productId);
+      if (product) {
+        const currentQty = parseFloat(product.quantity);
+        const purchasedQty = parseFloat(insertPurchase.quantity);
+        const newQty = currentQty + purchasedQty;
+        
+        product.quantity = newQty.toString();
+        this.products.set(insertPurchase.productId, product);
+        
+        // Create inventory adjustment record for tracking
+        const adjustmentId = randomUUID();
+        const adjustment: InventoryAdjustment = {
+          id: adjustmentId,
+          productId: insertPurchase.productId,
+          adjustmentType: "add",
+          quantity: purchasedQty.toString(),
+          reason: "purchase",
+          notes: `Automatic addition from purchase - ${insertPurchase.itemName}`,
+          performedBy: null,
+          createdAt: new Date(),
+        };
+        this.inventoryAdjustments.set(adjustmentId, adjustment);
+      }
+    }
+    
     return purchase;
   }
 

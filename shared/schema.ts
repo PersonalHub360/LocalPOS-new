@@ -137,6 +137,7 @@ export const purchases = pgTable("purchases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   imageUrl: text("image_url"),
   categoryId: varchar("category_id").notNull(),
+  productId: varchar("product_id"),
   itemName: text("item_name").notNull(),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
