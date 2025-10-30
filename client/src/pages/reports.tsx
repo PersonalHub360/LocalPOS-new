@@ -749,23 +749,27 @@ export default function Reports() {
             <CardDescription>Sales amount by payment method</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {Object.entries(paymentTotals).map(([method, data]) => (
-                <div key={method} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="capitalize">{method}</Badge>
-                    <span className="text-sm text-muted-foreground">{data.count} transactions</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold">${data.total.toFixed(2)}</div>
+                <Card key={method} className="p-4">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="capitalize">{method}</Badge>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold">${data.total.toFixed(2)}</div>
+                      <div className="text-sm text-muted-foreground">
+                        ៛{(data.total * 4100).toFixed(0)}
+                      </div>
+                    </div>
                     <div className="text-xs text-muted-foreground">
-                      ៛{(data.total * 4100).toFixed(0)}
+                      {data.count} {data.count === 1 ? 'transaction' : 'transactions'}
                     </div>
                   </div>
-                </div>
+                </Card>
               ))}
               {Object.keys(paymentTotals).length === 0 && (
-                <div className="text-center text-muted-foreground py-4">
+                <div className="col-span-full text-center text-muted-foreground py-4">
                   No transactions found for the selected filters
                 </div>
               )}
