@@ -41,7 +41,10 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
     - **Process Payment Section**: Payment Method selector below Order Status with options: ABA, Acleda, Cash, Due, Card, Cash And ABA, Cash And Acleda
   - **Sales Summary Report**: Aggregated product sales data showing individual item performance (Product Name, Quantity Sold, Total Revenue). Supports date filtering (All Time, Today, Yesterday, Custom Range) to analyze sales trends over specific periods. Exchange rate: 1 USD = 4,100 KHR.
 - **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV).
-- **Expense Management**: Full CRUD for expenses and expense categories. Upload slip/invoice images (optional) for each expense with preview functionality. Images stored as base64 and displayed in View dialog and Print receipt.
+- **Expense Management**: Full CRUD for expenses and expense categories with modern, colorful interface. Upload slip/invoice images (optional) for each expense with preview functionality. Images stored as base64 and displayed in View dialog and Print receipt.
+  - **Summary Statistics**: Three colorful stat cards displaying Total Expenses (orange gradient), Average Expense (purple gradient), and Categories Count (blue gradient) with icons and enhanced shadows.
+  - **Colorful UI**: Vibrant gradient backgrounds on headers, tabs, and stat cards. Gradient title text (orange to pink) and gradient action buttons for better visual appeal.
+  - **Enhanced Design**: Border accents, shadow effects, and responsive grid layout (1-3 columns) for summary cards.
 - **Purchase Management**: CRUD for purchases, category management, search, filtering, and bulk import/export.
 - **Table Management**: CRUD for tables, capacity tracking, and status management. Enhanced print with order items display (Product Name, Quantity, Price, Discount, Total) and Total in KHR conversion. For occupied tables: Edit Items (navigate to POS), Add Items (dialog to add new items), Print Directly (print current order), and Complete Order (finish order and mark table available).
 - **HRM**: Full employee management (CRUD, import/export, schedule upload). Schemas defined for Attendance, Leave, and Payroll modules.

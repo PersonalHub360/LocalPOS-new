@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen, Upload, X } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen, Upload, X, Wallet, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import type { Expense, ExpenseCategory } from "@shared/schema";
 
@@ -318,22 +318,67 @@ export default function ExpenseManage() {
     );
   });
 
+  const totalExpenses = expenses.reduce((sum, expense) => sum + parseFloat(expense.total), 0);
+  const expenseCount = expenses.length;
+  const avgExpense = expenseCount > 0 ? totalExpenses / expenseCount : 0;
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Expense Management</h1>
-            <p className="text-muted-foreground mt-1">Track and manage all business expenses</p>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Expense Management</h1>
+            <p className="text-muted-foreground mt-1 font-medium">Track and manage all business expenses</p>
           </div>
-          <Button onClick={() => setShowAddExpenseDialog(true)} data-testid="button-add-expense">
+          <Button onClick={() => setShowAddExpenseDialog(true)} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600" data-testid="button-add-expense">
             <Plus className="w-4 h-4 mr-2" />
             Add Expense
           </Button>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950 dark:to-amber-950 shadow-lg">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+              <Wallet className="h-5 w-5 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">${totalExpenses.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground font-medium">
+                {expenseCount} total records
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 shadow-lg">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Avg Expense</CardTitle>
+              <TrendingUp className="h-5 w-5 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">${avgExpense.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground font-medium">
+                Per transaction
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 shadow-lg">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Categories</CardTitle>
+              <FolderOpen className="h-5 w-5 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{categories.length}</div>
+              <p className="text-xs text-muted-foreground font-medium">
+                Active categories
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="bg-gradient-to-r from-orange-100 to-pink-100 dark:from-orange-900 dark:to-pink-900">
             <TabsTrigger value="expenses" data-testid="tab-expenses">Expenses</TabsTrigger>
             <TabsTrigger value="categories" data-testid="tab-categories">
               <FolderOpen className="w-4 h-4 mr-2" />
@@ -342,9 +387,9 @@ export default function ExpenseManage() {
           </TabsList>
 
           <TabsContent value="expenses" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Expense Records</CardTitle>
+            <Card className="border-2 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950 dark:to-amber-950">
+                <CardTitle className="text-xl">Expense Records</CardTitle>
                 <CardDescription>View and manage all expense records</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -473,13 +518,13 @@ export default function ExpenseManage() {
           </TabsContent>
 
           <TabsContent value="categories" className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
+            <Card className="border-2 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
                 <div>
-                  <CardTitle>Expense Categories</CardTitle>
+                  <CardTitle className="text-xl">Expense Categories</CardTitle>
                   <CardDescription>Organize expenses by categories</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddCategoryDialog(true)} data-testid="button-add-category">
+                <Button onClick={() => setShowAddCategoryDialog(true)} className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600" data-testid="button-add-category">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Category
                 </Button>
