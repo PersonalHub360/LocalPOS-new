@@ -174,8 +174,8 @@ export default function Reports() {
     return acc;
   }, {} as Record<string, number>);
 
-  // Calculate payment totals by method for payment history
-  const paymentTotals = sales.reduce((acc, sale) => {
+  // Calculate payment totals by method for payment history (using filtered sales to respect date range)
+  const paymentTotals = filteredSales.reduce((acc, sale) => {
     const method = sale.paymentMethod || "unknown";
     const total = parseFloat(sale.total);
     if (!acc[method]) {
@@ -193,8 +193,8 @@ export default function Reports() {
     return acc;
   }, {} as Record<string, { total: number; count: number; paid: number; pending: number; failed: number }>);
 
-  // Calculate outstanding dues (all pending/unpaid "due" payments)
-  const outstandingDues = sales.filter(
+  // Calculate outstanding dues (all pending/unpaid "due" payments, filtered by date range)
+  const outstandingDues = filteredSales.filter(
     sale => sale.paymentMethod === "due" && sale.paymentStatus !== "paid"
   );
   const totalOutstanding = outstandingDues.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
