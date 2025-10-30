@@ -1218,14 +1218,75 @@ export class MemStorage implements IStorage {
   async updatePurchase(id: string, updates: Partial<InsertPurchase>): Promise<Purchase | undefined> {
     const purchase = this.purchases.get(id);
     if (!purchase) return undefined;
+    
+    // If purchase was linked to a product and quantity changed, adjust inventory
+    if (purchase.productId && updates.quantity !== undefined) {
+      const product = this.products.get(purchase.productId);
+      if (product) {
+        const oldQty = parseFloat(purchase.quantity);
+        const newQty = parseFloat(updates.quantity);
+        const delta = newQty - oldQty;
+        
+        if (delta !== 0) {
+          const currentInventory = parseFloat(product.quantity);
+          const newInventory = Math.max(0, currentInventory + delta);
+          
+          product.quantity = newInventory.toString();
+          this.products.set(purchase.productId, product);
+          
+          // Create inventory adjustment record
+          const adjustmentId = randomUUID();
+          const adjustment: InventoryAdjustment = {
+            id: adjustmentId,
+            productId: purchase.productId,
+            adjustmentType: delta > 0 ? "add" : "remove",
+            quantity: Math.abs(delta).toString(),
+            reason: "purchase",
+            notes: `Adjustment from purchase update - ${purchase.itemName} (changed from ${oldQty} to ${newQty})`,
+            performedBy: null,
+            createdAt: new Date(),
+          };
+          this.inventoryAdjustments.set(adjustmentId, adjustment);
+        }
+      }
+    }
+    
     const updated = { ...purchase, ...updates };
     this.purchases.set(id, updated);
     return updated;
   }
 
   async deletePurchase(id: string): Promise<boolean> {
-    const exists = this.purchases.has(id);
-    if (!exists) return false;
+    const purchase = this.purchases.get(id);
+    if (!purchase) return false;
+    
+    // If purchase was linked to a product, reverse the inventory change
+    if (purchase.productId) {
+      const product = this.products.get(purchase.productId);
+      if (product) {
+        const purchasedQty = parseFloat(purchase.quantity);
+        const currentInventory = parseFloat(product.quantity);
+        const newInventory = Math.max(0, currentInventory - purchasedQty);
+        
+        product.quantity = newInventory.toString();
+        this.products.set(purchase.productId, product);
+        
+        // Create inventory adjustment record for reversal
+        const adjustmentId = randomUUID();
+        const adjustment: InventoryAdjustment = {
+          id: adjustmentId,
+          productId: purchase.productId,
+          adjustmentType: "remove",
+          quantity: purchasedQty.toString(),
+          reason: "purchase",
+          notes: `Reversal from purchase deletion - ${purchase.itemName}`,
+          performedBy: null,
+          createdAt: new Date(),
+        };
+        this.inventoryAdjustments.set(adjustmentId, adjustment);
+      }
+    }
+    
     this.purchases.delete(id);
     return true;
   }

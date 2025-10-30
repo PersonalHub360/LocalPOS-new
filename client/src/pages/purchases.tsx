@@ -153,12 +153,14 @@ export default function PurchaseManage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
       setPurchaseDialogOpen(false);
       purchaseForm.reset();
       setImagePreview("");
       toast({
         title: "Success",
-        description: "Purchase updated successfully",
+        description: "Purchase updated successfully. Inventory adjusted automatically.",
       });
     },
     onError: () => {
@@ -176,9 +178,11 @@ export default function PurchaseManage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
       toast({
         title: "Success",
-        description: "Purchase deleted successfully",
+        description: "Purchase deleted successfully. Inventory reversed automatically.",
       });
     },
     onError: () => {
