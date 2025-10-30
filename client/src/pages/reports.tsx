@@ -65,7 +65,7 @@ export default function Reports() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
-  const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("all");
+  const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("cash");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
@@ -135,10 +135,8 @@ export default function Reports() {
       }
 
       // Apply payment gateway filter
-      if (paymentGatewayFilter !== "all") {
-        if (sale.paymentMethod !== paymentGatewayFilter) {
-          return false;
-        }
+      if (sale.paymentMethod !== paymentGatewayFilter) {
+        return false;
       }
 
       return true;
@@ -633,7 +631,6 @@ export default function Reports() {
                     <SelectValue placeholder="Select gateway" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Gateways</SelectItem>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="card">Card</SelectItem>
                     <SelectItem value="aba">ABA</SelectItem>
@@ -690,86 +687,98 @@ export default function Reports() {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <DollarSign className="h-5 w-5 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-revenue">${totalRevenue.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
+              <div className="text-2xl font-bold text-green-700 dark:text-green-400" data-testid="text-total-revenue">${totalRevenue.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground font-medium">
                 {totalTransactions} transactions
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-blue-500 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              <ShoppingCart className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-transactions">{totalTransactions}</div>
-              <p className="text-xs text-muted-foreground">
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400" data-testid="text-total-transactions">{totalTransactions}</div>
+              <p className="text-xs text-muted-foreground font-medium">
                 Total orders processed
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Avg Sale Value</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <TrendingUp className="h-5 w-5 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-avg-sale">${avgSaleValue.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
+              <div className="text-2xl font-bold text-purple-700 dark:text-purple-400" data-testid="text-avg-sale">${avgSaleValue.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground font-medium">
                 Per transaction
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-l-4 border-l-orange-500 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950 dark:to-amber-950 shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Discounts</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <BarChart3 className="h-5 w-5 text-orange-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-discounts">${totalDiscounts.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
+              <div className="text-2xl font-bold text-orange-700 dark:text-orange-400" data-testid="text-total-discounts">${totalDiscounts.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground font-medium">
                 Given to customers
               </p>
             </CardContent>
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Account History</CardTitle>
+        <Card className="border-2 shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950">
+            <CardTitle className="text-2xl">Account History</CardTitle>
             <CardDescription>Sales amount by payment method</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Object.entries(paymentTotals).map(([method, data]) => (
-                <Card key={method} className="p-4">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="capitalize">{method}</Badge>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold">${data.total.toFixed(2)}</div>
-                      <div className="text-sm text-muted-foreground">
-                        ៛{(data.total * 4100).toFixed(0)}
+              {Object.entries(paymentTotals).map(([method, data], index) => {
+                const colors = [
+                  { border: 'border-blue-500', bg: 'bg-blue-50 dark:bg-blue-950', icon: 'text-blue-600' },
+                  { border: 'border-green-500', bg: 'bg-green-50 dark:bg-green-950', icon: 'text-green-600' },
+                  { border: 'border-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-950', icon: 'text-yellow-600' },
+                  { border: 'border-orange-500', bg: 'bg-orange-50 dark:bg-orange-950', icon: 'text-orange-600' },
+                  { border: 'border-purple-500', bg: 'bg-purple-50 dark:bg-purple-950', icon: 'text-purple-600' },
+                  { border: 'border-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950', icon: 'text-indigo-600' },
+                  { border: 'border-teal-500', bg: 'bg-teal-50 dark:bg-teal-950', icon: 'text-teal-600' },
+                ];
+                const colorScheme = colors[index % colors.length];
+                return (
+                  <Card key={method} className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-shadow`}>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="capitalize font-semibold">{method}</Badge>
+                      </div>
+                      <div>
+                        <div className={`text-2xl font-bold ${colorScheme.icon}`}>${data.total.toFixed(2)}</div>
+                        <div className="text-sm text-muted-foreground font-medium">
+                          ៛{(data.total * 4100).toFixed(0)}
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground font-medium">
+                        {data.count} {data.count === 1 ? 'transaction' : 'transactions'}
                       </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {data.count} {data.count === 1 ? 'transaction' : 'transactions'}
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
               {Object.keys(paymentTotals).length === 0 && (
-                <div className="col-span-full text-center text-muted-foreground py-4">
+                <div className="col-span-full text-center text-muted-foreground py-8">
                   No transactions found for the selected filters
                 </div>
               )}
