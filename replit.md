@@ -31,7 +31,7 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 
 ### Feature Specifications
 - **Authentication**: Secure login, session management, password hashing, and protected API routes.
-- **POS Order Workflow**: Draft saving, editing, receipt generation, diverse payment methods (Cash, Card, ABA, Acleda, Due), and transactional safety for order completion.
+- **POS Order Workflow**: Draft saving, editing, receipt generation, diverse payment methods (Cash, Card, ABA, Acleda, Due, Cash And ABA, Cash And Acleda), and transactional safety for order completion.
 - **Sales Management**: Complete order history display with detailed item breakdown. Features two tabs: "Detailed Sales Report" and "Sales Summary Report". 
   - **Detailed Sales Report**: View, Edit, and Print functions show all order items (Product Name, Quantity, Price, Discount, Total) along with order summary (Subtotal, Discount, Total, Total in KHR with ៛ symbol). Fixed product name display issue. Export functionality to Excel and PDF formats.
   - **Edit Sale Feature**: When clicking "Edit" from the Sales List, opens Edit Sale dialog with editable fields:

@@ -47,10 +47,12 @@ export function PaymentModal({
 
   const paymentMethods = [
     { value: "cash", label: "Cash", icon: Banknote },
-    { value: "card", label: "Card Payment", icon: CreditCard },
+    { value: "card", label: "Card", icon: CreditCard },
     { value: "aba", label: "ABA", icon: Smartphone },
     { value: "acleda", label: "Acleda", icon: Wallet },
-    { value: "due", label: "Due (Pay Later)", icon: CreditCard },
+    { value: "due", label: "Due", icon: CreditCard },
+    { value: "cash_aba", label: "Cash And ABA", icon: Banknote },
+    { value: "cash_acleda", label: "Cash And Acleda", icon: Banknote },
   ];
 
   return (

@@ -403,7 +403,9 @@ export default function SettingsPage() {
                         <SelectItem value="card">Card</SelectItem>
                         <SelectItem value="aba">ABA</SelectItem>
                         <SelectItem value="acleda">Acleda</SelectItem>
-                        <SelectItem value="credit">Credit/Due</SelectItem>
+                        <SelectItem value="due">Due</SelectItem>
+                        <SelectItem value="cash_aba">Cash And ABA</SelectItem>
+                        <SelectItem value="cash_acleda">Cash And Acleda</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

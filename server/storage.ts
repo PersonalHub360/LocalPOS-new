@@ -62,7 +62,7 @@ export interface IStorage {
   getQROrders(): Promise<Order[]>;
   getCompletedOrders(): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
-  createOrderWithItems(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
+  createOrderWithItems(order: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order>;
   updateOrder(id: string, order: Partial<InsertOrder>): Promise<Order | undefined>;
   updateOrderStatus(id: string, status: string): Promise<Order | undefined>;
   deleteOrder(id: string): Promise<boolean>;
