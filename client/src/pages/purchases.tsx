@@ -10,9 +10,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertPurchaseSchema, insertCategorySchema, type Purchase, type Category } from "@shared/schema";
+import { insertPurchaseSchema, insertCategorySchema, type Purchase, type Category, type Product } from "@shared/schema";
 import type { z } from "zod";
-import { Plus, Search, Download, Upload, Edit, Trash2, FolderPlus, Calendar, ImagePlus, X, ShoppingCart, Eye, Printer, FileSpreadsheet, TrendingUp } from "lucide-react";
+import { Plus, Search, Download, Upload, Edit, Trash2, FolderPlus, Calendar, ImagePlus, X, ShoppingCart, Eye, Printer, FileSpreadsheet, TrendingUp, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -51,6 +51,10 @@ export default function PurchaseManage() {
     queryKey: ["/api/purchases"],
   });
 
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+  });
+
   const filteredPurchases = allPurchases.filter((purchase) => {
     const matchesSearch = purchase.itemName.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -86,6 +90,7 @@ export default function PurchaseManage() {
     defaultValues: {
       imageUrl: null,
       categoryId: "",
+      productId: null,
       itemName: "",
       quantity: "",
       unit: "kg",
@@ -93,6 +98,21 @@ export default function PurchaseManage() {
       purchaseDate: new Date(),
     },
   });
+
+  const handleProductSelect = (productId: string) => {
+    if (!productId || productId === "none") {
+      purchaseForm.setValue("productId", null);
+      return;
+    }
+    
+    const product = products.find(p => p.id === productId);
+    if (product) {
+      purchaseForm.setValue("productId", productId);
+      purchaseForm.setValue("itemName", product.name);
+      purchaseForm.setValue("unit", product.unit);
+      purchaseForm.setValue("categoryId", product.categoryId);
+    }
+  };
 
   const categoryForm = useForm<z.infer<typeof insertCategorySchema>>({
     resolver: zodResolver(insertCategorySchema),
@@ -108,12 +128,14 @@ export default function PurchaseManage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
       setPurchaseDialogOpen(false);
       purchaseForm.reset();
       setImagePreview("");
       toast({
         title: "Success",
-        description: "Purchase created successfully",
+        description: "Purchase created successfully. Inventory updated automatically.",
       });
     },
     onError: () => {
@@ -793,6 +815,38 @@ export default function PurchaseManage() {
                         </div>
                       )}
                     </div>
+
+                    <FormField
+                      control={purchaseForm.control}
+                      name="productId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Link to Existing Product (optional)</FormLabel>
+                          <Select onValueChange={handleProductSelect} value={field.value || undefined}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-product">
+                                <SelectValue placeholder="Select product from inventory or leave blank" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">None (Custom Purchase)</SelectItem>
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="w-4 h-4" />
+                                    {product.name} ({product.unit})
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                          <p className="text-xs text-muted-foreground">
+                            Select a product to automatically update its inventory when purchase is created
+                          </p>
+                        </FormItem>
+                      )}
+                    />
 
                     <FormField
                       control={purchaseForm.control}
