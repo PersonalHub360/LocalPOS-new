@@ -74,6 +74,11 @@ interface SalesSummaryItem {
   revenue: number;
 }
 
+interface PaymentSplit {
+  method: string;
+  amount: number;
+}
+
 export default function SalesManage() {
   const [activeTab, setActiveTab] = useState("detailed");
   const [viewSale, setViewSale] = useState<Order | null>(null);
@@ -88,6 +93,9 @@ export default function SalesManage() {
   const [summaryStartDate, setSummaryStartDate] = useState<Date | undefined>(undefined);
   const [summaryEndDate, setSummaryEndDate] = useState<Date | undefined>(undefined);
   const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
+  const [newPaymentMethod, setNewPaymentMethod] = useState<string>("cash");
+  const [newPaymentAmount, setNewPaymentAmount] = useState<string>("");
   const { toast} = useToast();
 
   const { data: sales = [], isLoading } = useQuery<Order[]>({
@@ -187,8 +195,20 @@ export default function SalesManage() {
       fetchOrderItems(viewSale.id);
     } else if (editSale) {
       fetchOrderItems(editSale.id);
+      // Load existing payment splits if any
+      if (editSale.paymentSplits) {
+        try {
+          const splits = JSON.parse(editSale.paymentSplits);
+          setPaymentSplits(splits);
+        } catch {
+          setPaymentSplits([]);
+        }
+      } else {
+        setPaymentSplits([]);
+      }
     } else {
       setOrderItems([]);
+      setPaymentSplits([]);
     }
   }, [viewSale, editSale]);
 
@@ -290,14 +310,69 @@ export default function SalesManage() {
     }
   };
 
+  const addPaymentSplit = () => {
+    if (!newPaymentAmount || parseFloat(newPaymentAmount) <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid payment amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amount = parseFloat(newPaymentAmount);
+    const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
+    const orderTotal = editSale ? parseFloat(editSale.total) : 0;
+
+    if (totalPaid + amount > orderTotal) {
+      toast({
+        title: "Amount Exceeds Total",
+        description: `Payment amount cannot exceed order total of $${orderTotal.toFixed(2)}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPaymentSplits([...paymentSplits, { method: newPaymentMethod, amount }]);
+    setNewPaymentAmount("");
+    setNewPaymentMethod("cash");
+  };
+
+  const removePaymentSplit = (index: number) => {
+    setPaymentSplits(paymentSplits.filter((_, i) => i !== index));
+  };
+
+  const getPaymentMethodLabel = (method: string) => {
+    const labels: Record<string, string> = {
+      "aba": "ABA",
+      "acleda": "Acleda",
+      "cash": "Cash",
+      "due": "Due",
+      "card": "Card",
+      "cash_aba": "Cash And ABA",
+      "cash_acleda": "Cash And Acleda",
+    };
+    return labels[method] || method;
+  };
+
   const handleUpdate = () => {
     if (!editSale) return;
+
+    // Generate primary payment method from splits
+    let primaryPaymentMethod = editSale.paymentMethod;
+    if (paymentSplits.length > 0) {
+      // Create a summary of payment methods used
+      const methods = paymentSplits.map(s => getPaymentMethodLabel(s.method));
+      primaryPaymentMethod = methods.length === 1 ? paymentSplits[0].method : "split";
+    }
+
     updateMutation.mutate({
       id: editSale.id,
       data: {
         customerName: editSale.customerName,
         paymentStatus: editSale.paymentStatus,
-        paymentMethod: editSale.paymentMethod,
+        paymentMethod: primaryPaymentMethod,
+        paymentSplits: paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : null,
         status: editSale.status,
       },
     });
@@ -915,30 +990,117 @@ export default function SalesManage() {
               </div>
 
               {/* Process Payment Section */}
-              <div className="border-t pt-4">
-                <Label className="text-base font-semibold mb-4 block">Process Payment</Label>
-                <div>
-                  <Label htmlFor="payment-method">Payment Method (Pay by)</Label>
-                  <Select
-                    value={editSale.paymentMethod || ""}
-                    onValueChange={(value) =>
-                      setEditSale({ ...editSale, paymentMethod: value })
-                    }
+              <div className="border-t pt-4 space-y-4">
+                <Label className="text-base font-semibold">Process Payment - Split Payment</Label>
+                
+                {/* Payment Splits List */}
+                {paymentSplits.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Current Payments:</Label>
+                    <div className="border rounded-md divide-y">
+                      {paymentSplits.map((split, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 bg-muted/30"
+                          data-testid={`payment-split-${index}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium capitalize">
+                              {getPaymentMethodLabel(split.method)}
+                            </span>
+                            <span className="text-lg font-bold text-primary">
+                              ${split.amount.toFixed(2)}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => removePaymentSplit(index)}
+                            data-testid={`button-remove-split-${index}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Add New Payment */}
+                <div className="space-y-3 border rounded-md p-4 bg-muted/10">
+                  <Label className="text-sm font-medium">Add Payment Method</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="new-payment-method" className="text-xs text-muted-foreground">
+                        Payment Method
+                      </Label>
+                      <Select
+                        value={newPaymentMethod}
+                        onValueChange={setNewPaymentMethod}
+                      >
+                        <SelectTrigger data-testid="select-new-payment-method">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aba">ABA</SelectItem>
+                          <SelectItem value="acleda">Acleda</SelectItem>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="due">Due</SelectItem>
+                          <SelectItem value="card">Card</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="new-payment-amount" className="text-xs text-muted-foreground">
+                        Amount Paid
+                      </Label>
+                      <Input
+                        id="new-payment-amount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={newPaymentAmount}
+                        onChange={(e) => setNewPaymentAmount(e.target.value)}
+                        data-testid="input-new-payment-amount"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={addPaymentSplit}
+                    className="w-full"
+                    variant="outline"
+                    data-testid="button-add-payment-split"
                   >
-                    <SelectTrigger data-testid="select-edit-payment-method">
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="aba">ABA</SelectItem>
-                      <SelectItem value="acleda">Acleda</SelectItem>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="due">Due</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                      <SelectItem value="cash_aba">Cash And ABA</SelectItem>
-                      <SelectItem value="cash_acleda">Cash And Acleda</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    Add Payment
+                  </Button>
                 </div>
+
+                {/* Payment Summary */}
+                {editSale && (
+                  <div className="border rounded-md p-4 bg-accent/5 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Order Total:</span>
+                      <span className="font-semibold">${parseFloat(editSale.total).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Paid:</span>
+                      <span className="font-semibold text-green-600">
+                        ${paymentSplits.reduce((sum, split) => sum + split.amount, 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t pt-2">
+                      <span className="text-muted-foreground font-medium">Remaining:</span>
+                      <span className={`font-bold ${
+                        (parseFloat(editSale.total) - paymentSplits.reduce((sum, split) => sum + split.amount, 0)) > 0
+                          ? "text-orange-600"
+                          : "text-green-600"
+                      }`}>
+                        ${(parseFloat(editSale.total) - paymentSplits.reduce((sum, split) => sum + split.amount, 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Order Items (Read-only) */}

@@ -67,6 +67,7 @@ export const orders = pgTable("orders", {
   status: text("status").notNull().default("draft"),
   paymentStatus: text("payment_status").notNull().default("pending"),
   paymentMethod: text("payment_method"),
+  paymentSplits: text("payment_splits"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   completedAt: timestamp("completed_at"),
 });
