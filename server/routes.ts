@@ -613,6 +613,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/sales/summary", async (req, res) => {
+    try {
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      const summary = await storage.getSalesSummary(startDate, endDate);
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch sales summary" });
+    }
+  });
+
   app.get("/api/dashboard/recent-orders", async (req, res) => {
     try {
       const filter = (req.query.filter as string) || "today";

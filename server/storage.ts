@@ -85,6 +85,7 @@ export interface IStorage {
   getSalesByCategory(startDate: Date, endDate: Date): Promise<Array<{ category: string; revenue: number }>>;
   getSalesByPaymentMethod(startDate: Date, endDate: Date): Promise<Array<{ paymentMethod: string; amount: number }>>;
   getPopularProducts(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>>;
+  getSalesSummary(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>>;
   getRecentOrders(startDate: Date, endDate: Date): Promise<Order[]>;
   
   getExpenseCategories(): Promise<ExpenseCategory[]>;
@@ -1063,6 +1064,34 @@ export class MemStorage implements IStorage {
       .map(({ name, quantity, revenue }) => ({ product: name, quantity, revenue }))
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
+  }
+
+  async getSalesSummary(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>> {
+    const orders = Array.from(this.orders.values()).filter(order => {
+      if (order.status !== 'completed') return false;
+      const orderDate = new Date(order.createdAt);
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+    const productStats = new Map<string, { name: string; quantity: number; revenue: number }>();
+
+    for (const order of orders) {
+      const items = await this.getOrderItems(order.id);
+      for (const item of items) {
+        const product = this.products.get(item.productId);
+        if (product) {
+          const current = productStats.get(product.id) || { name: product.name, quantity: 0, revenue: 0 };
+          productStats.set(product.id, {
+            name: product.name,
+            quantity: current.quantity + item.quantity,
+            revenue: current.revenue + parseFloat(item.total),
+          });
+        }
+      }
+    }
+
+    return Array.from(productStats.values())
+      .map(({ name, quantity, revenue }) => ({ product: name, quantity, revenue }))
+      .sort((a, b) => a.product.localeCompare(b.product));
   }
 
   async getRecentOrders(startDate: Date, endDate: Date): Promise<Order[]> {

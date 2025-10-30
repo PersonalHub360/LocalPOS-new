@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -67,7 +68,14 @@ interface OrderItemWithProduct {
   productName: string;
 }
 
+interface SalesSummaryItem {
+  product: string;
+  quantity: number;
+  revenue: number;
+}
+
 export default function SalesManage() {
+  const [activeTab, setActiveTab] = useState("detailed");
   const [viewSale, setViewSale] = useState<Order | null>(null);
   const [editSale, setEditSale] = useState<Order | null>(null);
   const [deleteSaleId, setDeleteSaleId] = useState<string | null>(null);
@@ -76,10 +84,40 @@ export default function SalesManage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [orderItems, setOrderItems] = useState<OrderItemWithProduct[]>([]);
-  const { toast } = useToast();
+  const [summaryDateFilter, setSummaryDateFilter] = useState<DateFilterType>("all");
+  const [summaryStartDate, setSummaryStartDate] = useState<Date | undefined>(undefined);
+  const [summaryEndDate, setSummaryEndDate] = useState<Date | undefined>(undefined);
+  const { toast} = useToast();
 
   const { data: sales = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+  });
+
+  // Get date range for sales summary
+  const getSummaryDateRange = () => {
+    const now = new Date();
+    let start = new Date(0);
+    let end = now;
+
+    if (summaryDateFilter === "today") {
+      start = startOfDay(now);
+      end = endOfDay(now);
+    } else if (summaryDateFilter === "yesterday") {
+      const yesterday = subDays(now, 1);
+      start = startOfDay(yesterday);
+      end = endOfDay(yesterday);
+    } else if (summaryDateFilter === "custom" && summaryStartDate && summaryEndDate) {
+      start = startOfDay(summaryStartDate);
+      end = endOfDay(summaryEndDate);
+    }
+
+    return { start, end };
+  };
+
+  const summaryDateRange = getSummaryDateRange();
+  
+  const { data: salesSummary = [], isLoading: isSummaryLoading } = useQuery<SalesSummaryItem[]>({
+    queryKey: ["/api/sales/summary", summaryDateRange.start.toISOString(), summaryDateRange.end.toISOString()],
   });
 
   const updateMutation = useMutation({
@@ -399,7 +437,14 @@ export default function SalesManage() {
           </DropdownMenu>
         </div>
 
-        <Card>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="detailed" data-testid="tab-detailed-sales">Detailed Sales Report</TabsTrigger>
+            <TabsTrigger value="summary" data-testid="tab-sales-summary">Sales Summary Report</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="detailed" className="space-y-4">
+            <Card>
           <CardHeader>
             <CardTitle>Sales List</CardTitle>
             <CardDescription>Comprehensive list of all sales transactions</CardDescription>
@@ -582,6 +627,97 @@ export default function SalesManage() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="summary" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Sales Summary Report</CardTitle>
+                <CardDescription>Individual item sales summary</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Select value={summaryDateFilter} onValueChange={(value: DateFilterType) => setSummaryDateFilter(value)}>
+                    <SelectTrigger className="w-[180px]" data-testid="select-summary-date-filter">
+                      <SelectValue placeholder="Filter by date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="yesterday">Yesterday</SelectItem>
+                      <SelectItem value="custom">Custom Range</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {summaryDateFilter === "custom" && (
+                    <>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-start-date">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {summaryStartDate ? format(summaryStartDate, "PPP") : "Start Date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={summaryStartDate}
+                            onSelect={setSummaryStartDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-end-date">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {summaryEndDate ? format(summaryEndDate, "PPP") : "End Date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={summaryEndDate}
+                            onSelect={setSummaryEndDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </>
+                  )}
+                </div>
+
+                {isSummaryLoading ? (
+                  <p className="text-muted-foreground">Loading sales summary...</p>
+                ) : salesSummary.length === 0 ? (
+                  <p className="text-muted-foreground">No sales data available for the selected period</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead data-testid="header-product-name">Product Name</TableHead>
+                          <TableHead data-testid="header-quantity-sold">Quantity Sold</TableHead>
+                          <TableHead data-testid="header-total-revenue">Total Revenue</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {salesSummary.map((item, index) => (
+                          <TableRow key={index} data-testid={`row-summary-${index}`}>
+                            <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
+                            <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
+                            <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* View Dialog */}
