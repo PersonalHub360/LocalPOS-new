@@ -65,6 +65,8 @@ export default function Reports() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  const [paymentsHistoryFilter, setPaymentsHistoryFilter] = useState<string>("all");
+  const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("all");
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
@@ -129,6 +131,30 @@ export default function Reports() {
         // Map "completed" to "paid" for backward compatibility
         const statusToCheck = paymentStatusFilter === "completed" ? "paid" : paymentStatusFilter;
         if (sale.paymentStatus !== statusToCheck) {
+          return false;
+        }
+      }
+
+      // Apply payment gateway filter
+      if (paymentGatewayFilter !== "all") {
+        if (sale.paymentMethod !== paymentGatewayFilter) {
+          return false;
+        }
+      }
+
+      // Apply payments history filter
+      if (paymentsHistoryFilter !== "all") {
+        // Filter by payment history type
+        if (paymentsHistoryFilter === "successful" && sale.paymentStatus !== "paid") {
+          return false;
+        }
+        if (paymentsHistoryFilter === "failed" && sale.paymentStatus !== "failed") {
+          return false;
+        }
+        if (paymentsHistoryFilter === "pending" && sale.paymentStatus !== "pending") {
+          return false;
+        }
+        if (paymentsHistoryFilter === "refunded" && sale.status !== "cancelled") {
           return false;
         }
       }
@@ -614,6 +640,41 @@ export default function Reports() {
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="due">Due</SelectItem>
                     <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payments History</label>
+                <Select value={paymentsHistoryFilter} onValueChange={setPaymentsHistoryFilter}>
+                  <SelectTrigger data-testid="select-payments-history">
+                    <SelectValue placeholder="Select history" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All History</SelectItem>
+                    <SelectItem value="successful">Successful</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="refunded">Refunded</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payment Gateway</label>
+                <Select value={paymentGatewayFilter} onValueChange={setPaymentGatewayFilter}>
+                  <SelectTrigger data-testid="select-payment-gateway">
+                    <SelectValue placeholder="Select gateway" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Gateways</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="aba">ABA</SelectItem>
+                    <SelectItem value="acleda">Acleda</SelectItem>
+                    <SelectItem value="due">Due</SelectItem>
+                    <SelectItem value="cash and aba">Cash And ABA</SelectItem>
+                    <SelectItem value="cash and acleda">Cash And Acleda</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

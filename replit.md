@@ -56,10 +56,12 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
   - **Manual Adjustments**: Support for manual stock adjustments with reasons (New Purchase, Sale/Usage, Damage/Spoilage, Return, Stock Correction, Other) and optional notes.
   - **Stock Status Indicators**: Visual badges for stock status (Out of Stock, Low Stock, In Stock) with color coding.
 - **Reporting System**: Comprehensive reports for Sales, Inventory, Discounts, Refunds, and Staff Performance with streamlined filtering and export options.
-  - **Report Filters Layout**: Clean horizontal filter bar with three main dropdowns:
+  - **Report Filters Layout**: Clean horizontal filter bar with five main dropdowns:
     - **Date Range**: Today, Yesterday, This Month, Last Month, Custom Date
     - **Report Type**: Sales, Inventory, Discounts, Refunds, Staff Performance
     - **Payment Status**: All Statuses, Completed, Pending, Due, Failed
+    - **Payments History**: All History, Successful, Pending, Failed, Refunded
+    - **Payment Gateway**: All Gateways, Cash, Card, ABA, Acleda, Due, Cash And ABA, Cash And Acleda
   - **Sales Report**: Displays detailed transaction list with checkboxes for bulk selection and deletion. Includes Date/Time, Order ID, Customer, Total Amount, Payment Method, Payment Status, Status, and action buttons (View, Edit, Print). Export to CSV and PDF formats available.
   - **Other Reports**: Display transaction information in table format with columns for Date/Time, Order ID, Customer, Total Amount, Payment Method, Payment Status, Status, and Actions. All reports respect selected date range and payment status filters.
   - **Export Functionality**: All reports support CSV and PDF export with comprehensive transaction details including dual currency display (USD/KHR at 1:4,100 exchange rate).
