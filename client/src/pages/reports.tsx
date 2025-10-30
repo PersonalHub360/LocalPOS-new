@@ -613,7 +613,7 @@ export default function Reports() {
             <CardDescription>Select report type and date range</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Report Type</label>
                 <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
@@ -654,8 +654,61 @@ export default function Reports() {
                 </Select>
               </div>
 
+              {reportType === "gateway" && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Payment Method</label>
+                    <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+                      <SelectTrigger data-testid="select-payment-method">
+                        <SelectValue placeholder="All Methods" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Methods</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="card">Card</SelectItem>
+                        <SelectItem value="aba">ABA</SelectItem>
+                        <SelectItem value="acleda">Acleda</SelectItem>
+                        <SelectItem value="due">Due</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Payment Status</label>
+                    <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                      <SelectTrigger data-testid="select-payment-status">
+                        <SelectValue placeholder="All Statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {(reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card" || reportType === "payment-history") && (
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Payment Status</label>
+                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                    <SelectTrigger data-testid="select-payment-status">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               {dateFilter === "custom" && (
-                <div className="flex gap-2">
+                <>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Start Date</label>
                     <Popover>
@@ -692,64 +745,9 @@ export default function Reports() {
                       </PopoverContent>
                     </Popover>
                   </div>
-                </div>
+                </>
               )}
             </div>
-
-            {reportType === "gateway" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Payment Method</label>
-                  <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-                    <SelectTrigger data-testid="select-payment-method">
-                      <SelectValue placeholder="All Methods" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Methods</SelectItem>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                      <SelectItem value="aba">ABA</SelectItem>
-                      <SelectItem value="acleda">Acleda</SelectItem>
-                      <SelectItem value="due">Due</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Payment Status</label>
-                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
-                    <SelectTrigger data-testid="select-payment-status">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="failed">Failed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-            {(reportType === "aba" || reportType === "acleda" || reportType === "cash" || reportType === "due" || reportType === "card") && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Payment Status</label>
-                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
-                    <SelectTrigger data-testid="select-payment-status">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="paid">Paid</SelectItem>
-                      <SelectItem value="failed">Failed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
