@@ -655,7 +655,7 @@ export default function Reports() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">Payment Report Type</label>
+                <label className="text-sm font-medium mb-2 block">Payment Report</label>
                 <Select value={paymentReportType} onValueChange={(value) => setPaymentReportType(value as PaymentReportType)}>
                   <SelectTrigger data-testid="select-payment-report-type">
                     <SelectValue placeholder="Select payment report" />
