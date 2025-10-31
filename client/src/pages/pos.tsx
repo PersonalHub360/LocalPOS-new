@@ -12,8 +12,11 @@ import { ReceiptPrintModal } from "@/components/receipt-print-modal";
 import { useToast } from "@/hooks/use-toast";
 import type { Product, Category, Table, Order, OrderItem } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useBranch } from "@/contexts/BranchContext";
+import { withBranchId } from "@/lib/branchQuery";
 
 export default function POS() {
+  const { selectedBranchId } = useBranch();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [orderItems, setOrderItems] = useState<OrderItemData[]>([]);
@@ -43,15 +46,30 @@ export default function POS() {
   });
 
   const { data: products = [], isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+    queryKey: ["/api/products", { branchId: selectedBranchId }],
+    queryFn: async () => {
+      const res = await fetch(withBranchId("/api/products", selectedBranchId), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch products");
+      return res.json();
+    },
   });
 
   const { data: tables = [] } = useQuery<Table[]>({
-    queryKey: ["/api/tables"],
+    queryKey: ["/api/tables", { branchId: selectedBranchId }],
+    queryFn: async () => {
+      const res = await fetch(withBranchId("/api/tables", selectedBranchId), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tables");
+      return res.json();
+    },
   });
 
   const { data: orders = [] } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
+    queryKey: ["/api/orders", { branchId: selectedBranchId }],
+    queryFn: async () => {
+      const res = await fetch(withBranchId("/api/orders", selectedBranchId), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch orders");
+      return res.json();
+    },
   });
 
   const draftOrders = orders.filter((order) => order.status === "draft");
@@ -61,7 +79,7 @@ export default function POS() {
       return await apiRequest("POST", "/api/orders", orderData);
     },
     onSuccess: () => {
-      // Invalidate orders and products
+      // Invalidate orders and products (all branches)
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });

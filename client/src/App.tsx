@@ -8,6 +8,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthWrapper } from "@/components/auth-wrapper";
+import { BranchProvider } from "@/contexts/BranchContext";
+import { BranchSelector } from "@/components/branch-selector";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Grid3x3, LogOut, User } from "lucide-react";
@@ -28,6 +30,7 @@ import HRM from "@/pages/hrm";
 import Reports from "@/pages/reports";
 import BankStatement from "@/pages/bank-statement";
 import Settings from "@/pages/settings";
+import Branches from "@/pages/branches";
 import Login from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
@@ -46,6 +49,7 @@ function Router() {
       <Route path="/hrm" component={HRM} />
       <Route path="/reports" component={Reports} />
       <Route path="/bank-statement" component={BankStatement} />
+      <Route path="/branches" component={Branches} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
@@ -151,6 +155,7 @@ function AppHeader() {
     <>
       <header className="h-16 border-b border-border bg-gradient-to-r from-primary via-secondary to-accent px-6 flex items-center gap-4">
         <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white hover:bg-white/20" />
+        <BranchSelector />
         <div className="flex-1" />
         {isPOSPage && (
           <div className="flex gap-2">
@@ -256,9 +261,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthWrapper>
-          <AuthenticatedApp />
-        </AuthWrapper>
+        <BranchProvider>
+          <AuthWrapper>
+            <AuthenticatedApp />
+          </AuthWrapper>
+        </BranchProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

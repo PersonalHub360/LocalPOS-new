@@ -44,25 +44,25 @@ export interface IStorage {
   updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category | undefined>;
   deleteCategory(id: string): Promise<boolean>;
   
-  getProducts(): Promise<Product[]>;
+  getProducts(branchId?: string | null): Promise<Product[]>;
   getProduct(id: string): Promise<Product | undefined>;
-  getProductsByCategory(categoryId: string): Promise<Product[]>;
+  getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
   
-  getTables(): Promise<Table[]>;
+  getTables(branchId?: string | null): Promise<Table[]>;
   getTable(id: string): Promise<Table | undefined>;
   createTable(table: InsertTable): Promise<Table>;
   updateTable(id: string, table: Partial<InsertTable>): Promise<Table | undefined>;
   updateTableStatus(id: string, status: string): Promise<Table | undefined>;
   deleteTable(id: string): Promise<boolean>;
   
-  getOrders(): Promise<Order[]>;
+  getOrders(branchId?: string | null): Promise<Order[]>;
   getOrder(id: string): Promise<Order | undefined>;
-  getDraftOrders(): Promise<Order[]>;
-  getQROrders(): Promise<Order[]>;
-  getCompletedOrders(): Promise<Order[]>;
+  getDraftOrders(branchId?: string | null): Promise<Order[]>;
+  getQROrders(branchId?: string | null): Promise<Order[]>;
+  getCompletedOrders(branchId?: string | null): Promise<Order[]>;
   createOrder(order: InsertOrder): Promise<Order>;
   createOrderWithItems(order: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order>;
   updateOrder(id: string, order: Partial<InsertOrder>): Promise<Order | undefined>;
@@ -96,19 +96,19 @@ export interface IStorage {
   updateExpenseCategory(id: string, category: Partial<InsertExpenseCategory>): Promise<ExpenseCategory | undefined>;
   deleteExpenseCategory(id: string): Promise<boolean>;
   
-  getExpenses(): Promise<Expense[]>;
+  getExpenses(branchId?: string | null): Promise<Expense[]>;
   getExpense(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<boolean>;
   
-  getPurchases(): Promise<Purchase[]>;
+  getPurchases(branchId?: string | null): Promise<Purchase[]>;
   getPurchase(id: string): Promise<Purchase | undefined>;
   createPurchase(purchase: InsertPurchase): Promise<Purchase>;
   updatePurchase(id: string, purchase: Partial<InsertPurchase>): Promise<Purchase | undefined>;
   deletePurchase(id: string): Promise<boolean>;
   
-  getEmployees(): Promise<Employee[]>;
+  getEmployees(branchId?: string | null): Promise<Employee[]>;
   getEmployee(id: string): Promise<Employee | undefined>;
   createEmployee(employee: InsertEmployee): Promise<Employee>;
   updateEmployee(id: string, employee: Partial<InsertEmployee>): Promise<Employee | undefined>;
@@ -670,18 +670,26 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  async getProducts(): Promise<Product[]> {
-    return Array.from(this.products.values());
+  async getProducts(branchId?: string | null): Promise<Product[]> {
+    const products = Array.from(this.products.values());
+    if (branchId) {
+      return products.filter(p => p.branchId === branchId);
+    }
+    return products;
   }
 
   async getProduct(id: string): Promise<Product | undefined> {
     return this.products.get(id);
   }
 
-  async getProductsByCategory(categoryId: string): Promise<Product[]> {
-    return Array.from(this.products.values()).filter(
+  async getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]> {
+    let products = Array.from(this.products.values()).filter(
       (product) => product.categoryId === categoryId
     );
+    if (branchId) {
+      products = products.filter(p => p.branchId === branchId);
+    }
+    return products;
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
@@ -715,8 +723,12 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  async getTables(): Promise<Table[]> {
-    return Array.from(this.tables.values());
+  async getTables(branchId?: string | null): Promise<Table[]> {
+    const tables = Array.from(this.tables.values());
+    if (branchId) {
+      return tables.filter(t => t.branchId === branchId);
+    }
+    return tables;
   }
 
   async getTable(id: string): Promise<Table | undefined> {
@@ -759,24 +771,36 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  async getOrders(): Promise<Order[]> {
-    return Array.from(this.orders.values());
+  async getOrders(branchId?: string | null): Promise<Order[]> {
+    const orders = Array.from(this.orders.values());
+    if (branchId) {
+      return orders.filter(o => o.branchId === branchId);
+    }
+    return orders;
   }
 
   async getOrder(id: string): Promise<Order | undefined> {
     return this.orders.get(id);
   }
 
-  async getDraftOrders(): Promise<Order[]> {
-    return Array.from(this.orders.values()).filter(order => order.status === "draft");
+  async getDraftOrders(branchId?: string | null): Promise<Order[]> {
+    const orders = Array.from(this.orders.values()).filter(order => order.status === "draft");
+    if (branchId) {
+      return orders.filter(o => o.branchId === branchId);
+    }
+    return orders;
   }
 
   async getQROrders(): Promise<Order[]> {
     return Array.from(this.orders.values()).filter(order => order.orderSource === "qr" && order.status === "qr-pending");
   }
 
-  async getCompletedOrders(): Promise<Order[]> {
-    return Array.from(this.orders.values()).filter(order => order.status === "completed");
+  async getCompletedOrders(branchId?: string | null): Promise<Order[]> {
+    const orders = Array.from(this.orders.values()).filter(order => order.status === "completed");
+    if (branchId) {
+      return orders.filter(o => o.branchId === branchId);
+    }
+    return orders;
   }
 
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
@@ -1147,8 +1171,12 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  async getExpenses(): Promise<Expense[]> {
-    return Array.from(this.expenses.values());
+  async getExpenses(branchId?: string | null): Promise<Expense[]> {
+    const expenses = Array.from(this.expenses.values());
+    if (branchId) {
+      return expenses.filter(e => e.branchId === branchId);
+    }
+    return expenses;
   }
 
   async getExpense(id: string): Promise<Expense | undefined> {
@@ -1177,8 +1205,12 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  async getPurchases(): Promise<Purchase[]> {
-    return Array.from(this.purchases.values());
+  async getPurchases(branchId?: string | null): Promise<Purchase[]> {
+    const purchases = Array.from(this.purchases.values());
+    if (branchId) {
+      return purchases.filter(p => p.branchId === branchId);
+    }
+    return purchases;
   }
 
   async getPurchase(id: string): Promise<Purchase | undefined> {
@@ -1302,8 +1334,12 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  async getEmployees(): Promise<Employee[]> {
-    return Array.from(this.employees.values());
+  async getEmployees(branchId?: string | null): Promise<Employee[]> {
+    const employees = Array.from(this.employees.values());
+    if (branchId) {
+      return employees.filter(e => e.branchId === branchId);
+    }
+    return employees;
   }
 
   async getEmployee(id: string): Promise<Employee | undefined> {

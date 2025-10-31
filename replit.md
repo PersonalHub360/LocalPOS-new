@@ -82,7 +82,14 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
   - **Summary Statistics**: Overview cards showing total revenue (USD/KHR), total completed transactions, and average transaction value.
   - **Export Capability**: Export bank statement data for accounting and reconciliation purposes.
   - **Real-time Updates**: Automatically reflects completed transactions and respects selected date filters.
-- **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization. Includes configurable stock threshold for low stock alerts.
+- **Branch Management**: Multi-location branch management system for managing multiple store locations.
+  - **Branch CRUD**: Create, view, edit, and delete branches with fields: name (required), location, contact person, phone, and active status.
+  - **Branch Storage**: All branches stored with branchId as nullable foreign key across orders, products, employees, expenses, purchases, and tables to support multi-branch operations.
+  - **Branch Page**: Modern card-based UI displaying branch details with color-coded active/inactive status badges, Building2 icons, and quick edit/delete actions.
+  - **Data Isolation**: Branch-based data filtering capability to view only specific branch data when a branch is selected, or view all records when "All Branches" is selected.
+  - **Backend API**: RESTful endpoints for branches (GET /api/branches, GET /api/branches/:id, POST /api/branches, PATCH /api/branches/:id, DELETE /api/branches/:id).
+  - **Schema Design**: Branch table with id, name, location, contactPerson, phone, and isActive fields. BranchId added as nullable field to support backward compatibility with existing data.
+- **System Settings**: Extensive configuration options across 10 sections including General, Payment Methods, Tax & Discount, Receipt & Invoice, User & Access, Printer & Hardware, Currency & Localization, Backup & Data, Notifications, and Customization. Includes configurable stock threshold for low stock alerts and secondary currency selection (Rial, BDT, KHR, etc.) with custom exchange rates for dual-currency receipt printing.
 
 ## External Dependencies
 - **Frontend Libraries**: React, TypeScript, TanStack Query, Tailwind CSS, Shadcn UI.

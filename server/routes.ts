@@ -198,10 +198,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/products", async (req, res) => {
     try {
-      const { categoryId } = req.query;
+      const { categoryId, branchId } = req.query;
       const products = categoryId
-        ? await storage.getProductsByCategory(categoryId as string)
-        : await storage.getProducts();
+        ? await storage.getProductsByCategory(categoryId as string, branchId as string | undefined)
+        : await storage.getProducts(branchId as string | undefined);
       res.json(products);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch products" });
@@ -296,7 +296,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/tables", async (req, res) => {
     try {
-      const tables = await storage.getTables();
+      const { branchId } = req.query;
+      const tables = await storage.getTables(branchId as string | undefined);
       res.json(tables);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tables" });
@@ -398,7 +399,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/orders", async (req, res) => {
     try {
-      const orders = await storage.getOrders();
+      const { branchId } = req.query;
+      const orders = await storage.getOrders(branchId as string | undefined);
       res.json(orders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch orders" });
@@ -733,7 +735,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses", async (req, res) => {
     try {
-      const expenses = await storage.getExpenses();
+      const { branchId } = req.query;
+      const expenses = await storage.getExpenses(branchId as string | undefined);
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
@@ -791,7 +794,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/purchases", async (req, res) => {
     try {
-      const purchases = await storage.getPurchases();
+      const { branchId } = req.query;
+      const purchases = await storage.getPurchases(branchId as string | undefined);
       res.json(purchases);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch purchases" });
@@ -884,7 +888,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employees", async (req, res) => {
     try {
-      const employees = await storage.getEmployees();
+      const { branchId } = req.query;
+      const employees = await storage.getEmployees(branchId as string | undefined);
       res.json(employees);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch employees" });
