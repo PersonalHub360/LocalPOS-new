@@ -395,6 +395,8 @@ export type User = typeof users.$inferSelect;
 export const branches = pgTable("branches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
   location: text("location"),
   contactPerson: text("contact_person"),
   phone: text("phone"),
@@ -406,6 +408,9 @@ export const branches = pgTable("branches", {
 export const insertBranchSchema = createInsertSchema(branches).omit({
   id: true,
   createdAt: true,
+}).extend({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export type InsertBranch = z.infer<typeof insertBranchSchema>;
