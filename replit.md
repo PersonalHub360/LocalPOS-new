@@ -17,7 +17,8 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 - **Frontend**: Built with React, TypeScript, React hooks, and TanStack Query for state management. Styling uses Tailwind CSS and Shadcn UI.
 - **Backend**: Developed with Express and TypeScript.
 - **Authentication**: Session-based authentication using `express-session` and `bcrypt` for password hashing secures all API routes.
-- **Storage**: Currently uses an in-memory `MemStorage` implementation.
+- **Database**: PostgreSQL database with Drizzle ORM for persistent storage. All data persists across application restarts and republishing.
+- **Order Counter**: Race-condition-free implementation using dedicated `orderCounters` table with row-level locking (`SELECT ... FOR UPDATE`), well-known singleton ID ('order-counter'), and atomic `ON CONFLICT DO NOTHING` upsert to guarantee unique, monotonically increasing order numbers even under concurrent load.
 - **API**: Provides RESTful APIs for managing products, categories, orders, tables, items, purchases, employees, and authentication.
 - **Core Workflows**: Includes a complete POS order workflow with draft management, receipt printing, and multiple payment methods. Comprehensive CRUD operations are supported across all management modules.
 - **Permissions**: Role-based permissions system with granular controls.
