@@ -10,7 +10,7 @@ const createOrderWithItemsSchema = insertOrderSchema.extend({
 });
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
+  if (!req.session.userId && !req.session.branchId) {
     return res.status(401).json({ error: "Authentication required" });
   }
   next();
@@ -91,21 +91,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.validateUserCredentials(username, password);
       
-      if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
+      if (user) {
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        req.session.role = user.role;
+        req.session.userType = "user";
+
+        return res.json({
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          userType: "user",
+        });
       }
 
-      req.session.userId = user.id;
-      req.session.username = user.username;
-      req.session.role = user.role;
+      const branch = await storage.validateBranchCredentials(username, password);
+      
+      if (branch) {
+        req.session.branchId = branch.id;
+        req.session.username = branch.username;
+        req.session.role = "branch";
+        req.session.userType = "branch";
 
-      res.json({
-        id: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-      });
+        return res.json({
+          id: branch.id,
+          username: branch.username,
+          name: branch.name,
+          location: branch.location,
+          role: "branch",
+          userType: "branch",
+        });
+      }
+
+      return res.status(401).json({ error: "Invalid credentials" });
     } catch (error) {
       res.status(500).json({ error: "Login failed" });
     }
@@ -130,9 +150,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fullName: user.fullName,
           email: user.email,
           role: user.role,
+          userType: "user",
         });
       }
     }
+    
+    if (req.session.branchId) {
+      const branch = await storage.getBranch(req.session.branchId);
+      if (branch) {
+        return res.json({
+          id: branch.id,
+          username: branch.username,
+          name: branch.name,
+          location: branch.location,
+          role: "branch",
+          userType: "branch",
+        });
+      }
+    }
+    
     res.status(401).json({ error: "Not authenticated" });
   });
 
