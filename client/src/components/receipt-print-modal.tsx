@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Printer, Receipt, Utensils, Calendar, Hash } from "lucide-react";
-import type { Order, OrderItem, Product } from "@shared/schema";
+import type { Order, OrderItem, Product, Settings } from "@shared/schema";
 import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 
 interface ReceiptPrintModalProps {
   open: boolean;
@@ -34,14 +35,17 @@ interface ReceiptPrintModalProps {
   onPrint: () => void;
 }
 
-// Exchange rate: 1 USD = 4100 KHR (Cambodian Riel)
-const USD_TO_KHR = 4100;
-
-function formatDualCurrency(usdAmount: number) {
-  const khrAmount = usdAmount * USD_TO_KHR;
+function formatDualCurrency(usdAmount: number, settings?: Settings) {
+  const exchangeRate = settings?.exchangeRate ? parseFloat(settings.exchangeRate) : 4100;
+  const secondaryCurrencySymbol = settings?.secondaryCurrencySymbol || "៛";
+  const showSecondaryCurrency = settings?.secondaryCurrency && settings?.exchangeRate;
+  
+  const secondaryAmount = usdAmount * exchangeRate;
   return {
     usd: `$${usdAmount.toFixed(2)}`,
-    khr: `${khrAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}៛`
+    secondary: showSecondaryCurrency 
+      ? `${secondaryAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${secondaryCurrencySymbol}`
+      : null
   };
 }
 
@@ -51,6 +55,11 @@ export function ReceiptPrintModal({
   order,
   onPrint,
 }: ReceiptPrintModalProps) {
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+    enabled: open,
+  });
+
   const handlePrint = () => {
     window.print();
     onPrint();
@@ -126,8 +135,8 @@ export function ReceiptPrintModal({
               {order.items.map((item, index) => {
                 const itemPrice = parseFloat(item.price);
                 const itemTotal = parseFloat(item.total);
-                const priceFormatted = formatDualCurrency(itemPrice);
-                const totalFormatted = formatDualCurrency(itemTotal);
+                const priceFormatted = formatDualCurrency(itemPrice, settings);
+                const totalFormatted = formatDualCurrency(itemTotal, settings);
                 
                 return (
                   <div 
@@ -142,18 +151,27 @@ export function ReceiptPrintModal({
                           <Badge variant="outline" className="text-xs font-mono">
                             {item.quantity}x
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {priceFormatted.usd} / {priceFormatted.khr}
-                          </span>
+                          {priceFormatted.secondary && (
+                            <span className="text-xs text-muted-foreground">
+                              {priceFormatted.usd} / {priceFormatted.secondary}
+                            </span>
+                          )}
+                          {!priceFormatted.secondary && (
+                            <span className="text-xs text-muted-foreground">
+                              {priceFormatted.usd}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="font-mono font-bold text-primary text-sm">
                           {totalFormatted.usd}
                         </p>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {totalFormatted.khr}
-                        </p>
+                        {totalFormatted.secondary && (
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {totalFormatted.secondary}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -168,17 +186,21 @@ export function ReceiptPrintModal({
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal:</span>
               <div className="text-right">
-                <p className="font-mono font-medium">{formatDualCurrency(order.subtotal).usd}</p>
-                <p className="font-mono text-xs text-muted-foreground">{formatDualCurrency(order.subtotal).khr}</p>
+                <p className="font-mono font-medium">{formatDualCurrency(order.subtotal, settings).usd}</p>
+                {formatDualCurrency(order.subtotal, settings).secondary && (
+                  <p className="font-mono text-xs text-muted-foreground">{formatDualCurrency(order.subtotal, settings).secondary}</p>
+                )}
               </div>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Discount:</span>
               <div className="text-right">
                 <p className="font-mono font-medium text-accent">
-                  {formatDualCurrency(order.discount).usd}
+                  {formatDualCurrency(order.discount, settings).usd}
                 </p>
-                <p className="font-mono text-xs text-muted-foreground">{formatDualCurrency(order.discount).khr}</p>
+                {formatDualCurrency(order.discount, settings).secondary && (
+                  <p className="font-mono text-xs text-muted-foreground">{formatDualCurrency(order.discount, settings).secondary}</p>
+                )}
               </div>
             </div>
             
@@ -188,11 +210,13 @@ export function ReceiptPrintModal({
                   <span className="font-bold text-lg">Total:</span>
                   <div className="text-right" data-testid="receipt-total">
                     <p className="font-mono font-bold text-2xl bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                      {formatDualCurrency(order.total).usd}
+                      {formatDualCurrency(order.total, settings).usd}
                     </p>
-                    <p className="font-mono font-semibold text-sm text-muted-foreground">
-                      {formatDualCurrency(order.total).khr}
-                    </p>
+                    {formatDualCurrency(order.total, settings).secondary && (
+                      <p className="font-mono font-semibold text-sm text-muted-foreground">
+                        {formatDualCurrency(order.total, settings).secondary}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -216,13 +240,15 @@ export function ReceiptPrintModal({
                       <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Payment Split:</h4>
                       <div className="space-y-2">
                         {splits.map((split, index) => {
-                          const formatted = formatDualCurrency(split.amount);
+                          const formatted = formatDualCurrency(split.amount, settings);
                           return (
                             <div key={index} className="flex justify-between text-sm">
                               <span className="text-muted-foreground">{paymentMethods[split.method] || split.method}:</span>
                               <div className="text-right">
                                 <p className="font-mono font-medium">{formatted.usd}</p>
-                                <p className="font-mono text-xs text-muted-foreground">{formatted.khr}</p>
+                                {formatted.secondary && (
+                                  <p className="font-mono text-xs text-muted-foreground">{formatted.secondary}</p>
+                                )}
                               </div>
                             </div>
                           );
@@ -244,11 +270,13 @@ export function ReceiptPrintModal({
                     <span className="font-bold text-lg text-green-700 dark:text-green-400">Change Due:</span>
                     <div className="text-right" data-testid="receipt-change-due">
                       <p className="font-mono font-bold text-2xl text-green-700 dark:text-green-400">
-                        {formatDualCurrency(order.changeDue).usd}
+                        {formatDualCurrency(order.changeDue, settings).usd}
                       </p>
-                      <p className="font-mono font-semibold text-sm text-green-600 dark:text-green-500">
-                        {formatDualCurrency(order.changeDue).khr}
-                      </p>
+                      {formatDualCurrency(order.changeDue, settings).secondary && (
+                        <p className="font-mono font-semibold text-sm text-green-600 dark:text-green-500">
+                          {formatDualCurrency(order.changeDue, settings).secondary}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2 text-center">
