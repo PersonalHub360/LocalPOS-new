@@ -168,9 +168,44 @@ export default function BankStatement() {
 
   const filteredSales = getFilteredSales();
 
+  // Helper function to normalize payment method names for consistent lookup
+  const normalizePaymentMethod = (method: string): string => {
+    // Convert underscore format to "and" format: cash_aba -> cash and aba
+    return method.toLowerCase().replace(/_/g, ' and ').replace(/and and/g, 'and');
+  };
+
   const paymentTotals = filteredSales.reduce(
     (acc, sale) => {
-      const method = sale.paymentMethod || "unknown";
+      // Check if this sale has split payments
+      if (sale.paymentSplits) {
+        try {
+          const splits: { method: string; amount: number }[] = JSON.parse(sale.paymentSplits);
+          if (splits.length > 0) {
+            // Distribute amounts according to split payments
+            // Track which methods were used in this order to count the transaction only once per method
+            const methodsInOrder = new Set<string>();
+            splits.forEach((split) => {
+              const method = normalizePaymentMethod(split.method);
+              if (!acc[method]) {
+                acc[method] = { total: 0, count: 0, adjustments: 0 };
+              }
+              acc[method].total += split.amount;
+              
+              // Only count this transaction once per method per order
+              if (!methodsInOrder.has(method)) {
+                acc[method].count += 1;
+                methodsInOrder.add(method);
+              }
+            });
+            return acc;
+          }
+        } catch (error) {
+          console.error("Failed to parse payment splits:", error);
+        }
+      }
+      
+      // Fallback to single payment method if no splits
+      const method = normalizePaymentMethod(sale.paymentMethod || "unknown");
       const total = parseFloat(sale.total);
       if (!acc[method]) {
         acc[method] = { total: 0, count: 0, adjustments: 0 };
@@ -184,7 +219,7 @@ export default function BankStatement() {
 
   // Add payment adjustments to totals
   paymentAdjustments.forEach((adjustment) => {
-    const method = adjustment.paymentMethod.toLowerCase();
+    const method = normalizePaymentMethod(adjustment.paymentMethod);
     const amount = parseFloat(adjustment.amount);
     
     if (!paymentTotals[method]) {
@@ -313,6 +348,7 @@ export default function BankStatement() {
                             placeholder="Reason for adjustment..."
                             data-testid="input-description"
                             {...field}
+                            value={field.value || ""}
                           />
                         </FormControl>
                         <FormMessage />

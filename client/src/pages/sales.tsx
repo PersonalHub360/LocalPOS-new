@@ -735,7 +735,35 @@ export default function SalesManage() {
                         <TableCell data-testid={`text-discount-${sale.id}`}>${sale.discount}</TableCell>
                         <TableCell data-testid={`text-total-${sale.id}`}>${sale.total}</TableCell>
                         <TableCell data-testid={`text-pay-by-${sale.id}`}>
-                          <span className="capitalize">{sale.paymentMethod || "N/A"}</span>
+                          {sale.paymentSplits ? (() => {
+                            try {
+                              const splits: { method: string; amount: number }[] = JSON.parse(sale.paymentSplits);
+                              if (splits.length > 0) {
+                                const paymentMethodLabels: Record<string, string> = {
+                                  cash: "Cash",
+                                  card: "Card",
+                                  aba: "ABA",
+                                  acleda: "Acleda",
+                                  due: "Due",
+                                  cash_aba: "Cash And ABA",
+                                  cash_acleda: "Cash And Acleda",
+                                };
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    {splits.map((split, index) => (
+                                      <div key={index} className="text-xs">
+                                        <span className="font-medium">{paymentMethodLabels[split.method] || split.method}:</span>
+                                        <span className="ml-1">${split.amount.toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                            } catch (error) {
+                              console.error("Failed to parse payment splits:", error);
+                            }
+                            return <span className="capitalize">{sale.paymentMethod || "N/A"}</span>;
+                          })() : <span className="capitalize">{sale.paymentMethod || "N/A"}</span>}
                         </TableCell>
                         <TableCell data-testid={`text-payment-status-${sale.id}`}>
                           <span
@@ -965,7 +993,35 @@ export default function SalesManage() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Payment Method</Label>
-                  <p className="font-medium capitalize" data-testid="view-pay-by">{viewSale.paymentMethod || "N/A"}</p>
+                  {viewSale.paymentSplits ? (() => {
+                    try {
+                      const splits: { method: string; amount: number }[] = JSON.parse(viewSale.paymentSplits);
+                      if (splits.length > 0) {
+                        const paymentMethodLabels: Record<string, string> = {
+                          cash: "Cash",
+                          card: "Card",
+                          aba: "ABA",
+                          acleda: "Acleda",
+                          due: "Due",
+                          cash_aba: "Cash And ABA",
+                          cash_acleda: "Cash And Acleda",
+                        };
+                        return (
+                          <div className="space-y-1" data-testid="view-pay-by">
+                            {splits.map((split, index) => (
+                              <div key={index} className="font-medium">
+                                <span className="text-muted-foreground">{paymentMethodLabels[split.method] || split.method}:</span>
+                                <span className="ml-2">${split.amount.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                    } catch (error) {
+                      console.error("Failed to parse payment splits:", error);
+                    }
+                    return <p className="font-medium capitalize" data-testid="view-pay-by">{viewSale.paymentMethod || "N/A"}</p>;
+                  })() : <p className="font-medium capitalize" data-testid="view-pay-by">{viewSale.paymentMethod || "N/A"}</p>}
                 </div>
               </div>
 

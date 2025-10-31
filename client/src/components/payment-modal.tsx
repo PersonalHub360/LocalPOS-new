@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CreditCard, Banknote, Wallet, Smartphone, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 interface PaymentSplit {
@@ -47,9 +47,31 @@ export function PaymentModal({
   const [newPaymentAmount, setNewPaymentAmount] = useState("");
   const { toast } = useToast();
 
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setAmountPaid(total.toString());
+      setPaymentMethod("cash");
+      setPaymentSplits([]);
+      setNewPaymentAmount("");
+      setNewPaymentMethod("aba");
+    }
+  }, [open, total]);
+
   const handleConfirm = () => {
     if (paymentSplits.length > 0) {
       const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
+      
+      // Validate that split payments cover at least the order total
+      if (totalPaid < total) {
+        toast({
+          title: "Incomplete Payment",
+          description: `Split payments total $${totalPaid.toFixed(2)} but order total is $${total.toFixed(2)}. Please add more payments or adjust amounts.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
       onConfirm(paymentSplits[0].method, totalPaid, paymentSplits);
     } else {
       onConfirm(paymentMethod, parseFloat(amountPaid) || 0);
