@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema } from "@shared/schema";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 
 const createOrderWithItemsSchema = insertOrderSchema.extend({
   items: z.array(insertOrderItemSchema.omit({ orderId: true })),
@@ -1257,7 +1258,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/branches", async (req, res) => {
     try {
       const branches = await storage.getBranches();
-      res.json(branches);
+      const branchesWithoutPasswords = branches.map(({ password, ...branch }) => branch);
+      res.json(branchesWithoutPasswords);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch branches" });
     }
@@ -1269,7 +1271,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!branch) {
         return res.status(404).json({ error: "Branch not found" });
       }
-      res.json(branch);
+      const { password, ...branchWithoutPassword } = branch;
+      res.json(branchWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch branch" });
     }
@@ -1278,8 +1281,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/branches", async (req, res) => {
     try {
       const validatedData = insertBranchSchema.parse(req.body);
-      const branch = await storage.createBranch(validatedData);
-      res.status(201).json(branch);
+      
+      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+      
+      const branch = await storage.createBranch({
+        ...validatedData,
+        password: hashedPassword,
+      });
+      
+      const { password, ...branchWithoutPassword } = branch;
+      res.status(201).json(branchWithoutPassword);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid branch data", details: error.errors });
@@ -1290,11 +1301,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/branches/:id", async (req, res) => {
     try {
-      const branch = await storage.updateBranch(req.params.id, req.body);
+      let updateData = { ...req.body };
+      
+      if (updateData.password) {
+        updateData.password = await bcrypt.hash(updateData.password, 10);
+      }
+      
+      const branch = await storage.updateBranch(req.params.id, updateData);
       if (!branch) {
         return res.status(404).json({ error: "Branch not found" });
       }
-      res.json(branch);
+      
+      const { password, ...branchWithoutPassword } = branch;
+      res.json(branchWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Failed to update branch" });
     }
