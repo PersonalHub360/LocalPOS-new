@@ -58,6 +58,23 @@ export function PaymentModal({
     }
   }, [open, total]);
 
+  // Automatically trigger split payment mode for Cash And ABA / Cash And Acleda
+  useEffect(() => {
+    if (paymentMethod === "cash_aba" && paymentSplits.length === 0) {
+      // Pre-populate with Cash and ABA splits
+      setPaymentSplits([
+        { method: "cash", amount: 0 },
+        { method: "aba", amount: 0 }
+      ]);
+    } else if (paymentMethod === "cash_acleda" && paymentSplits.length === 0) {
+      // Pre-populate with Cash and Acleda splits
+      setPaymentSplits([
+        { method: "cash", amount: 0 },
+        { method: "acleda", amount: 0 }
+      ]);
+    }
+  }, [paymentMethod, paymentSplits.length]);
+
   const handleConfirm = () => {
     if (paymentSplits.length > 0) {
       const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
@@ -111,6 +128,12 @@ export function PaymentModal({
 
   const handleRemovePaymentSplit = (index: number) => {
     setPaymentSplits(paymentSplits.filter((_, i) => i !== index));
+  };
+
+  const handleUpdatePaymentSplit = (index: number, amount: number) => {
+    const updatedSplits = [...paymentSplits];
+    updatedSplits[index] = { ...updatedSplits[index], amount };
+    setPaymentSplits(updatedSplits);
   };
 
   const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
@@ -242,13 +265,22 @@ export function PaymentModal({
                   {paymentSplits.map((split, index) => (
                     <div 
                       key={index} 
-                      className="flex items-center justify-between p-3 bg-muted rounded-md"
+                      className="flex items-center justify-between gap-3 p-3 bg-muted rounded-md"
                       data-testid={`payment-split-${index}`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1">
                         <Smartphone className="w-4 h-4" />
-                        <span className="font-medium">{getPaymentMethodLabel(split.method)}</span>
-                        <span className="font-mono">${split.amount.toFixed(2)}</span>
+                        <span className="font-medium min-w-[80px]">{getPaymentMethodLabel(split.method)}</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={split.amount === 0 ? "0" : split.amount.toString()}
+                          onChange={(e) => handleUpdatePaymentSplit(index, parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          className="font-mono w-32"
+                          data-testid={`input-split-amount-${index}`}
+                        />
                       </div>
                       <Button
                         type="button"
