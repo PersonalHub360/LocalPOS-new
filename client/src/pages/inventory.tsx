@@ -610,27 +610,28 @@ export default function Inventory() {
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all products"
-                        data-testid="checkbox-select-all"
-                      />
-                    </TableHead>
-                    <TableHead>Product Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <div className="overflow-auto max-h-[600px]" style={{ position: 'relative' }}>
+                <Table>
+                  <TableHeader>
+                    <TableRow style={{ position: 'sticky', top: 0, backgroundColor: 'hsl(var(--background))', zIndex: 10 }}>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all products"
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
+                      <TableHead>Product Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                   {filteredProducts.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground">
@@ -696,6 +697,7 @@ export default function Inventory() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
