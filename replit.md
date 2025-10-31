@@ -19,16 +19,17 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 - **Authentication**: Session-based authentication using `express-session` with PostgreSQL session store (`connect-pg-simple`) and `bcrypt` for password hashing. Sessions persist across restarts and republishing. All API routes are secured.
 - **Database**: PostgreSQL database with Drizzle ORM for persistent storage. All data persists across application restarts and republishing.
 - **Order Counter**: Race-condition-free implementation using dedicated `orderCounters` table with row-level locking (`SELECT ... FOR UPDATE`), well-known singleton ID ('order-counter'), and atomic `ON CONFLICT DO NOTHING` upsert to guarantee unique, monotonically increasing order numbers even under concurrent load.
-- **API**: Provides RESTful APIs for managing products, categories, orders, tables, items, purchases, employees, and authentication.
+- **API**: Provides RESTful APIs for managing products, categories, orders, tables, items, purchases, employees, and authentication. Backend returns JSON error responses with `{error: "message"}` format for consistent frontend error handling.
 - **Core Workflows**: Includes a complete POS order workflow with draft management, receipt printing, and multiple payment methods. Comprehensive CRUD operations are supported across all management modules.
 - **Permissions**: Role-based permissions system with granular controls.
 - **Cache Invalidation**: React Query cache invalidation ensures real-time UI updates across POS, Purchase, Inventory, Dashboard, and Reporting modules upon relevant data changes.
+- **Error Handling**: Frontend `apiRequest` function parses backend JSON error responses and extracts user-friendly messages for toast notifications. Toast system uses Shadcn UI with fixed React hook implementation for proper state management.
 
 ### Feature Specifications
 - **Authentication**: Secure login, session management, and protected API routes.
 - **POS Order Workflow**: Supports draft saving, editing, diverse payment methods (Cash, Card, ABA, Acleda, Due, Cash And ABA, Cash And Acleda), split payments, and receipt generation.
 - **Sales Management**: Displays complete order history with detailed item breakdowns, comprehensive reports (Detailed Sales Report, Sales Summary Report) with filtering, editing, printing, and export capabilities (Excel, PDF).
-- **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV).
+- **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV). Comprehensive duplicate name validation with specific error messages ("Already uploaded" for creating duplicates, "Duplicate name" for updating to an existing name, "Already updated" for no-change updates). Bulk import includes per-row duplicate detection and error reporting.
 - **Expense Management**: Full CRUD for expenses and categories, optional slip/invoice image uploads, summary statistics, and a colorful, enhanced UI.
 - **Purchase Management**: CRUD for purchases and categories, search, filtering, and bulk import/export. Integrates with inventory to automatically update stock levels and create adjustment records upon purchase creation.
 - **Table Management**: CRUD for tables, capacity tracking, status management, direct printing, and options to edit/add items or complete orders for occupied tables.
