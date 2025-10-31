@@ -189,12 +189,15 @@ interface BranchDialogProps {
 
 function BranchDialog({ open, onOpenChange, onSubmit, isPending, initialData, isEdit }: BranchDialogProps) {
   const form = useForm<InsertBranch>({
-    resolver: zodResolver(insertBranchSchema),
+    resolver: zodResolver(isEdit ? insertBranchSchema.partial({ password: true }) : insertBranchSchema),
     defaultValues: initialData ? {
       ...initialData,
       isActive: initialData.isActive === "true" ? "true" : "false",
+      password: "",
     } : {
       name: "",
+      username: "",
+      password: "",
       location: "",
       contactPerson: "",
       phone: "",
@@ -203,7 +206,12 @@ function BranchDialog({ open, onOpenChange, onSubmit, isPending, initialData, is
   });
 
   const handleSubmit = (data: InsertBranch) => {
-    onSubmit(data);
+    if (isEdit && !data.password) {
+      const { password, ...submitData } = data;
+      onSubmit(submitData as InsertBranch);
+    } else {
+      onSubmit(data);
+    }
     if (!isEdit) {
       form.reset();
     }
@@ -225,6 +233,34 @@ function BranchDialog({ open, onOpenChange, onSubmit, isPending, initialData, is
                   <FormLabel>Branch Name *</FormLabel>
                   <FormControl>
                     <Input {...field} placeholder="e.g., Downtown Store" data-testid="input-name" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username *</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="e.g., downtown_store" data-testid="input-username" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password {isEdit ? "(Leave blank to keep current)" : "*"}</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="password" placeholder={isEdit ? "Enter new password" : "Enter password"} data-testid="input-password" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
