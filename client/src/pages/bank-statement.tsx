@@ -229,8 +229,9 @@ export default function BankStatement() {
   ];
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="h-full overflow-y-auto">
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold" data-testid="text-bank-statement-title">
             Bank Statement
@@ -530,6 +531,7 @@ export default function BankStatement() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
