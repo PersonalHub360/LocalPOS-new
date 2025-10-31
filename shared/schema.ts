@@ -22,6 +22,7 @@ export const products = pgTable("products", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   purchaseCost: decimal("purchase_cost", { precision: 10, scale: 2 }),
   categoryId: varchar("category_id").notNull(),
+  branchId: varchar("branch_id"),
   imageUrl: text("image_url"),
   unit: text("unit").notNull().default("piece"),
   description: text("description"),
@@ -42,6 +43,7 @@ export const tables = pgTable("tables", {
   tableNumber: text("table_number").notNull().unique(),
   capacity: text("capacity"),
   description: text("description"),
+  branchId: varchar("branch_id"),
   status: text("status").notNull().default("available"),
 });
 
@@ -56,6 +58,7 @@ export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderNumber: text("order_number").notNull().unique(),
   tableId: varchar("table_id"),
+  branchId: varchar("branch_id"),
   diningOption: text("dining_option").notNull().default("dine-in"),
   customerName: text("customer_name"),
   customerPhone: text("customer_phone"),
@@ -114,6 +117,7 @@ export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   expenseDate: timestamp("expense_date").notNull(),
   categoryId: varchar("category_id").notNull(),
+  branchId: varchar("branch_id"),
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
@@ -138,6 +142,7 @@ export const purchases = pgTable("purchases", {
   imageUrl: text("image_url"),
   categoryId: varchar("category_id").notNull(),
   productId: varchar("product_id"),
+  branchId: varchar("branch_id"),
   itemName: text("item_name").notNull(),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
@@ -162,6 +167,7 @@ export const employees = pgTable("employees", {
   name: text("name").notNull(),
   position: text("position").notNull(),
   department: text("department").notNull(),
+  branchId: varchar("branch_id"),
   email: text("email"),
   phone: text("phone"),
   joiningDate: timestamp("joining_date").notNull(),
@@ -385,3 +391,22 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const branches = pgTable("branches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  location: text("location"),
+  contactPerson: text("contact_person"),
+  phone: text("phone"),
+  email: text("email"),
+  isActive: text("is_active").notNull().default("true"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertBranchSchema = createInsertSchema(branches).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBranch = z.infer<typeof insertBranchSchema>;
+export type Branch = typeof branches.$inferSelect;
