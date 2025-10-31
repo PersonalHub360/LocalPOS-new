@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -190,11 +190,7 @@ interface BranchDialogProps {
 function BranchDialog({ open, onOpenChange, onSubmit, isPending, initialData, isEdit }: BranchDialogProps) {
   const form = useForm<InsertBranch>({
     resolver: zodResolver(isEdit ? insertBranchSchema.partial({ password: true }) : insertBranchSchema),
-    defaultValues: initialData ? {
-      ...initialData,
-      isActive: initialData.isActive === "true" ? "true" : "false",
-      password: "",
-    } : {
+    defaultValues: {
       name: "",
       username: "",
       password: "",
@@ -204,6 +200,26 @@ function BranchDialog({ open, onOpenChange, onSubmit, isPending, initialData, is
       isActive: "true",
     },
   });
+
+  useEffect(() => {
+    if (initialData) {
+      form.reset({
+        ...initialData,
+        isActive: initialData.isActive === "true" ? "true" : "false",
+        password: "",
+      });
+    } else {
+      form.reset({
+        name: "",
+        username: "",
+        password: "",
+        location: "",
+        contactPerson: "",
+        phone: "",
+        isActive: "true",
+      });
+    }
+  }, [initialData, form]);
 
   const handleSubmit = (data: InsertBranch) => {
     if (isEdit && !data.password) {
