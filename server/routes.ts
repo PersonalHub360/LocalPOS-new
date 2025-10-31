@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema } from "@shared/schema";
+import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 
@@ -1364,6 +1364,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete branch" });
+    }
+  });
+
+  app.get("/api/payment-adjustments", async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const adjustments = await storage.getPaymentAdjustments(branchId);
+      res.json(adjustments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payment adjustments" });
+    }
+  });
+
+  app.post("/api/payment-adjustments", async (req, res) => {
+    try {
+      const validatedData = insertPaymentAdjustmentSchema.parse(req.body);
+      const adjustment = await storage.createPaymentAdjustment(validatedData);
+      res.status(201).json(adjustment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid adjustment data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create payment adjustment" });
     }
   });
 

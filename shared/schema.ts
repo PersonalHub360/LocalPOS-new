@@ -392,6 +392,24 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const paymentAdjustments = pgTable("payment_adjustments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentMethod: text("payment_method").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  adjustmentType: text("adjustment_type").notNull().default("add"),
+  description: text("description"),
+  branchId: varchar("branch_id"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertPaymentAdjustmentSchema = createInsertSchema(paymentAdjustments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPaymentAdjustment = z.infer<typeof insertPaymentAdjustmentSchema>;
+export type PaymentAdjustment = typeof paymentAdjustments.$inferSelect;
+
 export const branches = pgTable("branches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),

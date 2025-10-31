@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -14,6 +14,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -29,19 +48,81 @@ import {
   Calendar as CalendarIcon,
   Download,
   Banknote,
+  Plus,
 } from "lucide-react";
 import { format } from "date-fns";
-import type { Order } from "@shared/schema";
+import type { Order, PaymentAdjustment } from "@shared/schema";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertPaymentAdjustmentSchema } from "@shared/schema";
+import { z } from "zod";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "custom";
+
+const adjustmentFormSchema = insertPaymentAdjustmentSchema.extend({
+  amount: z.coerce.number().positive("Amount must be positive"),
+});
 
 export default function BankStatement() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
 
   const { data: sales = [] } = useQuery<Order[]>({
     queryKey: ["/api/sales"],
+  });
+
+  const { data: paymentAdjustments = [] } = useQuery<PaymentAdjustment[]>({
+    queryKey: ["/api/payment-adjustments"],
+  });
+
+  const form = useForm<z.infer<typeof adjustmentFormSchema>>({
+    resolver: zodResolver(adjustmentFormSchema),
+    defaultValues: {
+      paymentMethod: "",
+      amount: 0,
+      adjustmentType: "add",
+      description: "",
+    },
+  });
+
+  const createAdjustmentMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof adjustmentFormSchema>) => {
+      const payload = {
+        ...data,
+        amount: data.amount.toString(),
+      };
+      const response = await fetch("/api/payment-adjustments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create adjustment");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
+      setIsDialogOpen(false);
+      form.reset();
+      toast({
+        title: "Success",
+        description: "Payment adjustment added successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add payment adjustment",
+        variant: "destructive",
+      });
+    },
   });
 
   const getFilteredSales = () => {
@@ -92,19 +173,39 @@ export default function BankStatement() {
       const method = sale.paymentMethod || "unknown";
       const total = parseFloat(sale.total);
       if (!acc[method]) {
-        acc[method] = { total: 0, count: 0 };
+        acc[method] = { total: 0, count: 0, adjustments: 0 };
       }
       acc[method].total += total;
       acc[method].count += 1;
       return acc;
     },
-    {} as Record<string, { total: number; count: number }>
+    {} as Record<string, { total: number; count: number; adjustments: number }>
   );
 
+  // Add payment adjustments to totals
+  paymentAdjustments.forEach((adjustment) => {
+    const method = adjustment.paymentMethod.toLowerCase();
+    const amount = parseFloat(adjustment.amount);
+    
+    if (!paymentTotals[method]) {
+      paymentTotals[method] = { total: 0, count: 0, adjustments: 0 };
+    }
+    
+    if (adjustment.adjustmentType === "add") {
+      paymentTotals[method].adjustments += amount;
+    }
+  });
+
+  const totalAdjustments = paymentAdjustments.reduce(
+    (sum, adj) => sum + (adj.adjustmentType === "add" ? parseFloat(adj.amount) : 0),
+    0
+  );
+  
   const totalRevenue = filteredSales.reduce(
     (sum, sale) => sum + parseFloat(sale.total),
     0
-  );
+  ) + totalAdjustments;
+  
   const totalTransactions = filteredSales.length;
 
   const paymentMethodsData = [
@@ -138,10 +239,111 @@ export default function BankStatement() {
             Payment dashboard and sales breakdown by payment method
           </p>
         </div>
-        <Button variant="outline" data-testid="button-export-statement">
-          <Download className="w-4 h-4 mr-2" />
-          Export Statement
-        </Button>
+        <div className="flex gap-2">
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="default" data-testid="button-add-adjustment">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Manual Amount
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]" data-testid="dialog-add-adjustment">
+              <DialogHeader>
+                <DialogTitle>Add Manual Payment Adjustment</DialogTitle>
+                <DialogDescription>
+                  Add a manual amount to a payment method for business adjustments or fund additions
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit((data) => createAdjustmentMutation.mutate(data))} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="paymentMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Payment Method</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-payment-method">
+                              <SelectValue placeholder="Select payment method" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="aba">ABA</SelectItem>
+                            <SelectItem value="acleda">Acleda</SelectItem>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="card">Card</SelectItem>
+                            <SelectItem value="due">Due</SelectItem>
+                            <SelectItem value="cash and aba">Cash And ABA</SelectItem>
+                            <SelectItem value="cash and acleda">Cash And Acleda</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount ($)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Enter amount"
+                            data-testid="input-amount"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Reason for adjustment..."
+                            data-testid="input-description"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsDialogOpen(false)}
+                      data-testid="button-cancel"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={createAdjustmentMutation.isPending}
+                      data-testid="button-submit-adjustment"
+                    >
+                      {createAdjustmentMutation.isPending ? "Adding..." : "Add Adjustment"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+          <Button variant="outline" data-testid="button-export-statement">
+            <Download className="w-4 h-4 mr-2" />
+            Export Statement
+          </Button>
+        </div>
       </div>
 
       <Card className="border-2 shadow-lg">
@@ -288,6 +490,7 @@ export default function BankStatement() {
                 'bg-teal-500': { border: 'border-teal-500', bg: 'bg-teal-50 dark:bg-teal-950', icon: 'text-teal-600', iconBg: 'bg-teal-100 dark:bg-teal-900' },
               };
               const colorScheme = colorMap[method.color];
+              const totalWithAdjustments = data.total + data.adjustments;
               return (
                 <Card key={method.key} className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105`} data-testid={`card-${method.key}`}>
                   <div className="flex flex-col gap-3">
@@ -301,11 +504,16 @@ export default function BankStatement() {
                     </div>
                     <div>
                       <div className={`text-2xl font-bold ${colorScheme.icon}`} data-testid={`text-${method.key}-total`}>
-                        ${data.total.toFixed(2)}
+                        ${totalWithAdjustments.toFixed(2)}
                       </div>
                       <div className="text-sm text-muted-foreground font-medium">
-                        ៛{(data.total * 4100).toFixed(0)}
+                        ៛{(totalWithAdjustments * 4100).toFixed(0)}
                       </div>
+                      {data.adjustments > 0 && (
+                        <div className="text-xs text-green-600 dark:text-green-400 font-medium mt-1">
+                          +${data.adjustments.toFixed(2)} manual adjustment
+                        </div>
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground font-medium">
                       {data.count} {data.count === 1 ? "transaction" : "transactions"}

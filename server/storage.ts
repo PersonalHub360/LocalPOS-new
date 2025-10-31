@@ -33,6 +33,8 @@ import {
   type InsertInventoryAdjustment,
   type Branch,
   type InsertBranch,
+  type PaymentAdjustment,
+  type InsertPaymentAdjustment,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -166,6 +168,9 @@ export interface IStorage {
   createBranch(branch: InsertBranch): Promise<Branch>;
   updateBranch(id: string, branch: Partial<InsertBranch>): Promise<Branch | undefined>;
   deleteBranch(id: string): Promise<boolean>;
+  
+  getPaymentAdjustments(branchId?: string | null): Promise<PaymentAdjustment[]>;
+  createPaymentAdjustment(adjustment: InsertPaymentAdjustment): Promise<PaymentAdjustment>;
 }
 
 export class MemStorage implements IStorage {
@@ -186,6 +191,7 @@ export class MemStorage implements IStorage {
   private settings: Settings | null;
   private inventoryAdjustments: Map<string, InventoryAdjustment>;
   private branches: Map<string, Branch>;
+  private paymentAdjustments: Map<string, PaymentAdjustment>;
   private orderCounter: number = 20;
 
   constructor() {
@@ -206,6 +212,7 @@ export class MemStorage implements IStorage {
     this.settings = null;
     this.inventoryAdjustments = new Map();
     this.branches = new Map();
+    this.paymentAdjustments = new Map();
     this.seedData();
   }
 
@@ -1798,6 +1805,30 @@ export class MemStorage implements IStorage {
     if (!exists) return false;
     this.branches.delete(id);
     return true;
+  }
+
+  async getPaymentAdjustments(branchId?: string | null): Promise<PaymentAdjustment[]> {
+    const adjustments = Array.from(this.paymentAdjustments.values());
+    if (branchId) {
+      return adjustments.filter(adj => adj.branchId === branchId);
+    }
+    return adjustments.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  async createPaymentAdjustment(insertAdjustment: InsertPaymentAdjustment): Promise<PaymentAdjustment> {
+    const id = randomUUID();
+    const adjustment: PaymentAdjustment = {
+      ...insertAdjustment,
+      id,
+      description: insertAdjustment.description ?? null,
+      branchId: insertAdjustment.branchId ?? null,
+      createdAt: new Date(),
+    };
+
+    this.paymentAdjustments.set(id, adjustment);
+    return adjustment;
   }
 }
 
