@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema } from "@shared/schema";
+import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema } from "@shared/schema";
 import { z } from "zod";
 
 const createOrderWithItemsSchema = insertOrderSchema.extend({
@@ -1246,6 +1246,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/branches", async (req, res) => {
+    try {
+      const branches = await storage.getBranches();
+      res.json(branches);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch branches" });
+    }
+  });
+
+  app.get("/api/branches/:id", async (req, res) => {
+    try {
+      const branch = await storage.getBranch(req.params.id);
+      if (!branch) {
+        return res.status(404).json({ error: "Branch not found" });
+      }
+      res.json(branch);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch branch" });
+    }
+  });
+
+  app.post("/api/branches", async (req, res) => {
+    try {
+      const validatedData = insertBranchSchema.parse(req.body);
+      const branch = await storage.createBranch(validatedData);
+      res.status(201).json(branch);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid branch data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create branch" });
+    }
+  });
+
+  app.patch("/api/branches/:id", async (req, res) => {
+    try {
+      const branch = await storage.updateBranch(req.params.id, req.body);
+      if (!branch) {
+        return res.status(404).json({ error: "Branch not found" });
+      }
+      res.json(branch);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update branch" });
+    }
+  });
+
+  app.delete("/api/branches/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteBranch(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Branch not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete branch" });
     }
   });
 

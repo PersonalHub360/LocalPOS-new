@@ -31,6 +31,8 @@ import {
   type InsertUser,
   type InventoryAdjustment,
   type InsertInventoryAdjustment,
+  type Branch,
+  type InsertBranch,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -155,6 +157,13 @@ export interface IStorage {
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
   validateUserCredentials(username: string, password: string): Promise<User | null>;
+  
+  getBranches(): Promise<Branch[]>;
+  getBranch(id: string): Promise<Branch | undefined>;
+  getBranchByName(name: string): Promise<Branch | undefined>;
+  createBranch(branch: InsertBranch): Promise<Branch>;
+  updateBranch(id: string, branch: Partial<InsertBranch>): Promise<Branch | undefined>;
+  deleteBranch(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -174,6 +183,7 @@ export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private settings: Settings | null;
   private inventoryAdjustments: Map<string, InventoryAdjustment>;
+  private branches: Map<string, Branch>;
   private orderCounter: number = 20;
 
   constructor() {
@@ -193,6 +203,7 @@ export class MemStorage implements IStorage {
     this.users = new Map();
     this.settings = null;
     this.inventoryAdjustments = new Map();
+    this.branches = new Map();
     this.seedData();
   }
 
@@ -208,56 +219,56 @@ export class MemStorage implements IStorage {
     categories.forEach((cat) => this.categories.set(cat.id, cat));
 
     const products: Product[] = [
-      { id: "1", name: "Shrimp Basil Salad", price: "10.60", purchaseCost: null, categoryId: "3", imageUrl: null, unit: "plate", description: "Fresh shrimp with basil and greens", quantity: "50", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "2", name: "Onion Rings", price: "8.50", purchaseCost: null, categoryId: "2", imageUrl: null, unit: "serving", description: "Crispy fried onion rings", quantity: "100", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "3", name: "Smoked Bacon", price: "12.00", purchaseCost: null, categoryId: "3", imageUrl: null, unit: "serving", description: "Premium smoked bacon strips", quantity: "75", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "4", name: "Fresh Tomatoes", price: "9.50", purchaseCost: null, categoryId: "3", imageUrl: null, unit: "kg", description: "Organic fresh tomatoes", quantity: "25", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "5", name: "Chicken Burger", price: "10.50", purchaseCost: null, categoryId: "4", imageUrl: null, unit: "piece", description: "Juicy grilled chicken burger", quantity: "60", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "6", name: "Red Onion Rings", price: "8.50", purchaseCost: null, categoryId: "2", imageUrl: null, unit: "serving", description: "Red onion rings with special sauce", quantity: "80", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "7", name: "Beef Burger", price: "10.50", purchaseCost: null, categoryId: "4", imageUrl: null, unit: "piece", description: "Classic beef burger with cheese", quantity: "55", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "8", name: "Grilled Burger", price: "10.50", purchaseCost: null, categoryId: "4", imageUrl: null, unit: "piece", description: "Premium grilled burger", quantity: "45", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "9", name: "Fresh Basil Salad", price: "8.50", purchaseCost: null, categoryId: "3", imageUrl: null, unit: "plate", description: "Garden fresh basil salad", quantity: "70", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "10", name: "Vegetable Pizza", price: "15.00", purchaseCost: null, categoryId: "5", imageUrl: null, unit: "piece", description: "Mixed vegetable pizza", quantity: "40", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "11", name: "Fish & Chips", price: "12.50", purchaseCost: null, categoryId: "4", imageUrl: null, unit: "serving", description: "Crispy fish with fries", quantity: "35", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "12", name: "Fried Rice", price: "9.00", purchaseCost: null, categoryId: "1", imageUrl: null, unit: "plate", description: "Classic fried rice", quantity: "90", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "13", name: "Biryani Rice", price: "11.00", purchaseCost: null, categoryId: "1", imageUrl: null, unit: "plate", description: "Aromatic biryani rice", quantity: "65", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "14", name: "Chicken Rice", price: "10.00", purchaseCost: null, categoryId: "1", imageUrl: null, unit: "plate", description: "Tender chicken with rice", quantity: "85", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "15", name: "Caesar Salad", price: "9.50", purchaseCost: null, categoryId: "3", imageUrl: null, unit: "plate", description: "Classic caesar salad", quantity: "55", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "16", name: "Greek Salad", price: "10.00", purchaseCost: null, categoryId: "3", imageUrl: null, unit: "plate", description: "Traditional greek salad", quantity: "50", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "17", name: "Tomato Soup", price: "6.50", purchaseCost: null, categoryId: "4", imageUrl: null, unit: "bowl", description: "Creamy tomato soup", quantity: "100", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "18", name: "Mushroom Soup", price: "7.00", purchaseCost: null, categoryId: "4", imageUrl: null, unit: "bowl", description: "Rich mushroom soup", quantity: "95", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "19", name: "Margherita Pizza", price: "14.00", purchaseCost: null, categoryId: "5", imageUrl: null, unit: "piece", description: "Classic margherita pizza", quantity: "42", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "20", name: "Pepperoni Pizza", price: "16.00", purchaseCost: null, categoryId: "5", imageUrl: null, unit: "piece", description: "Spicy pepperoni pizza", quantity: "38", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "21", name: "Orange Juice", price: "4.50", purchaseCost: null, categoryId: "2", imageUrl: null, unit: "glass", description: "Fresh orange juice", quantity: "120", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "22", name: "Mango Juice", price: "4.50", purchaseCost: null, categoryId: "2", imageUrl: null, unit: "glass", description: "Sweet mango juice", quantity: "110", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "23", name: "Coffee", price: "3.50", purchaseCost: null, categoryId: "2", imageUrl: null, unit: "cup", description: "Fresh brewed coffee", quantity: "200", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "24", name: "Green Tea", price: "3.00", purchaseCost: null, categoryId: "2", imageUrl: null, unit: "cup", description: "Organic green tea", quantity: "150", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "1", name: "Shrimp Basil Salad", price: "10.60", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Fresh shrimp with basil and greens", quantity: "50", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "2", name: "Onion Rings", price: "8.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "serving", description: "Crispy fried onion rings", quantity: "100", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "3", name: "Smoked Bacon", price: "12.00", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "serving", description: "Premium smoked bacon strips", quantity: "75", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "4", name: "Fresh Tomatoes", price: "9.50", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "kg", description: "Organic fresh tomatoes", quantity: "25", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "5", name: "Chicken Burger", price: "10.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "piece", description: "Juicy grilled chicken burger", quantity: "60", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "6", name: "Red Onion Rings", price: "8.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "serving", description: "Red onion rings with special sauce", quantity: "80", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "7", name: "Beef Burger", price: "10.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "piece", description: "Classic beef burger with cheese", quantity: "55", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "8", name: "Grilled Burger", price: "10.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "piece", description: "Premium grilled burger", quantity: "45", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "9", name: "Fresh Basil Salad", price: "8.50", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Garden fresh basil salad", quantity: "70", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "10", name: "Vegetable Pizza", price: "15.00", purchaseCost: null, categoryId: "5", branchId: null, imageUrl: null, unit: "piece", description: "Mixed vegetable pizza", quantity: "40", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "11", name: "Fish & Chips", price: "12.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "serving", description: "Crispy fish with fries", quantity: "35", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "12", name: "Fried Rice", price: "9.00", purchaseCost: null, categoryId: "1", branchId: null, imageUrl: null, unit: "plate", description: "Classic fried rice", quantity: "90", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "13", name: "Biryani Rice", price: "11.00", purchaseCost: null, categoryId: "1", branchId: null, imageUrl: null, unit: "plate", description: "Aromatic biryani rice", quantity: "65", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "14", name: "Chicken Rice", price: "10.00", purchaseCost: null, categoryId: "1", branchId: null, imageUrl: null, unit: "plate", description: "Tender chicken with rice", quantity: "85", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "15", name: "Caesar Salad", price: "9.50", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Classic caesar salad", quantity: "55", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "16", name: "Greek Salad", price: "10.00", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Traditional greek salad", quantity: "50", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "17", name: "Tomato Soup", price: "6.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "bowl", description: "Creamy tomato soup", quantity: "100", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "18", name: "Mushroom Soup", price: "7.00", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "bowl", description: "Rich mushroom soup", quantity: "95", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "19", name: "Margherita Pizza", price: "14.00", purchaseCost: null, categoryId: "5", branchId: null, imageUrl: null, unit: "piece", description: "Classic margherita pizza", quantity: "42", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "20", name: "Pepperoni Pizza", price: "16.00", purchaseCost: null, categoryId: "5", branchId: null, imageUrl: null, unit: "piece", description: "Spicy pepperoni pizza", quantity: "38", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "21", name: "Orange Juice", price: "4.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "glass", description: "Fresh orange juice", quantity: "120", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "22", name: "Mango Juice", price: "4.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "glass", description: "Sweet mango juice", quantity: "110", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "23", name: "Coffee", price: "3.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "cup", description: "Fresh brewed coffee", quantity: "200", createdAt: new Date("2025-10-01T10:00:00") },
+      { id: "24", name: "Green Tea", price: "3.00", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "cup", description: "Organic green tea", quantity: "150", createdAt: new Date("2025-10-01T10:00:00") },
     ];
 
     products.forEach((prod) => this.products.set(prod.id, prod));
 
     const tables: Table[] = [
-      { id: "1", tableNumber: "1", capacity: "4", description: "Window seat table", status: "available" },
-      { id: "2", tableNumber: "2", capacity: "2", description: "Small corner table", status: "available" },
-      { id: "3", tableNumber: "3", capacity: "6", description: "Large family table", status: "available" },
-      { id: "4", tableNumber: "4", capacity: "4", description: "Center table", status: "available" },
-      { id: "5", tableNumber: "5", capacity: "2", description: "Quiet corner", status: "available" },
-      { id: "6", tableNumber: "6", capacity: "8", description: "Party table", status: "available" },
-      { id: "7", tableNumber: "7", capacity: "4", description: "Near entrance", status: "available" },
-      { id: "8", tableNumber: "8", capacity: "4", description: "Outdoor patio", status: "available" },
+      { id: "1", tableNumber: "1", capacity: "4", description: "Window seat table", branchId: null, status: "available" },
+      { id: "2", tableNumber: "2", capacity: "2", description: "Small corner table", branchId: null, status: "available" },
+      { id: "3", tableNumber: "3", capacity: "6", description: "Large family table", branchId: null, status: "available" },
+      { id: "4", tableNumber: "4", capacity: "4", description: "Center table", branchId: null, status: "available" },
+      { id: "5", tableNumber: "5", capacity: "2", description: "Quiet corner", branchId: null, status: "available" },
+      { id: "6", tableNumber: "6", capacity: "8", description: "Party table", branchId: null, status: "available" },
+      { id: "7", tableNumber: "7", capacity: "4", description: "Near entrance", branchId: null, status: "available" },
+      { id: "8", tableNumber: "8", capacity: "4", description: "Outdoor patio", branchId: null, status: "available" },
     ];
 
     tables.forEach((table) => this.tables.set(table.id, table));
 
     const employees: Employee[] = [
-      { id: "1", employeeId: "EMP001", name: "John Smith", position: "Manager", department: "Admin", email: "john.smith@restrobit.com", phone: "+1234567890", joiningDate: new Date("2024-01-15"), salary: "5000.00", photoUrl: null, status: "active", createdAt: new Date("2024-01-15") },
-      { id: "2", employeeId: "EMP002", name: "Sarah Johnson", position: "Head Chef", department: "Kitchen", email: "sarah.johnson@restrobit.com", phone: "+1234567891", joiningDate: new Date("2024-02-01"), salary: "4500.00", photoUrl: null, status: "active", createdAt: new Date("2024-02-01") },
-      { id: "3", employeeId: "EMP003", name: "Michael Chen", position: "Sous Chef", department: "Kitchen", email: "michael.chen@restrobit.com", phone: "+1234567892", joiningDate: new Date("2024-03-10"), salary: "3500.00", photoUrl: null, status: "active", createdAt: new Date("2024-03-10") },
-      { id: "4", employeeId: "EMP004", name: "Emma Wilson", position: "Waitress", department: "Service", email: "emma.wilson@restrobit.com", phone: "+1234567893", joiningDate: new Date("2024-04-05"), salary: "2500.00", photoUrl: null, status: "active", createdAt: new Date("2024-04-05") },
-      { id: "5", employeeId: "EMP005", name: "David Martinez", position: "Waiter", department: "Service", email: "david.martinez@restrobit.com", phone: "+1234567894", joiningDate: new Date("2024-04-20"), salary: "2500.00", photoUrl: null, status: "active", createdAt: new Date("2024-04-20") },
-      { id: "6", employeeId: "EMP006", name: "Lisa Anderson", position: "Receptionist", department: "Reception", email: "lisa.anderson@restrobit.com", phone: "+1234567895", joiningDate: new Date("2024-05-01"), salary: "2800.00", photoUrl: null, status: "active", createdAt: new Date("2024-05-01") },
-      { id: "7", employeeId: "EMP007", name: "Robert Taylor", position: "Accountant", department: "Finance", email: "robert.taylor@restrobit.com", phone: "+1234567896", joiningDate: new Date("2024-06-15"), salary: "4000.00", photoUrl: null, status: "active", createdAt: new Date("2024-06-15") },
-      { id: "8", employeeId: "EMP008", name: "Jennifer Lee", position: "HR Manager", department: "HR", email: "jennifer.lee@restrobit.com", phone: "+1234567897", joiningDate: new Date("2024-07-01"), salary: "4200.00", photoUrl: null, status: "active", createdAt: new Date("2024-07-01") },
+      { id: "1", employeeId: "EMP001", name: "John Smith", position: "Manager", department: "Admin", branchId: null, email: "john.smith@restrobit.com", phone: "+1234567890", joiningDate: new Date("2024-01-15"), salary: "5000.00", photoUrl: null, status: "active", createdAt: new Date("2024-01-15") },
+      { id: "2", employeeId: "EMP002", name: "Sarah Johnson", position: "Head Chef", department: "Kitchen", branchId: null, email: "sarah.johnson@restrobit.com", phone: "+1234567891", joiningDate: new Date("2024-02-01"), salary: "4500.00", photoUrl: null, status: "active", createdAt: new Date("2024-02-01") },
+      { id: "3", employeeId: "EMP003", name: "Michael Chen", position: "Sous Chef", department: "Kitchen", branchId: null, email: "michael.chen@restrobit.com", phone: "+1234567892", joiningDate: new Date("2024-03-10"), salary: "3500.00", photoUrl: null, status: "active", createdAt: new Date("2024-03-10") },
+      { id: "4", employeeId: "EMP004", name: "Emma Wilson", position: "Waitress", department: "Service", branchId: null, email: "emma.wilson@restrobit.com", phone: "+1234567893", joiningDate: new Date("2024-04-05"), salary: "2500.00", photoUrl: null, status: "active", createdAt: new Date("2024-04-05") },
+      { id: "5", employeeId: "EMP005", name: "David Martinez", position: "Waiter", department: "Service", branchId: null, email: "david.martinez@restrobit.com", phone: "+1234567894", joiningDate: new Date("2024-04-20"), salary: "2500.00", photoUrl: null, status: "active", createdAt: new Date("2024-04-20") },
+      { id: "6", employeeId: "EMP006", name: "Lisa Anderson", position: "Receptionist", department: "Reception", branchId: null, email: "lisa.anderson@restrobit.com", phone: "+1234567895", joiningDate: new Date("2024-05-01"), salary: "2800.00", photoUrl: null, status: "active", createdAt: new Date("2024-05-01") },
+      { id: "7", employeeId: "EMP007", name: "Robert Taylor", position: "Accountant", department: "Finance", branchId: null, email: "robert.taylor@restrobit.com", phone: "+1234567896", joiningDate: new Date("2024-06-15"), salary: "4000.00", photoUrl: null, status: "active", createdAt: new Date("2024-06-15") },
+      { id: "8", employeeId: "EMP008", name: "Jennifer Lee", position: "HR Manager", department: "HR", branchId: null, email: "jennifer.lee@restrobit.com", phone: "+1234567897", joiningDate: new Date("2024-07-01"), salary: "4200.00", photoUrl: null, status: "active", createdAt: new Date("2024-07-01") },
     ];
 
     employees.forEach((emp) => this.employees.set(emp.id, emp));
@@ -1683,6 +1694,54 @@ export class MemStorage implements IStorage {
     return Array.from(this.products.values())
       .filter(p => parseFloat(p.quantity) <= threshold)
       .sort((a, b) => parseFloat(a.quantity) - parseFloat(b.quantity));
+  }
+
+  async getBranches(): Promise<Branch[]> {
+    return Array.from(this.branches.values()).sort(
+      (a, b) => a.name.localeCompare(b.name)
+    );
+  }
+
+  async getBranch(id: string): Promise<Branch | undefined> {
+    return this.branches.get(id);
+  }
+
+  async getBranchByName(name: string): Promise<Branch | undefined> {
+    return Array.from(this.branches.values()).find(
+      (branch) => branch.name.toLowerCase() === name.toLowerCase()
+    );
+  }
+
+  async createBranch(insertBranch: InsertBranch): Promise<Branch> {
+    const id = randomUUID();
+    const branch: Branch = {
+      ...insertBranch,
+      id,
+      location: insertBranch.location ?? null,
+      contactPerson: insertBranch.contactPerson ?? null,
+      phone: insertBranch.phone ?? null,
+      email: insertBranch.email ?? null,
+      createdAt: new Date(),
+    };
+
+    this.branches.set(id, branch);
+    return branch;
+  }
+
+  async updateBranch(id: string, updates: Partial<InsertBranch>): Promise<Branch | undefined> {
+    const branch = this.branches.get(id);
+    if (!branch) return undefined;
+
+    const updatedBranch = { ...branch, ...updates };
+    this.branches.set(id, updatedBranch);
+    return updatedBranch;
+  }
+
+  async deleteBranch(id: string): Promise<boolean> {
+    const exists = this.branches.has(id);
+    if (!exists) return false;
+    this.branches.delete(id);
+    return true;
   }
 }
 
