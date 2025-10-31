@@ -27,7 +27,7 @@ The system features a vibrant, modern UI with a multi-color palette (Blue, Purpl
 
 ### Feature Specifications
 - **Authentication**: Secure login, session management, and protected API routes.
-- **POS Order Workflow**: Supports draft saving, editing, diverse payment methods (Cash, Card, ABA, Acleda, Due, Cash And ABA, Cash And Acleda), split payments, and receipt generation.
+- **POS Order Workflow**: Supports draft saving, editing, diverse payment methods (Cash, Card, ABA, Acleda, Due, Cash And ABA, Cash And Acleda), split payments, and receipt generation. When "Cash And ABA" or "Cash And Acleda" is selected, the payment modal automatically triggers split payment mode, allowing users to specify the exact amounts for each payment method. Both payment methods are then displayed separately in the Sales List.
 - **Sales Management**: Displays complete order history with detailed item breakdowns, comprehensive reports (Detailed Sales Report, Sales Summary Report) with filtering, editing, printing, and export capabilities (Excel, PDF).
 - **Item Management**: CRUD for items and categories, image management, search, filtering, and bulk import/export (Excel/CSV). Comprehensive duplicate name validation with specific error messages ("Already uploaded" for creating duplicates, "Duplicate name" for updating to an existing name, "Already updated" for no-change updates). Bulk import includes per-row duplicate detection and error reporting.
 - **Expense Management**: Full CRUD for expenses and categories, optional slip/invoice image uploads, summary statistics, and a colorful, enhanced UI.
