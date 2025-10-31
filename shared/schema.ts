@@ -410,6 +410,11 @@ export const insertPaymentAdjustmentSchema = createInsertSchema(paymentAdjustmen
 export type InsertPaymentAdjustment = z.infer<typeof insertPaymentAdjustmentSchema>;
 export type PaymentAdjustment = typeof paymentAdjustments.$inferSelect;
 
+export const orderCounters = pgTable("order_counters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  counterValue: integer("counter_value").notNull().default(0),
+});
+
 export const branches = pgTable("branches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),

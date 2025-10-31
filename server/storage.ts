@@ -35,8 +35,28 @@ import {
   type InsertBranch,
   type PaymentAdjustment,
   type InsertPaymentAdjustment,
+  categories,
+  products,
+  tables,
+  orders,
+  orderItems,
+  expenseCategories,
+  expenses,
+  purchases,
+  employees,
+  attendance,
+  leaves,
+  payroll,
+  staffSalaries,
+  settings,
+  inventoryAdjustments,
+  users,
+  branches,
+  paymentAdjustments,
+  orderCounters,
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, and, gte, lte, desc, asc, sql, isNull, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -173,807 +193,254 @@ export interface IStorage {
   createPaymentAdjustment(adjustment: InsertPaymentAdjustment): Promise<PaymentAdjustment>;
 }
 
-export class MemStorage implements IStorage {
-  private categories: Map<string, Category>;
-  private products: Map<string, Product>;
-  private tables: Map<string, Table>;
-  private orders: Map<string, Order>;
-  private orderItems: Map<string, OrderItem>;
-  private expenseCategories: Map<string, ExpenseCategory>;
-  private expenses: Map<string, Expense>;
-  private purchases: Map<string, Purchase>;
-  private employees: Map<string, Employee>;
-  private attendance: Map<string, Attendance>;
-  private leaves: Map<string, Leave>;
-  private payroll: Map<string, Payroll>;
-  private staffSalaries: Map<string, StaffSalary>;
-  private users: Map<string, User>;
-  private settings: Settings | null;
-  private inventoryAdjustments: Map<string, InventoryAdjustment>;
-  private branches: Map<string, Branch>;
-  private paymentAdjustments: Map<string, PaymentAdjustment>;
-  private orderCounter: number = 20;
+export class DatabaseStorage implements IStorage {
+  private readonly ORDER_COUNTER_ID = 'order-counter';
 
-  constructor() {
-    this.categories = new Map();
-    this.products = new Map();
-    this.tables = new Map();
-    this.orders = new Map();
-    this.orderItems = new Map();
-    this.expenseCategories = new Map();
-    this.expenses = new Map();
-    this.purchases = new Map();
-    this.employees = new Map();
-    this.attendance = new Map();
-    this.leaves = new Map();
-    this.payroll = new Map();
-    this.staffSalaries = new Map();
-    this.users = new Map();
-    this.settings = null;
-    this.inventoryAdjustments = new Map();
-    this.branches = new Map();
-    this.paymentAdjustments = new Map();
-    this.seedData();
-  }
-
-  private seedData() {
-    const categories: Category[] = [
-      { id: "1", name: "Rice", slug: "rice" },
-      { id: "2", name: "Beverages", slug: "beverages" },
-      { id: "3", name: "Salads", slug: "salads" },
-      { id: "4", name: "Soup", slug: "soup" },
-      { id: "5", name: "Pizza", slug: "pizza" },
-    ];
-
-    categories.forEach((cat) => this.categories.set(cat.id, cat));
-
-    const products: Product[] = [
-      { id: "1", name: "Shrimp Basil Salad", price: "10.60", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Fresh shrimp with basil and greens", quantity: "50", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "2", name: "Onion Rings", price: "8.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "serving", description: "Crispy fried onion rings", quantity: "100", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "3", name: "Smoked Bacon", price: "12.00", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "serving", description: "Premium smoked bacon strips", quantity: "75", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "4", name: "Fresh Tomatoes", price: "9.50", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "kg", description: "Organic fresh tomatoes", quantity: "25", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "5", name: "Chicken Burger", price: "10.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "piece", description: "Juicy grilled chicken burger", quantity: "60", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "6", name: "Red Onion Rings", price: "8.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "serving", description: "Red onion rings with special sauce", quantity: "80", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "7", name: "Beef Burger", price: "10.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "piece", description: "Classic beef burger with cheese", quantity: "55", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "8", name: "Grilled Burger", price: "10.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "piece", description: "Premium grilled burger", quantity: "45", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "9", name: "Fresh Basil Salad", price: "8.50", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Garden fresh basil salad", quantity: "70", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "10", name: "Vegetable Pizza", price: "15.00", purchaseCost: null, categoryId: "5", branchId: null, imageUrl: null, unit: "piece", description: "Mixed vegetable pizza", quantity: "40", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "11", name: "Fish & Chips", price: "12.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "serving", description: "Crispy fish with fries", quantity: "35", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "12", name: "Fried Rice", price: "9.00", purchaseCost: null, categoryId: "1", branchId: null, imageUrl: null, unit: "plate", description: "Classic fried rice", quantity: "90", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "13", name: "Biryani Rice", price: "11.00", purchaseCost: null, categoryId: "1", branchId: null, imageUrl: null, unit: "plate", description: "Aromatic biryani rice", quantity: "65", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "14", name: "Chicken Rice", price: "10.00", purchaseCost: null, categoryId: "1", branchId: null, imageUrl: null, unit: "plate", description: "Tender chicken with rice", quantity: "85", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "15", name: "Caesar Salad", price: "9.50", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Classic caesar salad", quantity: "55", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "16", name: "Greek Salad", price: "10.00", purchaseCost: null, categoryId: "3", branchId: null, imageUrl: null, unit: "plate", description: "Traditional greek salad", quantity: "50", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "17", name: "Tomato Soup", price: "6.50", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "bowl", description: "Creamy tomato soup", quantity: "100", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "18", name: "Mushroom Soup", price: "7.00", purchaseCost: null, categoryId: "4", branchId: null, imageUrl: null, unit: "bowl", description: "Rich mushroom soup", quantity: "95", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "19", name: "Margherita Pizza", price: "14.00", purchaseCost: null, categoryId: "5", branchId: null, imageUrl: null, unit: "piece", description: "Classic margherita pizza", quantity: "42", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "20", name: "Pepperoni Pizza", price: "16.00", purchaseCost: null, categoryId: "5", branchId: null, imageUrl: null, unit: "piece", description: "Spicy pepperoni pizza", quantity: "38", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "21", name: "Orange Juice", price: "4.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "glass", description: "Fresh orange juice", quantity: "120", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "22", name: "Mango Juice", price: "4.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "glass", description: "Sweet mango juice", quantity: "110", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "23", name: "Coffee", price: "3.50", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "cup", description: "Fresh brewed coffee", quantity: "200", createdAt: new Date("2025-10-01T10:00:00") },
-      { id: "24", name: "Green Tea", price: "3.00", purchaseCost: null, categoryId: "2", branchId: null, imageUrl: null, unit: "cup", description: "Organic green tea", quantity: "150", createdAt: new Date("2025-10-01T10:00:00") },
-    ];
-
-    products.forEach((prod) => this.products.set(prod.id, prod));
-
-    const tables: Table[] = [
-      { id: "1", tableNumber: "1", capacity: "4", description: "Window seat table", branchId: null, status: "available" },
-      { id: "2", tableNumber: "2", capacity: "2", description: "Small corner table", branchId: null, status: "available" },
-      { id: "3", tableNumber: "3", capacity: "6", description: "Large family table", branchId: null, status: "available" },
-      { id: "4", tableNumber: "4", capacity: "4", description: "Center table", branchId: null, status: "available" },
-      { id: "5", tableNumber: "5", capacity: "2", description: "Quiet corner", branchId: null, status: "available" },
-      { id: "6", tableNumber: "6", capacity: "8", description: "Party table", branchId: null, status: "available" },
-      { id: "7", tableNumber: "7", capacity: "4", description: "Near entrance", branchId: null, status: "available" },
-      { id: "8", tableNumber: "8", capacity: "4", description: "Outdoor patio", branchId: null, status: "available" },
-    ];
-
-    tables.forEach((table) => this.tables.set(table.id, table));
-
-    const employees: Employee[] = [
-      { id: "1", employeeId: "EMP001", name: "John Smith", position: "Manager", department: "Admin", branchId: null, email: "john.smith@restrobit.com", phone: "+1234567890", joiningDate: new Date("2024-01-15"), salary: "5000.00", photoUrl: null, status: "active", createdAt: new Date("2024-01-15") },
-      { id: "2", employeeId: "EMP002", name: "Sarah Johnson", position: "Head Chef", department: "Kitchen", branchId: null, email: "sarah.johnson@restrobit.com", phone: "+1234567891", joiningDate: new Date("2024-02-01"), salary: "4500.00", photoUrl: null, status: "active", createdAt: new Date("2024-02-01") },
-      { id: "3", employeeId: "EMP003", name: "Michael Chen", position: "Sous Chef", department: "Kitchen", branchId: null, email: "michael.chen@restrobit.com", phone: "+1234567892", joiningDate: new Date("2024-03-10"), salary: "3500.00", photoUrl: null, status: "active", createdAt: new Date("2024-03-10") },
-      { id: "4", employeeId: "EMP004", name: "Emma Wilson", position: "Waitress", department: "Service", branchId: null, email: "emma.wilson@restrobit.com", phone: "+1234567893", joiningDate: new Date("2024-04-05"), salary: "2500.00", photoUrl: null, status: "active", createdAt: new Date("2024-04-05") },
-      { id: "5", employeeId: "EMP005", name: "David Martinez", position: "Waiter", department: "Service", branchId: null, email: "david.martinez@restrobit.com", phone: "+1234567894", joiningDate: new Date("2024-04-20"), salary: "2500.00", photoUrl: null, status: "active", createdAt: new Date("2024-04-20") },
-      { id: "6", employeeId: "EMP006", name: "Lisa Anderson", position: "Receptionist", department: "Reception", branchId: null, email: "lisa.anderson@restrobit.com", phone: "+1234567895", joiningDate: new Date("2024-05-01"), salary: "2800.00", photoUrl: null, status: "active", createdAt: new Date("2024-05-01") },
-      { id: "7", employeeId: "EMP007", name: "Robert Taylor", position: "Accountant", department: "Finance", branchId: null, email: "robert.taylor@restrobit.com", phone: "+1234567896", joiningDate: new Date("2024-06-15"), salary: "4000.00", photoUrl: null, status: "active", createdAt: new Date("2024-06-15") },
-      { id: "8", employeeId: "EMP008", name: "Jennifer Lee", position: "HR Manager", department: "HR", branchId: null, email: "jennifer.lee@restrobit.com", phone: "+1234567897", joiningDate: new Date("2024-07-01"), salary: "4200.00", photoUrl: null, status: "active", createdAt: new Date("2024-07-01") },
-    ];
-
-    employees.forEach((emp) => this.employees.set(emp.id, emp));
-
-    const sampleOrders: Order[] = [
-      {
-        id: "sale-1",
-        orderNumber: "1",
-        tableId: "1",
-        diningOption: "dine-in",
-        customerName: "John Smith",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "45.50",
-        discount: "5.00",
-        discountType: "amount",
-        total: "40.50",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "cash",
-        createdAt: new Date("2025-10-06T10:30:00"),
-        completedAt: new Date("2025-10-06T10:45:00"),
-      },
-      {
-        id: "sale-2",
-        orderNumber: "2",
-        tableId: null,
-        diningOption: "takeaway",
-        customerName: "Sarah Johnson",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "32.00",
-        discount: "0.00",
-        discountType: "amount",
-        total: "32.00",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "card",
-        createdAt: new Date("2025-10-06T11:15:00"),
-        completedAt: new Date("2025-10-06T11:30:00"),
-      },
-      {
-        id: "sale-3",
-        orderNumber: "3",
-        tableId: "3",
-        diningOption: "dine-in",
-        customerName: "Michael Brown",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "68.75",
-        discount: "10.00",
-        discountType: "amount",
-        total: "58.75",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "aba",
-        createdAt: new Date("2025-10-06T12:00:00"),
-        completedAt: new Date("2025-10-06T12:20:00"),
-      },
-      {
-        id: "sale-4",
-        orderNumber: "4",
-        tableId: null,
-        diningOption: "delivery",
-        customerName: "Emily Davis",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "55.20",
-        discount: "0.00",
-        discountType: "amount",
-        total: "55.20",
-        status: "confirmed",
-        paymentStatus: "pending",
-        paymentMethod: null,
-        createdAt: new Date("2025-10-06T13:45:00"),
-        completedAt: null,
-      },
-      {
-        id: "sale-5",
-        orderNumber: "5",
-        tableId: "5",
-        diningOption: "dine-in",
-        customerName: null,
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "28.50",
-        discount: "2.00",
-        discountType: "amount",
-        total: "26.50",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "cash",
-        createdAt: new Date("2025-10-06T14:20:00"),
-        completedAt: new Date("2025-10-06T14:35:00"),
-      },
-      {
-        id: "sale-6",
-        orderNumber: "6",
-        tableId: null,
-        diningOption: "takeaway",
-        customerName: "David Lee",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "45.00",
-        discount: "0.00",
-        discountType: "amount",
-        total: "45.00",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "acleda",
-        createdAt: new Date("2025-10-06T15:00:00"),
-        completedAt: new Date("2025-10-06T15:15:00"),
-      },
-      {
-        id: "sale-7",
-        orderNumber: "7",
-        tableId: "6",
-        diningOption: "dine-in",
-        customerName: "Jessica Wang",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "72.50",
-        discount: "5.00",
-        discountType: "amount",
-        total: "67.50",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "due",
-        createdAt: new Date("2025-10-06T16:30:00"),
-        completedAt: new Date("2025-10-06T16:50:00"),
-      },
-      {
-        id: "sale-8",
-        orderNumber: "8",
-        tableId: null,
-        diningOption: "delivery",
-        customerName: "Tom Anderson",
-        customerPhone: null,
-        orderSource: "pos",
-        subtotal: "38.00",
-        discount: "0.00",
-        discountType: "amount",
-        total: "38.00",
-        status: "completed",
-        paymentStatus: "paid",
-        paymentMethod: "aba",
-        createdAt: new Date("2025-10-06T17:20:00"),
-        completedAt: new Date("2025-10-06T17:35:00"),
-      },
-      {
-        id: "qr-order-1",
-        orderNumber: "9",
-        tableId: "2",
-        diningOption: "dine-in",
-        customerName: "James Wilson",
-        customerPhone: "+1234567890",
-        orderSource: "qr",
-        subtotal: "42.00",
-        discount: "0.00",
-        discountType: "amount",
-        total: "42.00",
-        status: "qr-pending",
-        paymentStatus: "pending",
-        paymentMethod: null,
-        createdAt: new Date(),
-        completedAt: null,
-      },
-      {
-        id: "qr-order-2",
-        orderNumber: "10",
-        tableId: "4",
-        diningOption: "dine-in",
-        customerName: "Linda Martinez",
-        customerPhone: "+1234567891",
-        orderSource: "qr",
-        subtotal: "67.50",
-        discount: "0.00",
-        discountType: "amount",
-        total: "67.50",
-        status: "qr-pending",
-        paymentStatus: "pending",
-        paymentMethod: null,
-        createdAt: new Date(),
-        completedAt: null,
-      },
-      {
-        id: "qr-order-3",
-        orderNumber: "11",
-        tableId: null,
-        diningOption: "takeaway",
-        customerName: "Robert Chen",
-        customerPhone: "+1234567892",
-        orderSource: "qr",
-        subtotal: "28.00",
-        discount: "0.00",
-        discountType: "amount",
-        total: "28.00",
-        status: "qr-pending",
-        paymentStatus: "pending",
-        paymentMethod: null,
-        createdAt: new Date(),
-        completedAt: null,
-      },
-    ];
-
-    sampleOrders.forEach((order) => this.orders.set(order.id, order));
-    this.orderCounter = 12;
-
-    // Order items for completed sales
-    const saleOrderItems: OrderItem[] = [
-      // sale-1 items (subtotal: 45.50, discount: 5.00, total: 40.50)
-      { id: randomUUID(), orderId: "sale-1", productId: "1", quantity: 2, price: "10.60", total: "21.20" },
-      { id: randomUUID(), orderId: "sale-1", productId: "5", quantity: 1, price: "10.50", total: "10.50" },
-      { id: randomUUID(), orderId: "sale-1", productId: "21", quantity: 3, price: "4.60", total: "13.80" },
+  private async getNextOrderNumber(): Promise<string> {
+    return await db.transaction(async (tx) => {
+      await tx
+        .insert(orderCounters)
+        .values({ id: this.ORDER_COUNTER_ID, counterValue: 0 })
+        .onConflictDoNothing();
       
-      // sale-2 items (subtotal: 32.00, total: 32.00)
-      { id: randomUUID(), orderId: "sale-2", productId: "7", quantity: 2, price: "10.50", total: "21.00" },
-      { id: randomUUID(), orderId: "sale-2", productId: "15", quantity: 1, price: "11.00", total: "11.00" },
+      const counters = await tx
+        .select()
+        .from(orderCounters)
+        .where(eq(orderCounters.id, this.ORDER_COUNTER_ID))
+        .for('update');
       
-      // sale-3 items (subtotal: 68.75, discount: 10.00, total: 58.75)
-      { id: randomUUID(), orderId: "sale-3", productId: "3", quantity: 3, price: "10.50", total: "31.50" },
-      { id: randomUUID(), orderId: "sale-3", productId: "10", quantity: 1, price: "15.00", total: "15.00" },
-      { id: randomUUID(), orderId: "sale-3", productId: "12", quantity: 1, price: "9.00", total: "9.00" },
-      { id: randomUUID(), orderId: "sale-3", productId: "23", quantity: 2, price: "3.50", total: "7.00" },
-      { id: randomUUID(), orderId: "sale-3", productId: "24", quantity: 2, price: "3.125", total: "6.25" },
+      const newValue = counters[0].counterValue + 1;
+      const result = await tx
+        .update(orderCounters)
+        .set({ counterValue: newValue })
+        .where(eq(orderCounters.id, this.ORDER_COUNTER_ID))
+        .returning();
       
-      // sale-5 items (subtotal: 28.50, discount: 2.00, total: 26.50)
-      { id: randomUUID(), orderId: "sale-5", productId: "8", quantity: 2, price: "10.50", total: "21.00" },
-      { id: randomUUID(), orderId: "sale-5", productId: "22", quantity: 1, price: "4.50", total: "4.50" },
-      { id: randomUUID(), orderId: "sale-5", productId: "25", quantity: 1, price: "3.00", total: "3.00" },
-      
-      // sale-6 items (subtotal: 45.00, total: 45.00) - Acleda payment
-      { id: randomUUID(), orderId: "sale-6", productId: "2", quantity: 2, price: "10.50", total: "21.00" },
-      { id: randomUUID(), orderId: "sale-6", productId: "6", quantity: 1, price: "10.50", total: "10.50" },
-      { id: randomUUID(), orderId: "sale-6", productId: "20", quantity: 3, price: "4.50", total: "13.50" },
-      
-      // sale-7 items (subtotal: 72.50, discount: 5.00, total: 67.50) - Due payment
-      { id: randomUUID(), orderId: "sale-7", productId: "1", quantity: 3, price: "10.60", total: "31.80" },
-      { id: randomUUID(), orderId: "sale-7", productId: "9", quantity: 2, price: "10.50", total: "21.00" },
-      { id: randomUUID(), orderId: "sale-7", productId: "14", quantity: 1, price: "11.00", total: "11.00" },
-      { id: randomUUID(), orderId: "sale-7", productId: "23", quantity: 2, price: "3.50", total: "7.00" },
-      
-      // sale-8 items (subtotal: 38.00, total: 38.00) - ABA payment
-      { id: randomUUID(), orderId: "sale-8", productId: "4", quantity: 2, price: "10.50", total: "21.00" },
-      { id: randomUUID(), orderId: "sale-8", productId: "11", quantity: 1, price: "9.00", total: "9.00" },
-      { id: randomUUID(), orderId: "sale-8", productId: "21", quantity: 2, price: "4.00", total: "8.00" },
-    ];
-
-    const qrOrderItems: OrderItem[] = [
-      { id: randomUUID(), orderId: "qr-order-1", productId: "5", quantity: 2, price: "10.50", total: "21.00" },
-      { id: randomUUID(), orderId: "qr-order-1", productId: "10", quantity: 1, price: "15.00", total: "15.00" },
-      { id: randomUUID(), orderId: "qr-order-1", productId: "21", quantity: 2, price: "4.50", total: "9.00" },
-      
-      { id: randomUUID(), orderId: "qr-order-2", productId: "1", quantity: 2, price: "10.60", total: "21.20" },
-      { id: randomUUID(), orderId: "qr-order-2", productId: "7", quantity: 3, price: "10.50", total: "31.50" },
-      { id: randomUUID(), orderId: "qr-order-2", productId: "23", quantity: 2, price: "3.50", total: "7.00" },
-      { id: randomUUID(), orderId: "qr-order-2", productId: "24", quantity: 1, price: "3.00", total: "3.00" },
-      
-      { id: randomUUID(), orderId: "qr-order-3", productId: "12", quantity: 2, price: "9.00", total: "18.00" },
-      { id: randomUUID(), orderId: "qr-order-3", productId: "22", quantity: 2, price: "4.50", total: "9.00" },
-    ];
-
-    // Add all order items to storage
-    saleOrderItems.forEach((item) => this.orderItems.set(item.id, item));
-    qrOrderItems.forEach((item) => this.orderItems.set(item.id, item));
-
-    const expenseCategories: ExpenseCategory[] = [
-      { id: "exp-cat-1", name: "Office Supplies", description: "Stationery, printing, and office materials" },
-      { id: "exp-cat-2", name: "Travel", description: "Transportation and travel expenses" },
-      { id: "exp-cat-3", name: "Utilities", description: "Electricity, water, and internet" },
-      { id: "exp-cat-4", name: "Food & Ingredients", description: "Raw materials and ingredients for kitchen" },
-      { id: "exp-cat-5", name: "Maintenance", description: "Repairs and maintenance" },
-    ];
-
-    expenseCategories.forEach((cat) => this.expenseCategories.set(cat.id, cat));
-
-    const sampleExpenses: Expense[] = [
-      {
-        id: "exp-1",
-        expenseDate: new Date("2025-10-06T09:00:00"),
-        categoryId: "exp-cat-4",
-        description: "Fresh vegetables and meat",
-        amount: "250.00",
-        unit: "Kg",
-        quantity: "15.5",
-        total: "250.00",
-        createdAt: new Date("2025-10-06T09:00:00"),
-      },
-      {
-        id: "exp-2",
-        expenseDate: new Date("2025-10-05T14:30:00"),
-        categoryId: "exp-cat-3",
-        description: "Monthly electricity bill",
-        amount: "450.00",
-        unit: "Unit",
-        quantity: "1",
-        total: "450.00",
-        createdAt: new Date("2025-10-05T14:30:00"),
-      },
-      {
-        id: "exp-3",
-        expenseDate: new Date("2025-10-04T11:15:00"),
-        categoryId: "exp-cat-1",
-        description: "Printer paper and ink",
-        amount: "85.50",
-        unit: "Box",
-        quantity: "3",
-        total: "85.50",
-        createdAt: new Date("2025-10-04T11:15:00"),
-      },
-    ];
-
-    sampleExpenses.forEach((expense) => this.expenses.set(expense.id, expense));
-
-    // Sample purchases
-    const samplePurchases: Purchase[] = [
-      {
-        id: "purchase-1",
-        imageUrl: null,
-        categoryId: "4",
-        itemName: "Fresh Vegetables",
-        quantity: "50",
-        unit: "Kg",
-        price: "5.00",
-        purchaseDate: new Date("2025-10-06T08:00:00"),
-        createdAt: new Date("2025-10-06T08:00:00"),
-      },
-      {
-        id: "purchase-2",
-        imageUrl: null,
-        categoryId: "4",
-        itemName: "Chicken Meat",
-        quantity: "30",
-        unit: "Kg",
-        price: "8.50",
-        purchaseDate: new Date("2025-10-05T09:30:00"),
-        createdAt: new Date("2025-10-05T09:30:00"),
-      },
-      {
-        id: "purchase-3",
-        imageUrl: null,
-        categoryId: "1",
-        itemName: "Rice",
-        quantity: "100",
-        unit: "Kg",
-        price: "2.50",
-        purchaseDate: new Date("2025-10-04T10:00:00"),
-        createdAt: new Date("2025-10-04T10:00:00"),
-      },
-    ];
-
-    samplePurchases.forEach((purchase) => this.purchases.set(purchase.id, purchase));
-
-    // Seed default admin user
-    const defaultAdminPassword = bcrypt.hashSync("admin123", 10);
-    const defaultUsers: User[] = [
-      {
-        id: "user-1",
-        username: "admin",
-        password: defaultAdminPassword,
-        fullName: "System Administrator",
-        email: "admin@restaurant.com",
-        role: "admin",
-        employeeId: null,
-        isActive: "true",
-        createdAt: new Date(),
-      },
-    ];
-    defaultUsers.forEach((user) => this.users.set(user.id, user));
+      return result[0].counterValue.toString();
+    });
   }
 
   async getCategories(): Promise<Category[]> {
-    return Array.from(this.categories.values());
+    return await db.select().from(categories);
   }
 
   async getCategory(id: string): Promise<Category | undefined> {
-    return this.categories.get(id);
+    const result = await db.select().from(categories).where(eq(categories.id, id));
+    return result[0];
   }
 
   async createCategory(insertCategory: InsertCategory): Promise<Category> {
-    const id = randomUUID();
-    const category: Category = { ...insertCategory, id };
-    this.categories.set(id, category);
-    return category;
+    const result = await db.insert(categories).values(insertCategory).returning();
+    return result[0];
   }
 
   async updateCategory(id: string, updates: Partial<InsertCategory>): Promise<Category | undefined> {
-    const category = this.categories.get(id);
-    if (!category) return undefined;
-    const updated = { ...category, ...updates };
-    this.categories.set(id, updated);
-    return updated;
+    const result = await db.update(categories).set(updates).where(eq(categories.id, id)).returning();
+    return result[0];
   }
 
   async deleteCategory(id: string): Promise<boolean> {
-    const exists = this.categories.has(id);
-    if (!exists) return false;
-    this.categories.delete(id);
-    return true;
+    const result = await db.delete(categories).where(eq(categories.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getProducts(branchId?: string | null): Promise<Product[]> {
-    const products = Array.from(this.products.values());
     if (branchId) {
-      return products.filter(p => p.branchId === branchId);
+      return await db.select().from(products).where(eq(products.branchId, branchId));
     }
-    return products;
+    return await db.select().from(products);
   }
 
   async getProduct(id: string): Promise<Product | undefined> {
-    return this.products.get(id);
+    const result = await db.select().from(products).where(eq(products.id, id));
+    return result[0];
   }
 
   async getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]> {
-    let products = Array.from(this.products.values()).filter(
-      (product) => product.categoryId === categoryId
-    );
     if (branchId) {
-      products = products.filter(p => p.branchId === branchId);
+      return await db.select().from(products)
+        .where(and(eq(products.categoryId, categoryId), eq(products.branchId, branchId)));
     }
-    return products;
+    return await db.select().from(products).where(eq(products.categoryId, categoryId));
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
-    const id = randomUUID();
-    const product: Product = { 
-      ...insertProduct, 
-      id, 
-      purchaseCost: insertProduct.purchaseCost ?? null,
-      imageUrl: insertProduct.imageUrl ?? null,
-      description: insertProduct.description ?? null,
-      unit: insertProduct.unit ?? "piece",
-      quantity: insertProduct.quantity ?? "0",
-      createdAt: new Date(),
-    };
-    this.products.set(id, product);
-    return product;
+    const result = await db.insert(products).values(insertProduct).returning();
+    return result[0];
   }
 
   async updateProduct(id: string, updates: Partial<InsertProduct>): Promise<Product | undefined> {
-    const product = this.products.get(id);
-    if (!product) return undefined;
-    const updated = { ...product, ...updates };
-    this.products.set(id, updated);
-    return updated;
+    const result = await db.update(products).set(updates).where(eq(products.id, id)).returning();
+    return result[0];
   }
 
   async deleteProduct(id: string): Promise<boolean> {
-    const exists = this.products.has(id);
-    if (!exists) return false;
-    this.products.delete(id);
-    return true;
+    const result = await db.delete(products).where(eq(products.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getTables(branchId?: string | null): Promise<Table[]> {
-    const tables = Array.from(this.tables.values());
     if (branchId) {
-      return tables.filter(t => t.branchId === branchId);
+      return await db.select().from(tables).where(eq(tables.branchId, branchId));
     }
-    return tables;
+    return await db.select().from(tables);
   }
 
   async getTable(id: string): Promise<Table | undefined> {
-    return this.tables.get(id);
+    const result = await db.select().from(tables).where(eq(tables.id, id));
+    return result[0];
   }
 
   async createTable(insertTable: InsertTable): Promise<Table> {
-    const id = randomUUID();
-    const table: Table = { 
-      ...insertTable, 
-      id, 
-      capacity: insertTable.capacity ?? null,
-      description: insertTable.description ?? null,
-      status: insertTable.status ?? "available" 
-    };
-    this.tables.set(id, table);
-    return table;
+    const result = await db.insert(tables).values(insertTable).returning();
+    return result[0];
   }
 
   async updateTable(id: string, updates: Partial<InsertTable>): Promise<Table | undefined> {
-    const table = this.tables.get(id);
-    if (!table) return undefined;
-    const updated = { ...table, ...updates };
-    this.tables.set(id, updated);
-    return updated;
+    const result = await db.update(tables).set(updates).where(eq(tables.id, id)).returning();
+    return result[0];
   }
 
   async updateTableStatus(id: string, status: string): Promise<Table | undefined> {
-    const table = this.tables.get(id);
-    if (!table) return undefined;
-    const updated = { ...table, status };
-    this.tables.set(id, updated);
-    return updated;
+    const result = await db.update(tables).set({ status }).where(eq(tables.id, id)).returning();
+    return result[0];
   }
 
   async deleteTable(id: string): Promise<boolean> {
-    const exists = this.tables.has(id);
-    if (!exists) return false;
-    this.tables.delete(id);
-    return true;
+    const result = await db.delete(tables).where(eq(tables.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getOrders(branchId?: string | null): Promise<Order[]> {
-    const orders = Array.from(this.orders.values());
     if (branchId) {
-      return orders.filter(o => o.branchId === branchId);
+      return await db.select().from(orders).where(eq(orders.branchId, branchId)).orderBy(desc(orders.createdAt));
     }
-    return orders;
+    return await db.select().from(orders).orderBy(desc(orders.createdAt));
   }
 
   async getOrder(id: string): Promise<Order | undefined> {
-    return this.orders.get(id);
+    const result = await db.select().from(orders).where(eq(orders.id, id));
+    return result[0];
   }
 
   async getDraftOrders(branchId?: string | null): Promise<Order[]> {
-    const orders = Array.from(this.orders.values()).filter(order => order.status === "draft");
     if (branchId) {
-      return orders.filter(o => o.branchId === branchId);
+      return await db.select().from(orders)
+        .where(and(eq(orders.status, 'draft'), eq(orders.branchId, branchId)))
+        .orderBy(desc(orders.createdAt));
     }
-    return orders;
+    return await db.select().from(orders).where(eq(orders.status, 'draft')).orderBy(desc(orders.createdAt));
   }
 
-  async getQROrders(): Promise<Order[]> {
-    return Array.from(this.orders.values()).filter(order => order.orderSource === "qr" && order.status === "qr-pending");
+  async getQROrders(branchId?: string | null): Promise<Order[]> {
+    if (branchId) {
+      return await db.select().from(orders)
+        .where(and(eq(orders.status, 'qr-pending'), eq(orders.branchId, branchId)))
+        .orderBy(desc(orders.createdAt));
+    }
+    return await db.select().from(orders).where(eq(orders.status, 'qr-pending')).orderBy(desc(orders.createdAt));
   }
 
   async getCompletedOrders(branchId?: string | null): Promise<Order[]> {
-    const orders = Array.from(this.orders.values()).filter(order => order.status === "completed");
     if (branchId) {
-      return orders.filter(o => o.branchId === branchId);
+      return await db.select().from(orders)
+        .where(and(eq(orders.status, 'completed'), eq(orders.branchId, branchId)))
+        .orderBy(desc(orders.createdAt));
     }
-    return orders;
+    return await db.select().from(orders).where(eq(orders.status, 'completed')).orderBy(desc(orders.createdAt));
   }
 
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
-    const id = randomUUID();
-    const orderNumber = `${this.orderCounter++}`;
-    const order: Order = {
+    const orderNumber = await this.getNextOrderNumber();
+    const orderWithNumber = {
       ...insertOrder,
-      id,
       orderNumber,
-      discountType: insertOrder.discountType ?? "amount",
-      createdAt: new Date(),
-      completedAt: null,
-      status: insertOrder.status ?? "draft",
-      diningOption: insertOrder.diningOption ?? "dine-in",
-      discount: insertOrder.discount ?? "0",
-      tableId: insertOrder.tableId ?? null,
-      customerName: insertOrder.customerName ?? null,
-      customerPhone: insertOrder.customerPhone ?? null,
-      orderSource: insertOrder.orderSource ?? "pos",
-      paymentStatus: insertOrder.paymentStatus ?? "pending",
-      paymentMethod: insertOrder.paymentMethod ?? null,
     };
-    this.orders.set(id, order);
-    return order;
+    const result = await db.insert(orders).values(orderWithNumber).returning();
+    return result[0];
+  }
+
+  async createOrderWithItems(insertOrder: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order> {
+    return await db.transaction(async (tx) => {
+      const orderNumber = await this.getNextOrderNumber();
+      const orderWithNumber = {
+        ...insertOrder,
+        orderNumber,
+      };
+      
+      const result = await tx.insert(orders).values(orderWithNumber).returning();
+      const newOrder = result[0];
+
+      if (items.length > 0) {
+        const orderItemsWithOrderId = items.map(item => ({
+          ...item,
+          orderId: newOrder.id,
+        }));
+        await tx.insert(orderItems).values(orderItemsWithOrderId);
+      }
+
+      return newOrder;
+    });
   }
 
   async updateOrder(id: string, updates: Partial<InsertOrder>): Promise<Order | undefined> {
-    const order = this.orders.get(id);
-    if (!order) return undefined;
-    const updated = { ...order, ...updates };
-    this.orders.set(id, updated);
-    return updated;
+    const result = await db.update(orders).set(updates).where(eq(orders.id, id)).returning();
+    return result[0];
   }
 
   async updateOrderStatus(id: string, status: string): Promise<Order | undefined> {
-    const order = this.orders.get(id);
-    if (!order) return undefined;
-    
-    // If completing an order, automatically deduct inventory
-    if (status === "completed" && order.status !== "completed") {
-      const orderItems = await this.getOrderItems(id);
-      
-      for (const item of orderItems) {
-        const product = this.products.get(item.productId);
-        if (product) {
-          const currentQty = parseFloat(product.quantity);
-          const soldQty = parseFloat(item.quantity);
-          const newQty = Math.max(0, currentQty - soldQty);
-          
-          product.quantity = newQty.toString();
-          this.products.set(item.productId, product);
-          
-          // Create inventory adjustment record for tracking
-          const adjustmentId = randomUUID();
-          const adjustment: InventoryAdjustment = {
-            id: adjustmentId,
-            productId: item.productId,
-            adjustmentType: "remove",
-            quantity: soldQty.toString(),
-            reason: "sale",
-            notes: `Automatic deduction from order #${order.orderNumber}`,
-            performedBy: null,
-            createdAt: new Date(),
-          };
-          this.inventoryAdjustments.set(adjustmentId, adjustment);
-        }
-      }
-      
-      const updated = { ...order, status, completedAt: new Date() };
-      this.orders.set(id, updated);
-      return updated;
+    const updateData: any = { status };
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
     }
-    
-    const updated = { ...order, status };
-    this.orders.set(id, updated);
-    return updated;
+    const result = await db.update(orders).set(updateData).where(eq(orders.id, id)).returning();
+    return result[0];
   }
 
   async deleteOrder(id: string): Promise<boolean> {
-    const exists = this.orders.has(id);
-    if (!exists) return false;
-    this.orders.delete(id);
-    const orderItems = Array.from(this.orderItems.values()).filter(
-      (item) => item.orderId === id
-    );
-    orderItems.forEach((item) => this.orderItems.delete(item.id));
-    return true;
+    await db.delete(orderItems).where(eq(orderItems.orderId, id));
+    const result = await db.delete(orders).where(eq(orders.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getOrderItems(orderId: string): Promise<OrderItem[]> {
-    return Array.from(this.orderItems.values()).filter(
-      (item) => item.orderId === orderId
-    );
+    return await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   }
 
   async createOrderItem(insertOrderItem: InsertOrderItem): Promise<OrderItem> {
-    const id = randomUUID();
-    const orderItem: OrderItem = { ...insertOrderItem, id };
-    this.orderItems.set(id, orderItem);
-    return orderItem;
-  }
-
-  async createOrderWithItems(insertOrder: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
-    const order = await this.createOrder(insertOrder);
-    for (const item of items) {
-      await this.createOrderItem({ ...item, orderId: order.id });
-    }
-    
-    // If order is created as completed, automatically deduct inventory
-    if (order.status === "completed") {
-      for (const item of items) {
-        const product = this.products.get(item.productId);
-        if (product) {
-          const currentQty = parseFloat(product.quantity);
-          const soldQty = parseFloat(item.quantity);
-          const newQty = Math.max(0, currentQty - soldQty);
-          
-          product.quantity = newQty.toString();
-          this.products.set(item.productId, product);
-          
-          // Create inventory adjustment record for tracking
-          const adjustmentId = randomUUID();
-          const adjustment: InventoryAdjustment = {
-            id: adjustmentId,
-            productId: item.productId,
-            adjustmentType: "remove",
-            quantity: soldQty.toString(),
-            reason: "sale",
-            notes: `Automatic deduction from order #${order.orderNumber}`,
-            performedBy: null,
-            createdAt: new Date(),
-          };
-          this.inventoryAdjustments.set(adjustmentId, adjustment);
-        }
-      }
-    }
-    
-    return order;
+    const result = await db.insert(orderItems).values(insertOrderItem).returning();
+    return result[0];
   }
 
   async deleteOrderItems(orderId: string): Promise<boolean> {
-    const items = await this.getOrderItems(orderId);
-    items.forEach((item) => this.orderItems.delete(item.id));
-    return true;
+    const result = await db.delete(orderItems).where(eq(orderItems.orderId, orderId));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
-  async getOrderItemsWithProducts(
-    orderId: string
-  ): Promise<(OrderItem & { product: Product })[]> {
-    const items = await this.getOrderItems(orderId);
-    return items
-      .map((item) => {
-        const product = this.products.get(item.productId);
-        if (!product) return null;
-        return { ...item, product };
+  async getOrderItemsWithProducts(orderId: string): Promise<(OrderItem & { product: Product })[]> {
+    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+    
+    const itemsWithProducts = await Promise.all(
+      items.map(async (item) => {
+        const product = await this.getProduct(item.productId);
+        return {
+          ...item,
+          product: product!,
+        };
       })
-      .filter((item): item is OrderItem & { product: Product } => item !== null);
+    );
+
+    return itemsWithProducts;
   }
 
   async getTableCurrentOrder(tableId: string): Promise<Order | undefined> {
-    const orders = Array.from(this.orders.values()).filter(
-      (order) => order.tableId === tableId && (order.status === "draft" || order.status === "in-progress")
-    );
-    return orders.length > 0 ? orders[0] : undefined;
+    const result = await db.select().from(orders)
+      .where(and(
+        eq(orders.tableId, tableId),
+        or(eq(orders.status, 'draft'), eq(orders.status, 'confirmed'))
+      ))
+      .orderBy(desc(orders.createdAt));
+    return result[0];
   }
 
   async getDashboardStats(startDate: Date, endDate: Date): Promise<{
@@ -985,69 +452,67 @@ export class MemStorage implements IStorage {
     profitLoss: number;
     totalPurchase: number;
   }> {
-    const orders = Array.from(this.orders.values());
-    const completedOrders = orders.filter(order => order.status === 'completed');
-    
-    const filteredOrders = completedOrders.filter(order => {
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
+    const completedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, 'completed'),
+        gte(orders.createdAt, startDate),
+        lte(orders.createdAt, endDate)
+      ));
 
-    const todaySales = filteredOrders.reduce((sum, order) => sum + parseFloat(order.total), 0);
-    
-    // Calculate total sales from date-filtered completed orders
-    const totalSales = filteredOrders.reduce((sum, order) => sum + parseFloat(order.total), 0);
+    const todaySales = completedOrders.reduce((sum, order) => sum + parseFloat(order.total), 0);
+    const totalSales = completedOrders.reduce((sum, order) => sum + parseFloat(order.total), 0);
+    const totalDiscount = completedOrders.reduce((sum, order) => sum + parseFloat(order.discount), 0);
 
-    // Calculate total discount from date-filtered completed orders
-    const totalDiscount = filteredOrders.reduce((sum, order) => sum + parseFloat(order.discount), 0);
+    const allPurchases = await db.select().from(purchases)
+      .where(and(
+        gte(purchases.purchaseDate, startDate),
+        lte(purchases.purchaseDate, endDate)
+      ));
 
-    // Calculate total purchase cost from Purchase Management for the date range
-    const purchases = Array.from(this.purchases.values()).filter(purchase => {
-      const purchaseDate = new Date(purchase.purchaseDate);
-      return purchaseDate >= startDate && purchaseDate <= endDate;
-    });
-    const totalPurchaseCost = purchases.reduce((sum, purchase) => {
+    const totalPurchaseCost = allPurchases.reduce((sum, purchase) => {
       return sum + (parseFloat(purchase.price) * parseFloat(purchase.quantity));
     }, 0);
 
-    // Calculate Total Revenue = Total Sales - (Purchase Cost + Discount)
     const totalRevenue = totalSales - (totalPurchaseCost + totalDiscount);
 
-    // Calculate total expenses for the date range (Expense Management only)
-    const expenses = Array.from(this.expenses.values()).filter(expense => {
-      const expenseDate = new Date(expense.expenseDate);
-      return expenseDate >= startDate && expenseDate <= endDate;
-    });
-    const totalExpenses = expenses.reduce((sum, expense) => sum + parseFloat(expense.total), 0);
+    const allExpenses = await db.select().from(expenses)
+      .where(and(
+        gte(expenses.expenseDate, startDate),
+        lte(expenses.expenseDate, endDate)
+      ));
 
-    // Calculate Profit/Loss = Total Revenue - Total Expenses
+    const totalExpenses = allExpenses.reduce((sum, expense) => sum + parseFloat(expense.total), 0);
     const profitLoss = totalRevenue - totalExpenses;
+
+    const allOrders = await db.select().from(orders).where(eq(orders.status, 'completed'));
 
     return {
       todaySales,
-      todayOrders: filteredOrders.length,
+      todayOrders: completedOrders.length,
       totalRevenue,
-      totalOrders: completedOrders.length,
+      totalOrders: allOrders.length,
       totalExpenses,
       profitLoss,
-      totalPurchase: totalPurchaseCost, // Same as purchase cost from Purchase Management
+      totalPurchase: totalPurchaseCost,
     };
   }
 
   async getSalesByCategory(startDate: Date, endDate: Date): Promise<Array<{ category: string; revenue: number }>> {
-    const orders = Array.from(this.orders.values()).filter(order => {
-      if (order.status !== 'completed') return false;
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
+    const completedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, 'completed'),
+        gte(orders.createdAt, startDate),
+        lte(orders.createdAt, endDate)
+      ));
+
     const categoryRevenue = new Map<string, number>();
 
-    for (const order of orders) {
+    for (const order of completedOrders) {
       const items = await this.getOrderItems(order.id);
       for (const item of items) {
-        const product = this.products.get(item.productId);
+        const product = await this.getProduct(item.productId);
         if (product) {
-          const category = this.categories.get(product.categoryId);
+          const category = await this.getCategory(product.categoryId);
           if (category) {
             const current = categoryRevenue.get(category.name) || 0;
             categoryRevenue.set(category.name, current + parseFloat(item.total));
@@ -1062,15 +527,16 @@ export class MemStorage implements IStorage {
   }
 
   async getSalesByPaymentMethod(startDate: Date, endDate: Date): Promise<Array<{ paymentMethod: string; amount: number }>> {
-    const filteredOrders = Array.from(this.orders.values()).filter(order => {
-      if (order.status !== 'completed') return false;
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
+    const completedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, 'completed'),
+        gte(orders.createdAt, startDate),
+        lte(orders.createdAt, endDate)
+      ));
 
     const paymentMethodTotals = new Map<string, number>();
 
-    for (const order of filteredOrders) {
+    for (const order of completedOrders) {
       const paymentMethod = order.paymentMethod || 'Not specified';
       const current = paymentMethodTotals.get(paymentMethod) || 0;
       paymentMethodTotals.set(paymentMethod, current + parseFloat(order.total));
@@ -1082,17 +548,19 @@ export class MemStorage implements IStorage {
   }
 
   async getPopularProducts(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>> {
-    const orders = Array.from(this.orders.values()).filter(order => {
-      if (order.status !== 'completed') return false;
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
+    const completedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, 'completed'),
+        gte(orders.createdAt, startDate),
+        lte(orders.createdAt, endDate)
+      ));
+
     const productStats = new Map<string, { name: string; quantity: number; revenue: number }>();
 
-    for (const order of orders) {
+    for (const order of completedOrders) {
       const items = await this.getOrderItems(order.id);
       for (const item of items) {
-        const product = this.products.get(item.productId);
+        const product = await this.getProduct(item.productId);
         if (product) {
           const current = productStats.get(product.id) || { name: product.name, quantity: 0, revenue: 0 };
           productStats.set(product.id, {
@@ -1111,17 +579,19 @@ export class MemStorage implements IStorage {
   }
 
   async getSalesSummary(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>> {
-    const orders = Array.from(this.orders.values()).filter(order => {
-      if (order.status !== 'completed') return false;
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
+    const completedOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.status, 'completed'),
+        gte(orders.createdAt, startDate),
+        lte(orders.createdAt, endDate)
+      ));
+
     const productStats = new Map<string, { name: string; quantity: number; revenue: number }>();
 
-    for (const order of orders) {
+    for (const order of completedOrders) {
       const items = await this.getOrderItems(order.id);
       for (const item of items) {
-        const product = this.products.get(item.productId);
+        const product = await this.getProduct(item.productId);
         if (product) {
           const current = productStats.get(product.id) || { name: product.name, quantity: 0, revenue: 0 };
           productStats.set(product.id, {
@@ -1139,128 +609,102 @@ export class MemStorage implements IStorage {
   }
 
   async getRecentOrders(startDate: Date, endDate: Date): Promise<Order[]> {
-    const orders = Array.from(this.orders.values())
-      .filter(order => {
-        if (order.status !== 'completed') return false;
-        const orderDate = new Date(order.createdAt);
-        return orderDate >= startDate && orderDate <= endDate;
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10);
-    return orders;
+    return await db.select().from(orders)
+      .where(and(
+        eq(orders.status, 'completed'),
+        gte(orders.createdAt, startDate),
+        lte(orders.createdAt, endDate)
+      ))
+      .orderBy(desc(orders.createdAt))
+      .limit(10);
   }
 
   async getExpenseCategories(): Promise<ExpenseCategory[]> {
-    return Array.from(this.expenseCategories.values());
+    return await db.select().from(expenseCategories);
   }
 
   async getExpenseCategory(id: string): Promise<ExpenseCategory | undefined> {
-    return this.expenseCategories.get(id);
+    const result = await db.select().from(expenseCategories).where(eq(expenseCategories.id, id));
+    return result[0];
   }
 
   async createExpenseCategory(insertCategory: InsertExpenseCategory): Promise<ExpenseCategory> {
-    const id = randomUUID();
-    const category: ExpenseCategory = { ...insertCategory, id, description: insertCategory.description ?? null };
-    this.expenseCategories.set(id, category);
-    return category;
+    const result = await db.insert(expenseCategories).values(insertCategory).returning();
+    return result[0];
   }
 
   async updateExpenseCategory(id: string, updates: Partial<InsertExpenseCategory>): Promise<ExpenseCategory | undefined> {
-    const category = this.expenseCategories.get(id);
-    if (!category) return undefined;
-    const updated = { ...category, ...updates };
-    this.expenseCategories.set(id, updated);
-    return updated;
+    const result = await db.update(expenseCategories).set(updates).where(eq(expenseCategories.id, id)).returning();
+    return result[0];
   }
 
   async deleteExpenseCategory(id: string): Promise<boolean> {
-    const exists = this.expenseCategories.has(id);
-    if (!exists) return false;
-    this.expenseCategories.delete(id);
-    return true;
+    const result = await db.delete(expenseCategories).where(eq(expenseCategories.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getExpenses(branchId?: string | null): Promise<Expense[]> {
-    const expenses = Array.from(this.expenses.values());
     if (branchId) {
-      return expenses.filter(e => e.branchId === branchId);
+      return await db.select().from(expenses).where(eq(expenses.branchId, branchId));
     }
-    return expenses;
+    return await db.select().from(expenses);
   }
 
   async getExpense(id: string): Promise<Expense | undefined> {
-    return this.expenses.get(id);
+    const result = await db.select().from(expenses).where(eq(expenses.id, id));
+    return result[0];
   }
 
   async createExpense(insertExpense: InsertExpense): Promise<Expense> {
-    const id = randomUUID();
-    const expense: Expense = { ...insertExpense, id, createdAt: new Date() };
-    this.expenses.set(id, expense);
-    return expense;
+    const result = await db.insert(expenses).values(insertExpense).returning();
+    return result[0];
   }
 
   async updateExpense(id: string, updates: Partial<InsertExpense>): Promise<Expense | undefined> {
-    const expense = this.expenses.get(id);
-    if (!expense) return undefined;
-    const updated = { ...expense, ...updates };
-    this.expenses.set(id, updated);
-    return updated;
+    const result = await db.update(expenses).set(updates).where(eq(expenses.id, id)).returning();
+    return result[0];
   }
 
   async deleteExpense(id: string): Promise<boolean> {
-    const exists = this.expenses.has(id);
-    if (!exists) return false;
-    this.expenses.delete(id);
-    return true;
+    const result = await db.delete(expenses).where(eq(expenses.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getPurchases(branchId?: string | null): Promise<Purchase[]> {
-    const purchases = Array.from(this.purchases.values());
     if (branchId) {
-      return purchases.filter(p => p.branchId === branchId);
+      return await db.select().from(purchases).where(eq(purchases.branchId, branchId));
     }
-    return purchases;
+    return await db.select().from(purchases);
   }
 
   async getPurchase(id: string): Promise<Purchase | undefined> {
-    return this.purchases.get(id);
+    const result = await db.select().from(purchases).where(eq(purchases.id, id));
+    return result[0];
   }
 
   async createPurchase(insertPurchase: InsertPurchase): Promise<Purchase> {
-    const id = randomUUID();
-    const purchase: Purchase = {
-      ...insertPurchase,
-      id,
-      imageUrl: insertPurchase.imageUrl ?? null,
-      productId: insertPurchase.productId ?? null,
-      createdAt: new Date(),
-    };
-    this.purchases.set(id, purchase);
+    const result = await db.insert(purchases).values(insertPurchase).returning();
+    const purchase = result[0];
     
-    // If productId is provided, automatically add to inventory
     if (insertPurchase.productId) {
-      const product = this.products.get(insertPurchase.productId);
+      const product = await this.getProduct(insertPurchase.productId);
       if (product) {
         const currentQty = parseFloat(product.quantity);
         const purchasedQty = parseFloat(insertPurchase.quantity);
         const newQty = currentQty + purchasedQty;
         
-        product.quantity = newQty.toString();
-        this.products.set(insertPurchase.productId, product);
+        await db.update(products)
+          .set({ quantity: newQty.toString() })
+          .where(eq(products.id, insertPurchase.productId));
         
-        // Create inventory adjustment record for tracking
-        const adjustmentId = randomUUID();
-        const adjustment: InventoryAdjustment = {
-          id: adjustmentId,
+        await db.insert(inventoryAdjustments).values({
           productId: insertPurchase.productId,
           adjustmentType: "add",
           quantity: purchasedQty.toString(),
           reason: "purchase",
           notes: `Automatic addition from purchase - ${insertPurchase.itemName}`,
           performedBy: null,
-          createdAt: new Date(),
-        };
-        this.inventoryAdjustments.set(adjustmentId, adjustment);
+        });
       }
     }
     
@@ -1268,12 +712,11 @@ export class MemStorage implements IStorage {
   }
 
   async updatePurchase(id: string, updates: Partial<InsertPurchase>): Promise<Purchase | undefined> {
-    const purchase = this.purchases.get(id);
+    const purchase = await this.getPurchase(id);
     if (!purchase) return undefined;
     
-    // If purchase was linked to a product and quantity changed, adjust inventory
     if (purchase.productId && updates.quantity !== undefined) {
-      const product = this.products.get(purchase.productId);
+      const product = await this.getProduct(purchase.productId);
       if (product) {
         const oldQty = parseFloat(purchase.quantity);
         const newQty = parseFloat(updates.quantity);
@@ -1283,553 +726,361 @@ export class MemStorage implements IStorage {
           const currentInventory = parseFloat(product.quantity);
           const newInventory = Math.max(0, currentInventory + delta);
           
-          product.quantity = newInventory.toString();
-          this.products.set(purchase.productId, product);
+          await db.update(products)
+            .set({ quantity: newInventory.toString() })
+            .where(eq(products.id, purchase.productId));
           
-          // Create inventory adjustment record
-          const adjustmentId = randomUUID();
-          const adjustment: InventoryAdjustment = {
-            id: adjustmentId,
+          await db.insert(inventoryAdjustments).values({
             productId: purchase.productId,
             adjustmentType: delta > 0 ? "add" : "remove",
             quantity: Math.abs(delta).toString(),
             reason: "purchase",
             notes: `Adjustment from purchase update - ${purchase.itemName} (changed from ${oldQty} to ${newQty})`,
             performedBy: null,
-            createdAt: new Date(),
-          };
-          this.inventoryAdjustments.set(adjustmentId, adjustment);
+          });
         }
       }
     }
     
-    const updated = { ...purchase, ...updates };
-    this.purchases.set(id, updated);
-    return updated;
+    const result = await db.update(purchases).set(updates).where(eq(purchases.id, id)).returning();
+    return result[0];
   }
 
   async deletePurchase(id: string): Promise<boolean> {
-    const purchase = this.purchases.get(id);
+    const purchase = await this.getPurchase(id);
     if (!purchase) return false;
     
-    // If purchase was linked to a product, reverse the inventory change
     if (purchase.productId) {
-      const product = this.products.get(purchase.productId);
+      const product = await this.getProduct(purchase.productId);
       if (product) {
         const purchasedQty = parseFloat(purchase.quantity);
         const currentInventory = parseFloat(product.quantity);
         const newInventory = Math.max(0, currentInventory - purchasedQty);
         
-        product.quantity = newInventory.toString();
-        this.products.set(purchase.productId, product);
+        await db.update(products)
+          .set({ quantity: newInventory.toString() })
+          .where(eq(products.id, purchase.productId));
         
-        // Create inventory adjustment record for reversal
-        const adjustmentId = randomUUID();
-        const adjustment: InventoryAdjustment = {
-          id: adjustmentId,
+        await db.insert(inventoryAdjustments).values({
           productId: purchase.productId,
           adjustmentType: "remove",
           quantity: purchasedQty.toString(),
           reason: "purchase",
           notes: `Reversal from purchase deletion - ${purchase.itemName}`,
           performedBy: null,
-          createdAt: new Date(),
-        };
-        this.inventoryAdjustments.set(adjustmentId, adjustment);
+        });
       }
     }
     
-    this.purchases.delete(id);
-    return true;
+    const result = await db.delete(purchases).where(eq(purchases.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getEmployees(branchId?: string | null): Promise<Employee[]> {
-    const employees = Array.from(this.employees.values());
     if (branchId) {
-      return employees.filter(e => e.branchId === branchId);
+      return await db.select().from(employees).where(eq(employees.branchId, branchId));
     }
-    return employees;
+    return await db.select().from(employees);
   }
 
   async getEmployee(id: string): Promise<Employee | undefined> {
-    return this.employees.get(id);
+    const result = await db.select().from(employees).where(eq(employees.id, id));
+    return result[0];
   }
 
   async createEmployee(insertEmployee: InsertEmployee): Promise<Employee> {
-    const id = randomUUID();
-    const employee: Employee = {
-      ...insertEmployee,
-      id,
-      photoUrl: insertEmployee.photoUrl ?? null,
-      email: insertEmployee.email ?? null,
-      phone: insertEmployee.phone ?? null,
-      status: insertEmployee.status ?? "active",
-      createdAt: new Date(),
-    };
-    this.employees.set(id, employee);
-    return employee;
+    const result = await db.insert(employees).values(insertEmployee).returning();
+    return result[0];
   }
 
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee | undefined> {
-    const employee = this.employees.get(id);
-    if (!employee) return undefined;
-    const updated = { ...employee, ...updates };
-    this.employees.set(id, updated);
-    return updated;
+    const result = await db.update(employees).set(updates).where(eq(employees.id, id)).returning();
+    return result[0];
   }
 
   async deleteEmployee(id: string): Promise<boolean> {
-    const exists = this.employees.has(id);
-    if (!exists) return false;
-    this.employees.delete(id);
-    return true;
+    const result = await db.delete(employees).where(eq(employees.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getAttendance(): Promise<Attendance[]> {
-    return Array.from(this.attendance.values());
+    return await db.select().from(attendance);
   }
 
   async getAttendanceByDate(date: Date): Promise<Attendance[]> {
-    const targetDate = new Date(date).toDateString();
-    return Array.from(this.attendance.values()).filter((att) => {
-      return new Date(att.date).toDateString() === targetDate;
-    });
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    return await db.select().from(attendance)
+      .where(and(
+        gte(attendance.date, startOfDay),
+        lte(attendance.date, endOfDay)
+      ));
   }
 
   async getAttendanceByEmployee(employeeId: string): Promise<Attendance[]> {
-    return Array.from(this.attendance.values()).filter((att) => att.employeeId === employeeId);
+    return await db.select().from(attendance).where(eq(attendance.employeeId, employeeId));
   }
 
   async createAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
-    const id = randomUUID();
-    const attendance: Attendance = {
-      ...insertAttendance,
-      id,
-      checkIn: insertAttendance.checkIn ?? null,
-      checkOut: insertAttendance.checkOut ?? null,
-      createdAt: new Date(),
-    };
-    this.attendance.set(id, attendance);
-    return attendance;
+    const result = await db.insert(attendance).values(insertAttendance).returning();
+    return result[0];
   }
 
   async updateAttendance(id: string, updates: Partial<InsertAttendance>): Promise<Attendance | undefined> {
-    const attendance = this.attendance.get(id);
-    if (!attendance) return undefined;
-    const updated = { ...attendance, ...updates };
-    this.attendance.set(id, updated);
-    return updated;
+    const result = await db.update(attendance).set(updates).where(eq(attendance.id, id)).returning();
+    return result[0];
   }
 
   async deleteAttendance(id: string): Promise<boolean> {
-    const exists = this.attendance.has(id);
-    if (!exists) return false;
-    this.attendance.delete(id);
-    return true;
+    const result = await db.delete(attendance).where(eq(attendance.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getLeaves(): Promise<Leave[]> {
-    return Array.from(this.leaves.values());
+    return await db.select().from(leaves);
   }
 
   async getLeave(id: string): Promise<Leave | undefined> {
-    return this.leaves.get(id);
+    const result = await db.select().from(leaves).where(eq(leaves.id, id));
+    return result[0];
   }
 
   async getLeavesByEmployee(employeeId: string): Promise<Leave[]> {
-    return Array.from(this.leaves.values()).filter((leave) => leave.employeeId === employeeId);
+    return await db.select().from(leaves).where(eq(leaves.employeeId, employeeId));
   }
 
   async createLeave(insertLeave: InsertLeave): Promise<Leave> {
-    const id = randomUUID();
-    const leave: Leave = {
-      ...insertLeave,
-      id,
-      reason: insertLeave.reason ?? null,
-      status: insertLeave.status ?? "pending",
-      createdAt: new Date(),
-    };
-    this.leaves.set(id, leave);
-    return leave;
+    const result = await db.insert(leaves).values(insertLeave).returning();
+    return result[0];
   }
 
   async updateLeave(id: string, updates: Partial<InsertLeave>): Promise<Leave | undefined> {
-    const leave = this.leaves.get(id);
-    if (!leave) return undefined;
-    const updated = { ...leave, ...updates };
-    this.leaves.set(id, updated);
-    return updated;
+    const result = await db.update(leaves).set(updates).where(eq(leaves.id, id)).returning();
+    return result[0];
   }
 
   async deleteLeave(id: string): Promise<boolean> {
-    const exists = this.leaves.has(id);
-    if (!exists) return false;
-    this.leaves.delete(id);
-    return true;
+    const result = await db.delete(leaves).where(eq(leaves.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getPayroll(): Promise<Payroll[]> {
-    return Array.from(this.payroll.values());
+    return await db.select().from(payroll);
   }
 
   async getPayrollById(id: string): Promise<Payroll | undefined> {
-    return this.payroll.get(id);
+    const result = await db.select().from(payroll).where(eq(payroll.id, id));
+    return result[0];
   }
 
   async getPayrollByEmployee(employeeId: string): Promise<Payroll[]> {
-    return Array.from(this.payroll.values()).filter((pay) => pay.employeeId === employeeId);
+    return await db.select().from(payroll).where(eq(payroll.employeeId, employeeId));
   }
 
   async createPayroll(insertPayroll: InsertPayroll): Promise<Payroll> {
-    const id = randomUUID();
-    const payroll: Payroll = {
-      ...insertPayroll,
-      id,
-      bonus: insertPayroll.bonus ?? "0",
-      deductions: insertPayroll.deductions ?? "0",
-      status: insertPayroll.status ?? "pending",
-      createdAt: new Date(),
-    };
-    this.payroll.set(id, payroll);
-    return payroll;
+    const result = await db.insert(payroll).values(insertPayroll).returning();
+    return result[0];
   }
 
   async updatePayroll(id: string, updates: Partial<InsertPayroll>): Promise<Payroll | undefined> {
-    const payroll = this.payroll.get(id);
-    if (!payroll) return undefined;
-    const updated = { ...payroll, ...updates };
-    this.payroll.set(id, updated);
-    return updated;
+    const result = await db.update(payroll).set(updates).where(eq(payroll.id, id)).returning();
+    return result[0];
   }
 
   async deletePayroll(id: string): Promise<boolean> {
-    const exists = this.payroll.has(id);
-    if (!exists) return false;
-    this.payroll.delete(id);
-    return true;
+    const result = await db.delete(payroll).where(eq(payroll.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getStaffSalaries(): Promise<StaffSalary[]> {
-    return Array.from(this.staffSalaries.values());
+    return await db.select().from(staffSalaries);
   }
 
   async getStaffSalary(id: string): Promise<StaffSalary | undefined> {
-    return this.staffSalaries.get(id);
+    const result = await db.select().from(staffSalaries).where(eq(staffSalaries.id, id));
+    return result[0];
   }
 
   async createStaffSalary(insertSalary: InsertStaffSalary): Promise<StaffSalary> {
-    const id = randomUUID();
-    const salary: StaffSalary = {
-      ...insertSalary,
-      id,
-      deductSalary: insertSalary.deductSalary ?? "0",
-      createdAt: new Date(),
-    };
-    this.staffSalaries.set(id, salary);
-    return salary;
+    const result = await db.insert(staffSalaries).values(insertSalary).returning();
+    return result[0];
   }
 
   async updateStaffSalary(id: string, updates: Partial<InsertStaffSalary>): Promise<StaffSalary | undefined> {
-    const salary = this.staffSalaries.get(id);
-    if (!salary) return undefined;
-    const updated = { ...salary, ...updates };
-    this.staffSalaries.set(id, updated);
-    return updated;
+    const result = await db.update(staffSalaries).set(updates).where(eq(staffSalaries.id, id)).returning();
+    return result[0];
   }
 
   async deleteStaffSalary(id: string): Promise<boolean> {
-    const exists = this.staffSalaries.has(id);
-    if (!exists) return false;
-    this.staffSalaries.delete(id);
-    return true;
+    const result = await db.delete(staffSalaries).where(eq(staffSalaries.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getSettings(): Promise<Settings | undefined> {
-    if (this.settings === null) {
-      const defaultSettings: Settings = {
-        id: randomUUID(),
-        businessName: "BondPos POS",
-        businessLogo: null,
-        address: null,
-        phone: null,
-        email: null,
-        dateFormat: "dd-mm-yyyy",
-        timeFormat: "12h",
-        terminalId: null,
-        paymentCash: "true",
-        paymentCard: "true",
-        paymentAba: "true",
-        paymentAcleda: "true",
-        paymentCredit: "true",
-        defaultPaymentMethod: "cash",
-        minTransactionAmount: "0",
-        maxTransactionAmount: null,
-        vatRate: "0",
-        serviceTaxRate: "0",
-        defaultDiscount: "0",
-        enablePercentageDiscount: "true",
-        enableFixedDiscount: "true",
-        maxDiscount: "50",
-        invoicePrefix: "INV-",
-        receiptHeader: null,
-        receiptFooter: null,
-        receiptLogo: null,
-        autoPrintReceipt: "false",
-        showLogoOnReceipt: "true",
-        includeTaxBreakdown: "true",
-        receiptPrinter: "default",
-        kitchenPrinter: "none",
-        paperSize: "80mm",
-        enableBarcodeScanner: "false",
-        enableCashDrawer: "true",
-        currency: "usd",
-        language: "en",
-        decimalPlaces: "2",
-        roundingRule: "nearest",
-        currencySymbolPosition: "before",
-        autoBackup: "true",
-        backupFrequency: "daily",
-        backupStorage: "cloud",
-        lowStockAlerts: "true",
-        stockThreshold: 10,
-        saleNotifications: "false",
-        discountAlerts: "false",
-        systemUpdateNotifications: "true",
-        notificationEmail: null,
-        colorTheme: "orange",
-        layoutPreference: "grid",
-        fontSize: "medium",
-        compactMode: "false",
-        showAnimations: "true",
-        permAccessReports: "true",
-        permAccessSettings: "false",
-        permProcessRefunds: "false",
-        permManageInventory: "true",
-        updatedAt: new Date(),
-      };
-      this.settings = defaultSettings;
+    const result = await db.select().from(settings).limit(1);
+    if (result.length === 0) {
+      const defaultSettings = await db.insert(settings).values({}).returning();
+      return defaultSettings[0];
     }
-    return this.settings;
+    return result[0];
   }
 
   async updateSettings(updates: Partial<InsertSettings>): Promise<Settings> {
-    if (this.settings === null) {
-      await this.getSettings();
+    const current = await this.getSettings();
+    if (!current) {
+      const result = await db.insert(settings).values(updates).returning();
+      return result[0];
     }
-    this.settings = {
-      ...this.settings!,
-      ...updates,
-      updatedAt: new Date(),
-    };
-    return this.settings;
+    
+    const result = await db.update(settings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(settings.id, current.id))
+      .returning();
+    return result[0];
+  }
+
+  async getInventoryAdjustments(): Promise<InventoryAdjustment[]> {
+    return await db.select().from(inventoryAdjustments).orderBy(desc(inventoryAdjustments.createdAt));
+  }
+
+  async getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined> {
+    const result = await db.select().from(inventoryAdjustments).where(eq(inventoryAdjustments.id, id));
+    return result[0];
+  }
+
+  async getInventoryAdjustmentsByProduct(productId: string): Promise<InventoryAdjustment[]> {
+    return await db.select().from(inventoryAdjustments)
+      .where(eq(inventoryAdjustments.productId, productId))
+      .orderBy(desc(inventoryAdjustments.createdAt));
+  }
+
+  async createInventoryAdjustment(insertAdjustment: InsertInventoryAdjustment): Promise<InventoryAdjustment> {
+    const result = await db.insert(inventoryAdjustments).values(insertAdjustment).returning();
+    return result[0];
+  }
+
+  async getLowStockProducts(threshold: number): Promise<Product[]> {
+    return await db.select().from(products)
+      .where(sql`CAST(${products.quantity} AS DECIMAL) <= ${threshold}`);
   }
 
   async getUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return await db.select().from(users);
   }
 
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.username === username);
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const hashedPassword = bcrypt.hashSync(insertUser.password, 10);
-    const user: User = {
+    const hashedPassword = await bcrypt.hash(insertUser.password, 10);
+    const userWithHashedPassword = {
       ...insertUser,
-      id,
       password: hashedPassword,
-      role: insertUser.role ?? "staff",
-      email: insertUser.email ?? null,
-      employeeId: insertUser.employeeId ?? null,
-      isActive: insertUser.isActive ?? "true",
-      createdAt: new Date(),
     };
-    this.users.set(id, user);
-    return user;
+    const result = await db.insert(users).values(userWithHashedPassword).returning();
+    return result[0];
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-    
-    const updatedUser = { ...user, ...updates };
+    const updateData = { ...updates };
     if (updates.password) {
-      updatedUser.password = bcrypt.hashSync(updates.password, 10);
+      updateData.password = await bcrypt.hash(updates.password, 10);
     }
-    
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    const result = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    return result[0];
   }
 
   async deleteUser(id: string): Promise<boolean> {
-    const exists = this.users.has(id);
-    if (!exists) return false;
-    this.users.delete(id);
-    return true;
+    const result = await db.delete(users).where(eq(users.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async validateUserCredentials(username: string, password: string): Promise<User | null> {
     const user = await this.getUserByUsername(username);
     if (!user) return null;
     
-    if (user.isActive !== "true") return null;
-    
-    const isValid = bcrypt.compareSync(password, user.password);
+    const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) return null;
     
     return user;
-  }
-
-  async getInventoryAdjustments(): Promise<InventoryAdjustment[]> {
-    return Array.from(this.inventoryAdjustments.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    );
-  }
-
-  async getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined> {
-    return this.inventoryAdjustments.get(id);
-  }
-
-  async getInventoryAdjustmentsByProduct(productId: string): Promise<InventoryAdjustment[]> {
-    return Array.from(this.inventoryAdjustments.values())
-      .filter(adj => adj.productId === productId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  }
-
-  async createInventoryAdjustment(insertAdjustment: InsertInventoryAdjustment): Promise<InventoryAdjustment> {
-    const id = randomUUID();
-    const adjustment: InventoryAdjustment = {
-      ...insertAdjustment,
-      id,
-      notes: insertAdjustment.notes ?? null,
-      performedBy: insertAdjustment.performedBy ?? null,
-      createdAt: new Date(),
-    };
-    
-    this.inventoryAdjustments.set(id, adjustment);
-    
-    // Update product quantity
-    const product = this.products.get(insertAdjustment.productId);
-    if (product) {
-      const currentQty = parseFloat(product.quantity);
-      const adjustQty = parseFloat(insertAdjustment.quantity);
-      let newQty: number;
-      
-      if (insertAdjustment.adjustmentType === "add") {
-        newQty = currentQty + adjustQty;
-      } else if (insertAdjustment.adjustmentType === "remove") {
-        newQty = currentQty - adjustQty;
-      } else {
-        newQty = adjustQty; // set
-      }
-      
-      product.quantity = Math.max(0, newQty).toString();
-      this.products.set(insertAdjustment.productId, product);
-    }
-    
-    return adjustment;
-  }
-
-  async getLowStockProducts(threshold: number): Promise<Product[]> {
-    return Array.from(this.products.values())
-      .filter(p => parseFloat(p.quantity) <= threshold)
-      .sort((a, b) => parseFloat(a.quantity) - parseFloat(b.quantity));
-  }
-
-  async getBranches(): Promise<Branch[]> {
-    return Array.from(this.branches.values()).sort(
-      (a, b) => a.name.localeCompare(b.name)
-    );
-  }
-
-  async getBranch(id: string): Promise<Branch | undefined> {
-    return this.branches.get(id);
-  }
-
-  async getBranchByName(name: string): Promise<Branch | undefined> {
-    return Array.from(this.branches.values()).find(
-      (branch) => branch.name.toLowerCase() === name.toLowerCase()
-    );
-  }
-
-  async getBranchByUsername(username: string): Promise<Branch | undefined> {
-    return Array.from(this.branches.values()).find(
-      (branch) => branch.username.toLowerCase() === username.toLowerCase()
-    );
   }
 
   async validateBranchCredentials(username: string, password: string): Promise<Branch | null> {
     const branch = await this.getBranchByUsername(username);
     if (!branch) return null;
     
-    if (branch.isActive !== "true") return null;
-    
-    const isValid = bcrypt.compareSync(password, branch.password);
+    const isValid = await bcrypt.compare(password, branch.password);
     if (!isValid) return null;
     
     return branch;
   }
 
-  async createBranch(insertBranch: InsertBranch): Promise<Branch> {
-    const id = randomUUID();
-    const branch: Branch = {
-      ...insertBranch,
-      id,
-      location: insertBranch.location ?? null,
-      contactPerson: insertBranch.contactPerson ?? null,
-      phone: insertBranch.phone ?? null,
-      email: insertBranch.email ?? null,
-      createdAt: new Date(),
-    };
+  async getBranches(): Promise<Branch[]> {
+    return await db.select().from(branches);
+  }
 
-    this.branches.set(id, branch);
-    return branch;
+  async getBranch(id: string): Promise<Branch | undefined> {
+    const result = await db.select().from(branches).where(eq(branches.id, id));
+    return result[0];
+  }
+
+  async getBranchByName(name: string): Promise<Branch | undefined> {
+    const result = await db.select().from(branches).where(eq(branches.name, name));
+    return result[0];
+  }
+
+  async getBranchByUsername(username: string): Promise<Branch | undefined> {
+    const result = await db.select().from(branches).where(eq(branches.username, username));
+    return result[0];
+  }
+
+  async createBranch(insertBranch: InsertBranch): Promise<Branch> {
+    const hashedPassword = await bcrypt.hash(insertBranch.password, 10);
+    const branchWithHashedPassword = {
+      ...insertBranch,
+      password: hashedPassword,
+    };
+    const result = await db.insert(branches).values(branchWithHashedPassword).returning();
+    return result[0];
   }
 
   async updateBranch(id: string, updates: Partial<InsertBranch>): Promise<Branch | undefined> {
-    const branch = this.branches.get(id);
-    if (!branch) return undefined;
-
-    const updatedBranch = { ...branch, ...updates };
-    this.branches.set(id, updatedBranch);
-    return updatedBranch;
+    const updateData = { ...updates };
+    if (updates.password) {
+      updateData.password = await bcrypt.hash(updates.password, 10);
+    }
+    const result = await db.update(branches).set(updateData).where(eq(branches.id, id)).returning();
+    return result[0];
   }
 
   async deleteBranch(id: string): Promise<boolean> {
-    const exists = this.branches.has(id);
-    if (!exists) return false;
-    this.branches.delete(id);
-    return true;
+    const result = await db.delete(branches).where(eq(branches.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
   }
 
   async getPaymentAdjustments(branchId?: string | null): Promise<PaymentAdjustment[]> {
-    const adjustments = Array.from(this.paymentAdjustments.values());
     if (branchId) {
-      return adjustments.filter(adj => adj.branchId === branchId);
+      return await db.select().from(paymentAdjustments)
+        .where(eq(paymentAdjustments.branchId, branchId))
+        .orderBy(desc(paymentAdjustments.createdAt));
     }
-    return adjustments.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    return await db.select().from(paymentAdjustments).orderBy(desc(paymentAdjustments.createdAt));
   }
 
   async createPaymentAdjustment(insertAdjustment: InsertPaymentAdjustment): Promise<PaymentAdjustment> {
-    const id = randomUUID();
-    const adjustment: PaymentAdjustment = {
-      ...insertAdjustment,
-      id,
-      description: insertAdjustment.description ?? null,
-      branchId: insertAdjustment.branchId ?? null,
-      createdAt: new Date(),
-    };
-
-    this.paymentAdjustments.set(id, adjustment);
-    return adjustment;
+    const result = await db.insert(paymentAdjustments).values(insertAdjustment).returning();
+    return result[0];
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
