@@ -246,7 +246,9 @@ export class DatabaseStorage implements IStorage {
 
   async getProducts(branchId?: string | null): Promise<Product[]> {
     if (branchId) {
-      return await db.select().from(products).where(eq(products.branchId, branchId));
+      // Return products with matching branchId OR NULL branchId (global products)
+      return await db.select().from(products)
+        .where(or(eq(products.branchId, branchId), isNull(products.branchId)));
     }
     return await db.select().from(products);
   }
@@ -258,8 +260,12 @@ export class DatabaseStorage implements IStorage {
 
   async getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]> {
     if (branchId) {
+      // Return products with matching category and (matching branchId OR NULL branchId)
       return await db.select().from(products)
-        .where(and(eq(products.categoryId, categoryId), eq(products.branchId, branchId)));
+        .where(and(
+          eq(products.categoryId, categoryId),
+          or(eq(products.branchId, branchId), isNull(products.branchId))
+        ));
     }
     return await db.select().from(products).where(eq(products.categoryId, categoryId));
   }
