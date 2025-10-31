@@ -851,6 +851,67 @@ export default function SettingsPage() {
                     </Select>
                   </div>
 
+                  <Separator />
+
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-medium">Secondary Currency for Receipts</Label>
+                    <p className="text-sm text-muted-foreground">Configure dual currency display on receipts and invoices</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="secondary-currency">Secondary Currency</Label>
+                    <Select 
+                      value={formData.secondaryCurrency || ""} 
+                      onValueChange={(value) => updateField("secondaryCurrency", value)}
+                    >
+                      <SelectTrigger id="secondary-currency" data-testid="select-secondary-currency">
+                        <SelectValue placeholder="Select currency (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="khr">KHR (Cambodian Riel)</SelectItem>
+                        <SelectItem value="rial">Rial (Iranian Rial)</SelectItem>
+                        <SelectItem value="bdt">BDT (Bangladeshi Taka)</SelectItem>
+                        <SelectItem value="inr">INR (Indian Rupee)</SelectItem>
+                        <SelectItem value="pkr">PKR (Pakistani Rupee)</SelectItem>
+                        <SelectItem value="thb">THB (Thai Baht)</SelectItem>
+                        <SelectItem value="vnd">VND (Vietnamese Dong)</SelectItem>
+                        <SelectItem value="myr">MYR (Malaysian Ringgit)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="secondary-currency-symbol">Currency Symbol</Label>
+                    <Input 
+                      id="secondary-currency-symbol" 
+                      value={formData.secondaryCurrencySymbol || ""} 
+                      onChange={(e) => updateField("secondaryCurrencySymbol", e.target.value)}
+                      placeholder="e.g., ៛, Rial, BDT, ₹"
+                      data-testid="input-currency-symbol" 
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="exchange-rate">Exchange Rate (1 USD = ?)</Label>
+                    <Input 
+                      id="exchange-rate" 
+                      type="number"
+                      step="0.01"
+                      value={formData.exchangeRate || ""} 
+                      onChange={(e) => updateField("exchangeRate", e.target.value)}
+                      placeholder="e.g., 4100, 4000, 125"
+                      data-testid="input-exchange-rate" 
+                    />
+                    {formData.exchangeRate && formData.secondaryCurrencySymbol && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        1 USD = {formData.exchangeRate} {formData.secondaryCurrencySymbol}
+                      </p>
+                    )}
+                  </div>
+
+                  <Separator />
+
                   <div>
                     <Label htmlFor="language">Language</Label>
                     <Select 
