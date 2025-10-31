@@ -45,7 +45,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, Pencil, Printer, Trash2, Download, FileSpreadsheet, FileText, Search, Calendar as CalendarIcon } from "lucide-react";
+import { Eye, Pencil, Printer, Trash2, Download, FileSpreadsheet, FileText, Search, Calendar as CalendarIcon, Trash } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format, startOfDay, endOfDay, subDays, isWithinInterval } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -96,6 +97,8 @@ export default function SalesManage() {
   const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
   const [newPaymentMethod, setNewPaymentMethod] = useState<string>("cash");
   const [newPaymentAmount, setNewPaymentAmount] = useState<string>("");
+  const [selectedSales, setSelectedSales] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const { toast} = useToast();
 
   const { data: sales = [], isLoading } = useQuery<Order[]>({
@@ -176,6 +179,50 @@ export default function SalesManage() {
       });
     },
   });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return Promise.all(ids.map(id => apiRequest("DELETE", `/api/orders/${id}`)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Success",
+        description: `${selectedSales.size} sale(s) deleted successfully`,
+      });
+      setSelectedSales(new Set());
+      setShowBulkDeleteDialog(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete selected sales",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleSelectAll = () => {
+    if (selectedSales.size === filteredSales.length) {
+      setSelectedSales(new Set());
+    } else {
+      setSelectedSales(new Set(filteredSales.map(sale => sale.id)));
+    }
+  };
+
+  const toggleSelectSale = (id: string) => {
+    const newSelected = new Set(selectedSales);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedSales(newSelected);
+  };
+
+  const handleBulkDelete = () => {
+    bulkDeleteMutation.mutate(Array.from(selectedSales));
+  };
 
   // Fetch order items when viewing or editing a sale
   useEffect(() => {
@@ -576,6 +623,17 @@ export default function SalesManage() {
                 />
               </div>
               
+              {selectedSales.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash className="w-4 h-4 mr-2" />
+                  Delete Selected ({selectedSales.size})
+                </Button>
+              )}
+              
               <div className="flex gap-2">
                 <Select value={dateFilter} onValueChange={(value: DateFilterType) => setDateFilter(value)}>
                   <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
@@ -638,6 +696,13 @@ export default function SalesManage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedSales.size === filteredSales.length && filteredSales.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
                       <TableHead data-testid="header-sale-id">Sale ID</TableHead>
                       <TableHead data-testid="header-invoice-no">Invoice No</TableHead>
                       <TableHead data-testid="header-date-time">Date & Time</TableHead>
@@ -652,6 +717,13 @@ export default function SalesManage() {
                   <TableBody>
                     {filteredSales.map((sale) => (
                       <TableRow key={sale.id} data-testid={`row-sale-${sale.id}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedSales.has(sale.id)}
+                            onCheckedChange={() => toggleSelectSale(sale.id)}
+                            data-testid={`checkbox-select-${sale.id}`}
+                          />
+                        </TableCell>
                         <TableCell data-testid={`text-sale-id-${sale.id}`}>{sale.id}</TableCell>
                         <TableCell data-testid={`text-invoice-no-${sale.id}`}>INV-{sale.orderNumber}</TableCell>
                         <TableCell data-testid={`text-date-${sale.id}`}>
@@ -1214,6 +1286,29 @@ export default function SalesManage() {
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent data-testid="dialog-bulk-delete">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Sales</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedSales.size} selected sale(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover-elevate"
+              data-testid="button-confirm-bulk-delete"
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete All"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
