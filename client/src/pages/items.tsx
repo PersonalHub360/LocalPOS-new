@@ -386,19 +386,47 @@ export default function ItemManage() {
         const lines = text.split('\n').slice(1);
         rows = lines.map(line => {
           if (!line.trim()) return [];
-          const matches = line.match(/(?:"([^"]*)"|([^,]*))/g);
-          return matches ? matches.map(m => m.replace(/^"|"$/g, '').trim()) : [];
+          // Better CSV parsing that handles quoted fields correctly
+          const fields: string[] = [];
+          let currentField = '';
+          let insideQuotes = false;
+          
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+            
+            if (char === '"') {
+              if (insideQuotes && nextChar === '"') {
+                // Escaped quote
+                currentField += '"';
+                i++; // Skip next quote
+              } else {
+                // Toggle quote state
+                insideQuotes = !insideQuotes;
+              }
+            } else if (char === ',' && !insideQuotes) {
+              // Field separator
+              fields.push(currentField.trim());
+              currentField = '';
+            } else {
+              currentField += char;
+            }
+          }
+          // Add last field
+          fields.push(currentField.trim());
+          return fields;
         });
       }
       
-      let imported = 0;
-      let skipped = 0;
+      // Prepare items for bulk import
+      const itemsToImport: any[] = [];
       const skipReasons: string[] = [];
+      let skippedBeforeImport = 0;
       
       for (const row of rows) {
         if (!row || row.length < 6) {
           if (row && row.length > 0) {
-            skipped++;
+            skippedBeforeImport++;
             skipReasons.push(`Row with insufficient data (need at least 6 columns)`);
           }
           continue;
@@ -413,48 +441,77 @@ export default function ItemManage() {
         const description = (row[6] || "").toString().trim();
 
         if (!name || !categoryName || !price || !unit || !quantity) {
-          skipped++;
-          skipReasons.push(`Row "${name || 'unnamed'}": Missing required fields`);
+          skippedBeforeImport++;
+          const missing = [];
+          if (!name) missing.push('Name');
+          if (!categoryName) missing.push('Category');
+          if (!price) missing.push('Sales Price');
+          if (!unit) missing.push('Unit');
+          if (!quantity) missing.push('Quantity');
+          skipReasons.push(`Row "${name || 'unnamed'}": Missing required fields: ${missing.join(', ')}`);
           continue;
         }
 
         const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
         if (!category) {
-          skipped++;
+          skippedBeforeImport++;
           skipReasons.push(`Row "${name}": Category "${categoryName}" not found`);
           continue;
         }
 
-        try {
-          await apiRequest("POST", "/api/products", {
-            name,
-            categoryId: category.id,
-            purchaseCost: purchaseCost || undefined,
-            price,
-            unit,
-            quantity,
-            description,
-            imageUrl: "",
-          });
-          imported++;
-        } catch (error) {
-          console.error("Failed to import item:", name, error);
-          skipped++;
-          skipReasons.push(`Row "${name}": Failed to save to database`);
-        }
+        itemsToImport.push({
+          name,
+          categoryId: category.id,
+          purchaseCost: purchaseCost || undefined,
+          price,
+          unit,
+          quantity,
+          description,
+          imageUrl: "",
+        });
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      
-      if (skipReasons.length > 0) {
-        console.log("Import skip reasons:", skipReasons);
+      // Bulk import all items
+      if (itemsToImport.length > 0) {
+        try {
+          const result: any = await apiRequest("POST", "/api/products/bulk", { items: itemsToImport });
+          
+          queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+          
+          const totalSkipped = skippedBeforeImport + (result.failed || 0);
+          
+          if (result.errors && result.errors.length > 0) {
+            console.log("Import errors:", result.errors);
+            skipReasons.push(...result.errors.map((e: any) => `Row ${e.row} "${e.name}": ${e.error}`));
+          }
+          
+          if (skipReasons.length > 0) {
+            console.log("Import skip reasons:", skipReasons);
+          }
+          
+          toast({
+            title: "Import Complete",
+            description: `Successfully imported ${result.imported || 0} items${totalSkipped > 0 ? `. ${totalSkipped} items skipped. Check console for details.` : ''}`,
+            variant: totalSkipped > 0 ? "default" : "default",
+          });
+        } catch (error) {
+          console.error("Bulk import failed:", error);
+          toast({
+            title: "Import Failed",
+            description: "Failed to import items. Please try again.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "No Items to Import",
+          description: `${skippedBeforeImport} items skipped due to validation errors. Check console for details.`,
+          variant: "destructive",
+        });
+        if (skipReasons.length > 0) {
+          console.log("Import skip reasons:", skipReasons);
+        }
       }
-      
-      toast({
-        title: "Import Complete",
-        description: `Successfully imported ${imported} items. ${skipped > 0 ? `${skipped} items skipped. Check console for details.` : ''}`,
-        variant: skipped > 0 ? "default" : "default",
-      });
     };
 
     if (isExcel) {

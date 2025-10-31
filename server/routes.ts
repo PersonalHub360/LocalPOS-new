@@ -233,6 +233,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/products/bulk", async (req, res) => {
+    try {
+      const items = req.body.items;
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ error: "Items must be an array" });
+      }
+
+      const results = {
+        imported: 0,
+        failed: 0,
+        errors: [] as Array<{ row: number; name: string; error: string }>
+      };
+
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const validatedData = insertProductSchema.parse(items[i]);
+          await storage.createProduct(validatedData);
+          results.imported++;
+        } catch (error) {
+          results.failed++;
+          const errorMsg = error instanceof z.ZodError 
+            ? error.errors.map(e => e.message).join(", ")
+            : "Unknown error";
+          results.errors.push({
+            row: i + 2, // +2 because row 1 is header and array is 0-indexed
+            name: items[i]?.name || "Unknown",
+            error: errorMsg
+          });
+        }
+      }
+
+      res.status(200).json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to process bulk import" });
+    }
+  });
+
   app.patch("/api/products/:id", async (req, res) => {
     try {
       const product = await storage.updateProduct(req.params.id, req.body);
