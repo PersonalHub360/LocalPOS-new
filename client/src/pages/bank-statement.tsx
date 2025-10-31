@@ -478,7 +478,7 @@ export default function BankStatement() {
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {paymentMethodsData.map((method) => {
-              const data = paymentTotals[method.key] || { total: 0, count: 0 };
+              const data = paymentTotals[method.key] || { total: 0, count: 0, adjustments: 0 };
               const Icon = method.icon;
               const colorMap: Record<string, { border: string; bg: string; icon: string; iconBg: string }> = {
                 'bg-blue-500': { border: 'border-blue-500', bg: 'bg-blue-50 dark:bg-blue-950', icon: 'text-blue-600', iconBg: 'bg-blue-100 dark:bg-blue-900' },
