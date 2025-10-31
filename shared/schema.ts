@@ -306,6 +306,9 @@ export const settings = pgTable("settings", {
   enableCashDrawer: text("enable_cash_drawer").notNull().default("true"),
   
   currency: text("currency").notNull().default("usd"),
+  secondaryCurrency: text("secondary_currency"),
+  secondaryCurrencySymbol: text("secondary_currency_symbol"),
+  exchangeRate: decimal("exchange_rate", { precision: 10, scale: 2 }),
   language: text("language").notNull().default("en"),
   decimalPlaces: text("decimal_places").notNull().default("2"),
   roundingRule: text("rounding_rule").notNull().default("nearest"),
