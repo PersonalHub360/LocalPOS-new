@@ -157,10 +157,12 @@ export interface IStorage {
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
   validateUserCredentials(username: string, password: string): Promise<User | null>;
+  validateBranchCredentials(username: string, password: string): Promise<Branch | null>;
   
   getBranches(): Promise<Branch[]>;
   getBranch(id: string): Promise<Branch | undefined>;
   getBranchByName(name: string): Promise<Branch | undefined>;
+  getBranchByUsername(username: string): Promise<Branch | undefined>;
   createBranch(branch: InsertBranch): Promise<Branch>;
   updateBranch(id: string, branch: Partial<InsertBranch>): Promise<Branch | undefined>;
   deleteBranch(id: string): Promise<boolean>;
@@ -1746,6 +1748,24 @@ export class MemStorage implements IStorage {
     return Array.from(this.branches.values()).find(
       (branch) => branch.name.toLowerCase() === name.toLowerCase()
     );
+  }
+
+  async getBranchByUsername(username: string): Promise<Branch | undefined> {
+    return Array.from(this.branches.values()).find(
+      (branch) => branch.username.toLowerCase() === username.toLowerCase()
+    );
+  }
+
+  async validateBranchCredentials(username: string, password: string): Promise<Branch | null> {
+    const branch = await this.getBranchByUsername(username);
+    if (!branch) return null;
+    
+    if (branch.isActive !== "true") return null;
+    
+    const isValid = bcrypt.compareSync(password, branch.password);
+    if (!isValid) return null;
+    
+    return branch;
   }
 
   async createBranch(insertBranch: InsertBranch): Promise<Branch> {
