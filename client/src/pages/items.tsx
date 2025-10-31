@@ -119,7 +119,12 @@ export default function ItemManage() {
       return await apiRequest("POST", "/api/products", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/products');
+        }
+      });
       setItemDialogOpen(false);
       itemForm.reset();
       toast({
@@ -141,7 +146,12 @@ export default function ItemManage() {
       return await apiRequest("PATCH", `/api/products/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/products');
+        }
+      });
       setItemDialogOpen(false);
       setEditingItem(null);
       itemForm.reset();
@@ -164,7 +174,12 @@ export default function ItemManage() {
       return await apiRequest("DELETE", `/api/products/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/products');
+        }
+      });
       toast({
         title: "Success",
         description: "Item deleted successfully",
@@ -476,7 +491,12 @@ export default function ItemManage() {
         try {
           const result: any = await apiRequest("POST", "/api/products/bulk", { items: itemsToImport });
           
-          queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+          queryClient.invalidateQueries({ 
+            predicate: (query) => {
+              const key = query.queryKey[0];
+              return typeof key === 'string' && key.includes('/api/products');
+            }
+          });
           
           const totalSkipped = skippedBeforeImport + (result.failed || 0);
           
