@@ -861,14 +861,14 @@ export default function SettingsPage() {
                   <div>
                     <Label htmlFor="secondary-currency">Secondary Currency</Label>
                     <Select 
-                      value={formData.secondaryCurrency || ""} 
-                      onValueChange={(value) => updateField("secondaryCurrency", value)}
+                      value={formData.secondaryCurrency || "none"} 
+                      onValueChange={(value) => updateField("secondaryCurrency", value === "none" ? null : value)}
                     >
                       <SelectTrigger id="secondary-currency" data-testid="select-secondary-currency">
                         <SelectValue placeholder="Select currency (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         <SelectItem value="khr">KHR (Cambodian Riel)</SelectItem>
                         <SelectItem value="rial">Rial (Iranian Rial)</SelectItem>
                         <SelectItem value="bdt">BDT (Bangladeshi Taka)</SelectItem>
