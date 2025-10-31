@@ -69,6 +69,7 @@ export interface IStorage {
   getProducts(branchId?: string | null): Promise<Product[]>;
   getProduct(id: string): Promise<Product | undefined>;
   getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]>;
+  getProductByName(name: string, excludeId?: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string): Promise<boolean>;
@@ -268,6 +269,19 @@ export class DatabaseStorage implements IStorage {
         ));
     }
     return await db.select().from(products).where(eq(products.categoryId, categoryId));
+  }
+
+  async getProductByName(name: string, excludeId?: string): Promise<Product | undefined> {
+    if (excludeId) {
+      const result = await db.select().from(products)
+        .where(and(
+          eq(products.name, name),
+          sql`${products.id} != ${excludeId}`
+        ));
+      return result[0];
+    }
+    const result = await db.select().from(products).where(eq(products.name, name));
+    return result[0];
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {

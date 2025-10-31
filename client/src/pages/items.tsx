@@ -132,10 +132,11 @@ export default function ItemManage() {
         description: "Item created successfully",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || "Failed to create item";
       toast({
         title: "Error",
-        description: "Failed to create item",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -160,10 +161,11 @@ export default function ItemManage() {
         description: "Item updated successfully",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || "Failed to update item";
       toast({
         title: "Error",
-        description: "Failed to update item",
+        description: errorMessage,
         variant: "destructive",
       });
     },

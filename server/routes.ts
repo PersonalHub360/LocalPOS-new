@@ -260,6 +260,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/products", async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
+      
+      // Check for duplicate name
+      const existingProduct = await storage.getProductByName(validatedData.name);
+      if (existingProduct) {
+        return res.status(409).json({ error: "Already uploaded" });
+      }
+      
       const product = await storage.createProduct(validatedData);
       res.status(201).json(product);
     } catch (error) {
@@ -286,6 +293,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < items.length; i++) {
         try {
           const validatedData = insertProductSchema.parse(items[i]);
+          
+          // Check for duplicate name
+          const existingProduct = await storage.getProductByName(validatedData.name);
+          if (existingProduct) {
+            results.failed++;
+            results.errors.push({
+              row: i + 2,
+              name: validatedData.name,
+              error: "Duplicate name - product already exists"
+            });
+            continue;
+          }
+          
           await storage.createProduct(validatedData);
           results.imported++;
         } catch (error) {
@@ -309,10 +329,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/products/:id", async (req, res) => {
     try {
-      const product = await storage.updateProduct(req.params.id, req.body);
-      if (!product) {
+      // Get current product
+      const currentProduct = await storage.getProduct(req.params.id);
+      if (!currentProduct) {
         return res.status(404).json({ error: "Product not found" });
       }
+      
+      // If name is being updated, check for duplicates
+      if (req.body.name && req.body.name !== currentProduct.name) {
+        const existingProduct = await storage.getProductByName(req.body.name, req.params.id);
+        if (existingProduct) {
+          return res.status(409).json({ error: "Duplicate name" });
+        }
+      }
+      
+      // Check if the data is actually being changed
+      if (req.body.name && req.body.name === currentProduct.name) {
+        const hasOtherChanges = Object.keys(req.body).some(key => {
+          if (key === 'name') return false;
+          return req.body[key] !== (currentProduct as any)[key];
+        });
+        if (!hasOtherChanges) {
+          return res.status(409).json({ error: "Already updated" });
+        }
+      }
+      
+      const product = await storage.updateProduct(req.params.id, req.body);
       res.json(product);
     } catch (error) {
       res.status(500).json({ error: "Failed to update product" });
