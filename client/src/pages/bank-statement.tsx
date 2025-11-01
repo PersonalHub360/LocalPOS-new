@@ -49,7 +49,16 @@ import {
   Download,
   Banknote,
   Plus,
+  ArrowLeft,
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { format } from "date-fns";
 import type { Order, PaymentAdjustment } from "@shared/schema";
 import { useForm } from "react-hook-form";
@@ -70,6 +79,7 @@ export default function BankStatement() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: sales = [] } = useQuery<Order[]>({
@@ -262,6 +272,29 @@ export default function BankStatement() {
       color: "bg-teal-500",
     },
   ];
+
+  // Get transactions for the selected payment method
+  const getTransactionsByPaymentMethod = (paymentMethodKey: string) => {
+    return filteredSales.filter((sale) => {
+      // Check if this sale has split payments
+      if (sale.paymentSplits) {
+        try {
+          const splits: { method: string; amount: number }[] = JSON.parse(sale.paymentSplits);
+          // Check if any split uses the selected payment method
+          return splits.some((split) => normalizePaymentMethod(split.method) === paymentMethodKey);
+        } catch (error) {
+          console.error("Failed to parse payment splits:", error);
+        }
+      }
+      
+      // Check single payment method
+      return normalizePaymentMethod(sale.paymentMethod || "") === paymentMethodKey;
+    });
+  };
+
+  const transactionsForSelectedMethod = selectedPaymentMethod 
+    ? getTransactionsByPaymentMethod(selectedPaymentMethod)
+    : [];
 
   return (
     <div className="h-full overflow-y-auto">
@@ -529,7 +562,12 @@ export default function BankStatement() {
               const colorScheme = colorMap[method.color];
               const totalWithAdjustments = data.total + data.adjustments;
               return (
-                <Card key={method.key} className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105`} data-testid={`card-${method.key}`}>
+                <Card 
+                  key={method.key} 
+                  className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer ${selectedPaymentMethod === method.key ? 'ring-2 ring-primary' : ''}`} 
+                  data-testid={`card-${method.key}`}
+                  onClick={() => setSelectedPaymentMethod(method.key)}
+                >
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
                       <Badge variant="outline" className="capitalize font-semibold">
@@ -567,6 +605,103 @@ export default function BankStatement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Transaction History for Selected Payment Method */}
+      {selectedPaymentMethod && (
+        <Card className="border-2 shadow-xl">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl">
+                  Transaction History - {paymentMethodsData.find(m => m.key === selectedPaymentMethod)?.name}
+                </CardTitle>
+                <CardDescription>
+                  All transactions using this payment method
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedPaymentMethod(null)}
+                data-testid="button-clear-payment-filter"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {transactionsForSelectedMethod.length > 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Dining</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead className="text-right">Amount Paid</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactionsForSelectedMethod.map((order) => {
+                      // Calculate amount paid with this payment method
+                      let amountPaid = parseFloat(order.total);
+                      let paymentDisplay = order.paymentMethod || "Unknown";
+
+                      if (order.paymentSplits) {
+                        try {
+                          const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+                          const matchingSplit = splits.find(
+                            split => normalizePaymentMethod(split.method) === selectedPaymentMethod
+                          );
+                          if (matchingSplit) {
+                            amountPaid = matchingSplit.amount;
+                            paymentDisplay = splits.map(s => `${s.method}: $${s.amount.toFixed(2)}`).join(', ');
+                          }
+                        } catch (error) {
+                          console.error("Failed to parse payment splits:", error);
+                        }
+                      }
+
+                      return (
+                        <TableRow key={order.id} data-testid={`row-transaction-${order.id}`}>
+                          <TableCell className="font-mono font-medium">
+                            #{order.orderNumber}
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(order.createdAt), "MMM dd, yyyy HH:mm")}
+                          </TableCell>
+                          <TableCell>
+                            {order.customerName || "Walk-in"}
+                          </TableCell>
+                          <TableCell className="capitalize">
+                            {order.diningOption}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {paymentDisplay}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-green-600 dark:text-green-400">
+                            ${amountPaid.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-medium">
+                            ${parseFloat(order.total).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8 font-medium">
+                No transactions found for this payment method
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       </div>
     </div>
   );
