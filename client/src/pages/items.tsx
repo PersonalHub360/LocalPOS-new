@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProductSchema, insertCategorySchema, type Product, type Category } from "@shared/schema";
@@ -40,6 +41,7 @@ export default function ItemManage() {
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const { toast } = useToast();
 
   const { data: categories = [] } = useQuery<Category[]>({
@@ -358,6 +360,55 @@ export default function ItemManage() {
     setCategoryDialogOpen(true);
   };
 
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedItems(prev => [...prev, itemId]);
+    } else {
+      setSelectedItems(prev => prev.filter(id => id !== itemId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedItems(filteredProducts.map(p => p.id));
+    } else {
+      setSelectedItems([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return;
+
+    const confirmMessage = `Are you sure you want to delete ${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''}?`;
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      await Promise.all(
+        selectedItems.map(id => apiRequest("DELETE", `/api/products/${id}`))
+      );
+
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.includes('/api/products');
+        }
+      });
+
+      toast({
+        title: "Success",
+        description: `${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''} deleted successfully`,
+      });
+
+      setSelectedItems([]);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete some items",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleExport = () => {
     const csvHeaders = "Name,Category,Purchase Cost,Sales Price,Unit,Quantity,Description,Created At\n";
     const csvRows = filteredProducts.map(product => {
@@ -589,6 +640,32 @@ export default function ItemManage() {
           <div>
             <h1 className="text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
             <p className="text-muted-foreground mt-1">Manage inventory and menu items</p>
+            {filteredProducts.length > 0 && (
+              <div className="flex items-center gap-4 mt-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedItems.length === filteredProducts.length && filteredProducts.length > 0}
+                    onCheckedChange={handleSelectAll}
+                    data-testid="checkbox-select-all"
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                    Select All ({selectedItems.length}/{filteredProducts.length})
+                  </label>
+                </div>
+                {selectedItems.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    data-testid="button-bulk-delete"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Selected ({selectedItems.length})
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
@@ -1042,6 +1119,13 @@ export default function ItemManage() {
                         <Utensils className="w-10 h-10 text-muted-foreground" />
                       </div>
                     )}
+                    <div className="absolute top-2 right-2 bg-background rounded-md p-1 shadow-md">
+                      <Checkbox
+                        checked={selectedItems.includes(product.id)}
+                        onCheckedChange={(checked) => handleSelectItem(product.id, checked as boolean)}
+                        data-testid={`checkbox-item-${product.id}`}
+                      />
+                    </div>
                   </div>
                   <CardContent className="p-3 space-y-2">
                     <div>
