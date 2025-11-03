@@ -1545,6 +1545,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/due/customers", async (req, res) => {
+    try {
+      const validatedData = insertCustomerSchema.parse(req.body);
+      const customer = await storage.createCustomer(validatedData);
+      res.status(201).json(customer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid customer data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create customer" });
+    }
+  });
+
   app.patch("/api/due/customers/:id", async (req, res) => {
     try {
       const updates = req.body;

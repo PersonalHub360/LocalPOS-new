@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, CreditCard, User, DollarSign, FileText, Wallet, Download, Upload, FileSpreadsheet, Edit, Printer, Eye } from "lucide-react";
+import { Calendar, CreditCard, User, DollarSign, FileText, Wallet, Download, Upload, FileSpreadsheet, Edit, Printer, Eye, UserPlus } from "lucide-react";
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -74,6 +74,7 @@ export default function DueManagement() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showOrdersModal, setShowOrdersModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [customerOrders, setCustomerOrders] = useState<OrderWithDetails[]>([]);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, boolean>>({});
   const [orderAllocations, setOrderAllocations] = useState<Record<string, number>>({});
@@ -124,6 +125,42 @@ export default function DueManagement() {
       phone: "",
       email: "",
       notes: "",
+    },
+  });
+
+  const addCustomerForm = useForm<CustomerFormData>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: {
+      name: "",
+      phone: "",
+      email: "",
+      notes: "",
+    },
+  });
+
+  const createCustomerMutation = useMutation({
+    mutationFn: async (data: CustomerFormData) => {
+      return await apiRequest("POST", "/api/due/customers", {
+        ...data,
+        branchId: selectedBranchId || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/due/customers-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      setShowAddCustomerModal(false);
+      addCustomerForm.reset();
+      toast({
+        title: "Success",
+        description: "Customer added successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add customer",
+        variant: "destructive",
+      });
     },
   });
 
@@ -774,6 +811,15 @@ export default function DueManagement() {
 
               {/* Export and Import Buttons */}
               <div className="flex flex-wrap gap-2">
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={() => setShowAddCustomerModal(true)} 
+                  data-testid="button-add-customer"
+                >
+                  <UserPlus className="w-4 h-4 mr-1" />
+                  Add Customer
+                </Button>
                 <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
                   <Download className="w-4 h-4 mr-1" />
                   Export CSV
@@ -1206,6 +1252,104 @@ export default function DueManagement() {
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Customer Modal */}
+      <Dialog open={showAddCustomerModal} onOpenChange={setShowAddCustomerModal}>
+        <DialogContent className="max-w-md" data-testid="dialog-add-customer">
+          <DialogHeader>
+            <DialogTitle>Add New Customer</DialogTitle>
+            <DialogDescription>
+              Create a new customer record
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...addCustomerForm}>
+            <form
+              onSubmit={addCustomerForm.handleSubmit((data) => {
+                createCustomerMutation.mutate(data);
+              })}
+              className="space-y-4"
+            >
+              <FormField
+                control={addCustomerForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Customer Name *</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Enter customer name" data-testid="input-add-customer-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addCustomerForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Enter phone number" data-testid="input-add-customer-phone" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addCustomerForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="email" placeholder="Enter email" data-testid="input-add-customer-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={addCustomerForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} placeholder="Additional notes" data-testid="input-add-customer-notes" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddCustomerModal(false);
+                    addCustomerForm.reset();
+                  }}
+                  data-testid="button-cancel-add-customer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createCustomerMutation.isPending}
+                  data-testid="button-save-add-customer"
+                >
+                  {createCustomerMutation.isPending ? "Adding..." : "Add Customer"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 

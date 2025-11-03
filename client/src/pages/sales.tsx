@@ -1059,6 +1059,12 @@ export default function SalesManage() {
               {/* Order Summary */}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between">
+                  <Label className="text-muted-foreground">Customer Name</Label>
+                  <p className="font-medium" data-testid="view-summary-customer">
+                    {viewSale.customerName || "Walk-in Customer"}
+                  </p>
+                </div>
+                <div className="flex justify-between">
                   <Label className="text-muted-foreground">Subtotal</Label>
                   <p className="font-medium" data-testid="view-subtotal">${viewSale.subtotal}</p>
                 </div>
@@ -1295,6 +1301,12 @@ export default function SalesManage() {
 
               {/* Order Summary (Read-only) */}
               <div className="border-t pt-4 space-y-2 bg-muted/20 p-4 rounded-md">
+                <div className="flex justify-between">
+                  <Label className="text-muted-foreground">Customer Name</Label>
+                  <p className="font-medium" data-testid="edit-summary-customer">
+                    {editSale.customerName || "Walk-in Customer"}
+                  </p>
+                </div>
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Subtotal</Label>
                   <p className="font-medium">${editSale.subtotal}</p>
