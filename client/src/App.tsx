@@ -29,6 +29,7 @@ import Inventory from "@/pages/inventory";
 import HRM from "@/pages/hrm";
 import Reports from "@/pages/reports";
 import BankStatement from "@/pages/bank-statement";
+import DueManagement from "@/pages/due-management";
 import Settings from "@/pages/settings";
 import Branches from "@/pages/branches";
 import Login from "@/pages/login";
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/hrm" component={HRM} />
       <Route path="/reports" component={Reports} />
       <Route path="/bank-statement" component={BankStatement} />
+      <Route path="/due-management" component={DueManagement} />
       <Route path="/branches" component={Branches} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

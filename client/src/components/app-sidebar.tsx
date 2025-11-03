@@ -16,6 +16,7 @@ import {
   PackageSearch,
   Landmark,
   Building2,
+  CreditCard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -100,6 +101,11 @@ const managementMenuItems = [
     title: "Bank Statement",
     url: "/bank-statement",
     icon: Landmark,
+  },
+  {
+    title: "Due Management",
+    url: "/due-management",
+    icon: CreditCard,
   },
   {
     title: "Branches",
