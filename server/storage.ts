@@ -348,7 +348,12 @@ export class DatabaseStorage implements IStorage {
 
   async getTables(branchId?: string | null): Promise<Table[]> {
     if (branchId) {
-      return await db.select().from(tables).where(eq(tables.branchId, branchId));
+      return await db.select().from(tables).where(
+        or(
+          eq(tables.branchId, branchId),
+          isNull(tables.branchId)
+        )
+      );
     }
     return await db.select().from(tables);
   }
