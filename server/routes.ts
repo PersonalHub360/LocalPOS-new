@@ -1545,6 +1545,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/due/customers/:id", async (req, res) => {
+    try {
+      const updates = req.body;
+      const customer = await storage.updateCustomer(req.params.id, updates);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update customer" });
+    }
+  });
+
   app.get("/api/settings", async (req, res) => {
     try {
       const settings = await storage.getSettings();

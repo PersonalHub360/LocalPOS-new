@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, CreditCard, User, DollarSign, FileText, Wallet, Download, Upload, FileSpreadsheet } from "lucide-react";
+import { Calendar, CreditCard, User, DollarSign, FileText, Wallet, Download, Upload, FileSpreadsheet, Edit, Printer, Eye } from "lucide-react";
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -58,13 +58,22 @@ const paymentFormSchema = z.object({
   note: z.string().optional(),
 });
 
+const customerFormSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  phone: z.string().optional(),
+  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  notes: z.string().optional(),
+});
+
 type PaymentFormData = z.infer<typeof paymentFormSchema>;
+type CustomerFormData = z.infer<typeof customerFormSchema>;
 
 export default function DueManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDueSummary | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [customerOrders, setCustomerOrders] = useState<OrderWithDetails[]>([]);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, boolean>>({});
   const [orderAllocations, setOrderAllocations] = useState<Record<string, number>>({});
@@ -105,6 +114,37 @@ export default function DueManagement() {
       paymentMethod: "cash",
       paymentDate: new Date(),
       note: "",
+    },
+  });
+
+  const customerForm = useForm<CustomerFormData>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: {
+      name: "",
+      phone: "",
+      email: "",
+      notes: "",
+    },
+  });
+
+  const updateCustomerMutation = useMutation({
+    mutationFn: async (data: { customerId: string; updates: CustomerFormData }) => {
+      return await apiRequest("PATCH", `/api/due/customers/${data.customerId}`, data.updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/due/customers-summary"] });
+      setShowEditModal(false);
+      toast({
+        title: "Success",
+        description: "Customer updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update customer",
+        variant: "destructive",
+      });
     },
   });
 
@@ -188,7 +228,7 @@ export default function DueManagement() {
     setShowPaymentModal(true);
   };
 
-  const handleViewOrders = (customer: CustomerDueSummary) => {
+  const handleViewOrders = async (customer: CustomerDueSummary) => {
     setSelectedCustomer(customer);
     
     const dueOrders = allOrders.filter(
@@ -197,8 +237,123 @@ export default function DueManagement() {
         (order.paymentStatus === "due" || order.paymentStatus === "partial")
     );
     
-    setCustomerOrders(dueOrders);
+    // Fetch order items for each order
+    const ordersWithItems = await Promise.all(
+      dueOrders.map(async (order) => {
+        try {
+          const response = await fetch(`/api/orders/${order.id}/items`, { credentials: "include" });
+          const items = await response.json();
+          return { ...order, items };
+        } catch (error) {
+          return { ...order, items: [] };
+        }
+      })
+    );
+    
+    setCustomerOrders(ordersWithItems);
     setShowOrdersModal(true);
+  };
+
+  const handleEditCustomer = (customer: CustomerDueSummary) => {
+    setSelectedCustomer(customer);
+    customerForm.reset({
+      name: customer.customer.name || "",
+      phone: customer.customer.phone || "",
+      email: customer.customer.email || "",
+      notes: customer.customer.notes || "",
+    });
+    setShowEditModal(true);
+  };
+
+  const handlePrintCustomer = (customer: CustomerDueSummary) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const dueOrders = allOrders.filter(
+      (order) =>
+        order.customerId === customer.customer.id &&
+        (order.paymentStatus === "due" || order.paymentStatus === "partial")
+    );
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Customer Due Summary - ${customer.customer.name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .info { margin: 20px 0; }
+            .info-row { margin: 8px 0; }
+            .label { font-weight: bold; display: inline-block; width: 150px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+            th { background-color: #f4f4f4; font-weight: bold; }
+            .total-row { font-weight: bold; background-color: #f9f9f9; }
+            @media print {
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Customer Due Summary</h1>
+          <div class="info">
+            <div class="info-row"><span class="label">Customer Name:</span> ${customer.customer.name || "N/A"}</div>
+            <div class="info-row"><span class="label">Phone:</span> ${customer.customer.phone || "N/A"}</div>
+            <div class="info-row"><span class="label">Email:</span> ${customer.customer.email || "N/A"}</div>
+            <div class="info-row"><span class="label">Total Due:</span> $${customer.totalDue.toFixed(2)}</div>
+            <div class="info-row"><span class="label">Total Paid:</span> $${customer.totalPaid.toFixed(2)}</div>
+            <div class="info-row"><span class="label">Balance:</span> $${customer.balance.toFixed(2)}</div>
+            <div class="info-row"><span class="label">Credit:</span> $${customer.credit.toFixed(2)}</div>
+            <div class="info-row"><span class="label">Due Orders:</span> ${customer.ordersCount}</div>
+          </div>
+          
+          <h2>Due Orders</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Order #</th>
+                <th>Date</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Balance</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dueOrders.map(order => `
+                <tr>
+                  <td>${order.orderNumber}</td>
+                  <td>${format(new Date(order.createdAt), "MMM dd, yyyy")}</td>
+                  <td>$${parseFloat(order.total).toFixed(2)}</td>
+                  <td>$${parseFloat(order.paidAmount || "0").toFixed(2)}</td>
+                  <td>$${parseFloat(order.dueAmount || order.total).toFixed(2)}</td>
+                  <td>${order.paymentStatus}</td>
+                </tr>
+              `).join('')}
+              <tr class="total-row">
+                <td colspan="2">Total</td>
+                <td>$${customer.totalDue.toFixed(2)}</td>
+                <td>$${customer.totalPaid.toFixed(2)}</td>
+                <td>$${customer.balance.toFixed(2)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <p style="margin-top: 30px; font-size: 12px; color: #666;">
+            Printed on ${format(new Date(), "PPP 'at' p")}
+          </p>
+          
+          <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">
+            Print
+          </button>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
   };
 
   const handleAutoAllocate = () => {
@@ -666,9 +821,9 @@ export default function DueManagement() {
                 <p>No customers with due payments found</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead>Customer Name</TableHead>
                       <TableHead>Phone Number</TableHead>
@@ -711,7 +866,31 @@ export default function DueManagement() {
                           {summary.ordersCount}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1 flex-wrap">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditCustomer(summary)}
+                              data-testid={`button-edit-${summary.customer.id}`}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePrintCustomer(summary)}
+                              data-testid={`button-print-${summary.customer.id}`}
+                            >
+                              <Printer className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewOrders(summary)}
+                              data-testid={`button-view-${summary.customer.id}`}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
                             <Button
                               variant="default"
                               size="sm"
@@ -719,16 +898,7 @@ export default function DueManagement() {
                               data-testid={`button-record-payment-${summary.customer.id}`}
                             >
                               <CreditCard className="w-4 h-4 mr-1" />
-                              Record Payment
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewOrders(summary)}
-                              data-testid={`button-view-orders-${summary.customer.id}`}
-                            >
-                              <FileText className="w-4 h-4 mr-1" />
-                              View Orders
+                              Pay
                             </Button>
                           </div>
                         </TableCell>
@@ -947,7 +1117,7 @@ export default function DueManagement() {
 
       {/* View Orders Modal */}
       <Dialog open={showOrdersModal} onOpenChange={setShowOrdersModal}>
-        <DialogContent className="max-w-4xl" data-testid="dialog-view-orders">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto" data-testid="dialog-view-orders">
           <DialogHeader>
             <DialogTitle>Customer Orders</DialogTitle>
             <DialogDescription>
@@ -955,40 +1125,80 @@ export default function DueManagement() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order #</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Total Amount</TableHead>
-                  <TableHead>Paid Amount</TableHead>
-                  <TableHead>Balance</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {customerOrders.map((order) => {
-                  const orderBalance = parseFloat(order.dueAmount || order.total);
-                  const orderPaid = parseFloat(order.paidAmount || "0");
+          <div className="space-y-6 overflow-y-auto max-h-[70vh]">
+            {customerOrders.map((order) => {
+              const orderBalance = parseFloat(order.dueAmount || order.total);
+              const orderPaid = parseFloat(order.paidAmount || "0");
 
-                  return (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                      <TableCell>{format(new Date(order.createdAt), "MMM dd, yyyy")}</TableCell>
-                      <TableCell className="font-mono">${parseFloat(order.total).toFixed(2)}</TableCell>
-                      <TableCell className="font-mono">${orderPaid.toFixed(2)}</TableCell>
-                      <TableCell className="font-mono font-bold text-primary">
-                        ${orderBalance.toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <span className="capitalize">{order.paymentStatus}</span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+              return (
+                <Card key={order.id} className="border-2" data-testid={`card-order-${order.id}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">Order #{order.orderNumber}</CardTitle>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {format(new Date(order.createdAt), "PPP")}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-primary">${orderBalance.toFixed(2)}</div>
+                        <p className="text-xs text-muted-foreground">Balance</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Order Summary */}
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Total</p>
+                        <p className="font-mono font-semibold">${parseFloat(order.total).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Paid</p>
+                        <p className="font-mono font-semibold">${orderPaid.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Status</p>
+                        <p className="capitalize font-semibold">{order.paymentStatus}</p>
+                      </div>
+                    </div>
+
+                    {/* Order Items */}
+                    {order.items && order.items.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold mb-2">Order Items</h4>
+                        <div className="border rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Product</TableHead>
+                                <TableHead className="text-right">Qty</TableHead>
+                                <TableHead className="text-right">Price</TableHead>
+                                <TableHead className="text-right">Total</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {order.items.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{item.productName}</TableCell>
+                                  <TableCell className="text-right">{item.quantity}</TableCell>
+                                  <TableCell className="text-right font-mono">
+                                    ${parseFloat(item.price).toFixed(2)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono font-semibold">
+                                    ${parseFloat(item.total).toFixed(2)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           <DialogFooter>
@@ -996,6 +1206,102 @@ export default function DueManagement() {
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Customer Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-md" data-testid="dialog-edit-customer">
+          <DialogHeader>
+            <DialogTitle>Edit Customer</DialogTitle>
+            <DialogDescription>
+              Update customer information for {selectedCustomer?.customer.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...customerForm}>
+            <form
+              onSubmit={customerForm.handleSubmit((data) => {
+                if (selectedCustomer) {
+                  updateCustomerMutation.mutate({
+                    customerId: selectedCustomer.customer.id,
+                    updates: data,
+                  });
+                }
+              })}
+              className="space-y-4"
+            >
+              <FormField
+                control={customerForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Customer Name *</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Enter customer name" data-testid="input-customer-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={customerForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Enter phone number" data-testid="input-customer-phone" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={customerForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="email" placeholder="Enter email" data-testid="input-customer-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={customerForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} placeholder="Additional notes" data-testid="input-customer-notes" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditModal(false)}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateCustomerMutation.isPending} data-testid="button-save-customer">
+                  {updateCustomerMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>
