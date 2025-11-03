@@ -430,12 +430,49 @@ export class DatabaseStorage implements IStorage {
   async createOrderWithItems(insertOrder: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const orderNumber = await this.getNextOrderNumber();
-      const orderWithNumber = {
+      let orderData = {
         ...insertOrder,
         orderNumber,
       };
       
-      const result = await tx.insert(orders).values(orderWithNumber).returning();
+      // If payment status is "due", create or find customer
+      if (insertOrder.paymentStatus === 'due' && insertOrder.customerName) {
+        // Try to find existing customer by name
+        const existingCustomer = await tx
+          .select()
+          .from(customers)
+          .where(eq(customers.name, insertOrder.customerName))
+          .limit(1);
+        
+        let customerId: string;
+        
+        if (existingCustomer.length > 0) {
+          customerId = existingCustomer[0].id;
+        } else {
+          // Create new customer
+          const newCustomerResult = await tx
+            .insert(customers)
+            .values({
+              name: insertOrder.customerName,
+              phone: insertOrder.customerPhone || null,
+              email: null,
+              branchId: insertOrder.branchId || null,
+              notes: null,
+            })
+            .returning();
+          customerId = newCustomerResult[0].id;
+        }
+        
+        // Set customer-related fields for due orders
+        orderData = {
+          ...orderData,
+          customerId,
+          dueAmount: insertOrder.total,
+          paidAmount: '0',
+        };
+      }
+      
+      const result = await tx.insert(orders).values(orderData).returning();
       const newOrder = result[0];
 
       if (items.length > 0) {

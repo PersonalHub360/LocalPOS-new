@@ -416,7 +416,7 @@ export default function POS() {
     }
   };
 
-  const handleConfirmPayment = (paymentMethod: string, amountPaid: number, paymentSplits?: { method: string; amount: number }[], customerName?: string) => {
+  const handleConfirmPayment = (paymentMethod: string, amountPaid: number, paymentSplits?: { method: string; amount: number }[], customerName?: string, customerPhone?: string) => {
     const subtotal = orderItems.reduce(
       (sum, item) => sum + parseFloat(item.product.price) * item.quantity,
       0
@@ -453,6 +453,10 @@ export default function POS() {
 
     if (customerName) {
       orderData.customerName = customerName;
+    }
+
+    if (customerPhone) {
+      orderData.customerPhone = customerPhone;
     }
 
     if (paymentSplits && paymentSplits.length > 0) {

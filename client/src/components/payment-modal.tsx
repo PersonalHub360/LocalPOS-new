@@ -28,7 +28,7 @@ interface PaymentSplit {
 interface PaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (paymentMethod: string, amountPaid: number, paymentSplits?: PaymentSplit[], customerName?: string) => void;
+  onConfirm: (paymentMethod: string, amountPaid: number, paymentSplits?: PaymentSplit[], customerName?: string, customerPhone?: string) => void;
   total: number;
   orderNumber: string;
 }
@@ -46,6 +46,7 @@ export function PaymentModal({
   const [newPaymentMethod, setNewPaymentMethod] = useState("aba");
   const [newPaymentAmount, setNewPaymentAmount] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const { toast } = useToast();
 
   // Reset state when dialog opens
@@ -57,6 +58,7 @@ export function PaymentModal({
       setNewPaymentAmount("");
       setNewPaymentMethod("aba");
       setCustomerName("");
+      setCustomerPhone("");
     }
   }, [open, total]);
 
@@ -91,9 +93,9 @@ export function PaymentModal({
         return;
       }
       
-      onConfirm(paymentSplits[0].method, totalPaid, paymentSplits, customerName.trim() || undefined);
+      onConfirm(paymentSplits[0].method, totalPaid, paymentSplits, customerName.trim() || undefined, customerPhone.trim() || undefined);
     } else {
-      onConfirm(paymentMethod, parseFloat(amountPaid) || 0, undefined, customerName.trim() || undefined);
+      onConfirm(paymentMethod, parseFloat(amountPaid) || 0, undefined, customerName.trim() || undefined, customerPhone.trim() || undefined);
     }
     setAmountPaid(total.toString());
     setPaymentMethod("cash");
@@ -168,6 +170,18 @@ export function PaymentModal({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               data-testid="input-customer-name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="customer-phone">Customer Phone (Optional)</Label>
+            <Input
+              id="customer-phone"
+              type="tel"
+              placeholder="Enter customer phone..."
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              data-testid="input-customer-phone"
             />
           </div>
 
