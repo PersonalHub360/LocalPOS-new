@@ -35,6 +35,12 @@ import {
   type InsertBranch,
   type PaymentAdjustment,
   type InsertPaymentAdjustment,
+  type Customer,
+  type InsertCustomer,
+  type DuePayment,
+  type InsertDuePayment,
+  type DuePaymentAllocation,
+  type InsertDuePaymentAllocation,
   categories,
   products,
   tables,
@@ -54,6 +60,9 @@ import {
   branches,
   paymentAdjustments,
   orderCounters,
+  customers,
+  duePayments,
+  duePaymentAllocations,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc, sql, isNull, or } from "drizzle-orm";
@@ -192,6 +201,44 @@ export interface IStorage {
   
   getPaymentAdjustments(branchId?: string | null): Promise<PaymentAdjustment[]>;
   createPaymentAdjustment(adjustment: InsertPaymentAdjustment): Promise<PaymentAdjustment>;
+  
+  getCustomers(branchId?: string | null): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  getCustomerByPhone(phone: string, branchId?: string | null): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
+  deleteCustomer(id: string): Promise<boolean>;
+  
+  getDuePayments(customerId?: string, branchId?: string | null): Promise<DuePayment[]>;
+  getDuePayment(id: string): Promise<DuePayment | undefined>;
+  createDuePayment(payment: InsertDuePayment): Promise<DuePayment>;
+  updateDuePayment(id: string, payment: Partial<InsertDuePayment>): Promise<DuePayment | undefined>;
+  deleteDuePayment(id: string): Promise<boolean>;
+  
+  getDuePaymentAllocations(paymentId?: string, orderId?: string): Promise<DuePaymentAllocation[]>;
+  createDuePaymentAllocation(allocation: InsertDuePaymentAllocation): Promise<DuePaymentAllocation>;
+  
+  recordPaymentWithAllocations(
+    payment: InsertDuePayment,
+    allocations: { orderId: string; amount: number }[]
+  ): Promise<DuePayment>;
+  
+  getCustomerDueSummary(customerId: string): Promise<{
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    credit: number;
+    ordersCount: number;
+  }>;
+  
+  getAllCustomersDueSummary(branchId?: string | null): Promise<Array<{
+    customer: Customer;
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    credit: number;
+    ordersCount: number;
+  }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1100,6 +1147,229 @@ export class DatabaseStorage implements IStorage {
   async createPaymentAdjustment(insertAdjustment: InsertPaymentAdjustment): Promise<PaymentAdjustment> {
     const result = await db.insert(paymentAdjustments).values(insertAdjustment).returning();
     return result[0];
+  }
+
+  async getCustomers(branchId?: string | null): Promise<Customer[]> {
+    if (branchId) {
+      return await db.select().from(customers)
+        .where(eq(customers.branchId, branchId))
+        .orderBy(desc(customers.createdAt));
+    }
+    return await db.select().from(customers).orderBy(desc(customers.createdAt));
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    const result = await db.select().from(customers).where(eq(customers.id, id));
+    return result[0];
+  }
+
+  async getCustomerByPhone(phone: string, branchId?: string | null): Promise<Customer | undefined> {
+    if (branchId) {
+      const result = await db.select().from(customers)
+        .where(and(eq(customers.phone, phone), eq(customers.branchId, branchId)));
+      return result[0];
+    }
+    const result = await db.select().from(customers).where(eq(customers.phone, phone));
+    return result[0];
+  }
+
+  async createCustomer(insertCustomer: InsertCustomer): Promise<Customer> {
+    const result = await db.insert(customers).values(insertCustomer).returning();
+    return result[0];
+  }
+
+  async updateCustomer(id: string, updates: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const result = await db.update(customers).set(updates).where(eq(customers.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteCustomer(id: string): Promise<boolean> {
+    const result = await db.delete(customers).where(eq(customers.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getDuePayments(customerId?: string, branchId?: string | null): Promise<DuePayment[]> {
+    let query = db.select().from(duePayments);
+    
+    if (customerId && branchId) {
+      return await query.where(and(
+        eq(duePayments.customerId, customerId),
+        eq(duePayments.branchId, branchId)
+      )).orderBy(desc(duePayments.paymentDate));
+    }
+    if (customerId) {
+      return await query.where(eq(duePayments.customerId, customerId))
+        .orderBy(desc(duePayments.paymentDate));
+    }
+    if (branchId) {
+      return await query.where(eq(duePayments.branchId, branchId))
+        .orderBy(desc(duePayments.paymentDate));
+    }
+    
+    return await query.orderBy(desc(duePayments.paymentDate));
+  }
+
+  async getDuePayment(id: string): Promise<DuePayment | undefined> {
+    const result = await db.select().from(duePayments).where(eq(duePayments.id, id));
+    return result[0];
+  }
+
+  async createDuePayment(insertPayment: InsertDuePayment): Promise<DuePayment> {
+    const result = await db.insert(duePayments).values(insertPayment).returning();
+    return result[0];
+  }
+
+  async updateDuePayment(id: string, updates: Partial<InsertDuePayment>): Promise<DuePayment | undefined> {
+    const result = await db.update(duePayments).set(updates).where(eq(duePayments.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteDuePayment(id: string): Promise<boolean> {
+    const result = await db.delete(duePayments).where(eq(duePayments.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getDuePaymentAllocations(paymentId?: string, orderId?: string): Promise<DuePaymentAllocation[]> {
+    if (paymentId && orderId) {
+      return await db.select().from(duePaymentAllocations)
+        .where(and(
+          eq(duePaymentAllocations.paymentId, paymentId),
+          eq(duePaymentAllocations.orderId, orderId)
+        ));
+    }
+    if (paymentId) {
+      return await db.select().from(duePaymentAllocations)
+        .where(eq(duePaymentAllocations.paymentId, paymentId));
+    }
+    if (orderId) {
+      return await db.select().from(duePaymentAllocations)
+        .where(eq(duePaymentAllocations.orderId, orderId));
+    }
+    return await db.select().from(duePaymentAllocations);
+  }
+
+  async createDuePaymentAllocation(insertAllocation: InsertDuePaymentAllocation): Promise<DuePaymentAllocation> {
+    const result = await db.insert(duePaymentAllocations).values(insertAllocation).returning();
+    return result[0];
+  }
+
+  async recordPaymentWithAllocations(
+    payment: InsertDuePayment,
+    allocations: { orderId: string; amount: number }[]
+  ): Promise<DuePayment> {
+    return await db.transaction(async (tx) => {
+      const [createdPayment] = await tx.insert(duePayments).values(payment).returning();
+      
+      let totalAllocated = 0;
+      
+      for (const allocation of allocations) {
+        await tx.insert(duePaymentAllocations).values({
+          paymentId: createdPayment.id,
+          orderId: allocation.orderId,
+          amount: allocation.amount.toString(),
+        });
+        
+        totalAllocated += allocation.amount;
+        
+        const [order] = await tx.select().from(orders).where(eq(orders.id, allocation.orderId));
+        
+        if (order) {
+          const currentPaid = parseFloat(order.paidAmount || "0");
+          const newPaidAmount = currentPaid + allocation.amount;
+          const dueAmount = parseFloat(order.dueAmount || order.total);
+          
+          let newPaymentStatus = order.paymentStatus;
+          if (newPaidAmount >= dueAmount) {
+            newPaymentStatus = "paid";
+          } else if (newPaidAmount > 0) {
+            newPaymentStatus = "partial";
+          }
+          
+          await tx.update(orders)
+            .set({
+              paidAmount: newPaidAmount.toString(),
+              paymentStatus: newPaymentStatus,
+            })
+            .where(eq(orders.id, allocation.orderId));
+        }
+      }
+      
+      const unapplied = parseFloat(payment.amount) - totalAllocated;
+      
+      if (unapplied !== 0) {
+        await tx.update(duePayments)
+          .set({ unappliedAmount: unapplied.toString() })
+          .where(eq(duePayments.id, createdPayment.id));
+      }
+      
+      const [updatedPayment] = await tx.select().from(duePayments)
+        .where(eq(duePayments.id, createdPayment.id));
+      
+      return updatedPayment;
+    });
+  }
+
+  async getCustomerDueSummary(customerId: string): Promise<{
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    credit: number;
+    ordersCount: number;
+  }> {
+    const dueOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.customerId, customerId),
+        or(
+          eq(orders.paymentStatus, "due"),
+          eq(orders.paymentStatus, "partial")
+        )
+      ));
+    
+    let totalDue = 0;
+    let totalPaid = 0;
+    
+    for (const order of dueOrders) {
+      const orderDue = parseFloat(order.dueAmount || order.total);
+      const orderPaid = parseFloat(order.paidAmount || "0");
+      totalDue += orderDue;
+      totalPaid += orderPaid;
+    }
+    
+    const payments = await this.getDuePayments(customerId);
+    const credit = payments.reduce((sum, p) => sum + parseFloat(p.unappliedAmount || "0"), 0);
+    
+    return {
+      totalDue,
+      totalPaid,
+      balance: totalDue - totalPaid,
+      credit,
+      ordersCount: dueOrders.length,
+    };
+  }
+
+  async getAllCustomersDueSummary(branchId?: string | null): Promise<Array<{
+    customer: Customer;
+    totalDue: number;
+    totalPaid: number;
+    balance: number;
+    credit: number;
+    ordersCount: number;
+  }>> {
+    const allCustomers = await this.getCustomers(branchId);
+    const summaries = [];
+    
+    for (const customer of allCustomers) {
+      const summary = await this.getCustomerDueSummary(customer.id);
+      
+      if (summary.ordersCount > 0 || summary.credit > 0) {
+        summaries.push({
+          customer,
+          ...summary,
+        });
+      }
+    }
+    
+    return summaries;
   }
 }
 
