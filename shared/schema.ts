@@ -54,10 +54,29 @@ export const insertTableSchema = createInsertSchema(tables).omit({
 export type InsertTable = z.infer<typeof insertTableSchema>;
 export type Table = typeof tables.$inferSelect;
 
+export const customers = pgTable("customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  branchId: varchar("branch_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertCustomerSchema = createInsertSchema(customers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type Customer = typeof customers.$inferSelect;
+
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderNumber: text("order_number").notNull().unique(),
   tableId: varchar("table_id"),
+  customerId: varchar("customer_id"),
   branchId: varchar("branch_id"),
   diningOption: text("dining_option").notNull().default("dine-in"),
   customerName: text("customer_name"),
@@ -67,6 +86,8 @@ export const orders = pgTable("orders", {
   discount: decimal("discount", { precision: 10, scale: 2 }).notNull().default("0"),
   discountType: text("discount_type").notNull().default("amount"),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  dueAmount: decimal("due_amount", { precision: 10, scale: 2 }),
+  paidAmount: decimal("paid_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   status: text("status").notNull().default("draft"),
   paymentStatus: text("payment_status").notNull().default("pending"),
   paymentMethod: text("payment_method"),
@@ -99,6 +120,46 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
 
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
+
+export const duePayments = pgTable("due_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull(),
+  paymentDate: timestamp("payment_date").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  unappliedAmount: decimal("unapplied_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  paymentMethod: text("payment_method").notNull(),
+  reference: text("reference"),
+  note: text("note"),
+  recordedBy: varchar("recorded_by"),
+  branchId: varchar("branch_id"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertDuePaymentSchema = createInsertSchema(duePayments).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  paymentDate: z.coerce.date(),
+});
+
+export type InsertDuePayment = z.infer<typeof insertDuePaymentSchema>;
+export type DuePayment = typeof duePayments.$inferSelect;
+
+export const duePaymentAllocations = pgTable("due_payment_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentId: varchar("payment_id").notNull(),
+  orderId: varchar("order_id").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertDuePaymentAllocationSchema = createInsertSchema(duePaymentAllocations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDuePaymentAllocation = z.infer<typeof insertDuePaymentAllocationSchema>;
+export type DuePaymentAllocation = typeof duePaymentAllocations.$inferSelect;
 
 export const expenseCategories = pgTable("expense_categories", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
