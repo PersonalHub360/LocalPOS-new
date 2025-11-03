@@ -23,7 +23,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 interface CustomerDueSummary {
   customer: Customer;
@@ -399,7 +399,7 @@ export default function DueManagement() {
       summary.ordersCount.toString(),
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [["Customer", "Phone", "Total Due", "Paid", "Balance", "Credit", "Orders"]],
       body: tableData,
       startY: 40,
