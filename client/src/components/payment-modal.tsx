@@ -28,7 +28,7 @@ interface PaymentSplit {
 interface PaymentModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (paymentMethod: string, amountPaid: number, paymentSplits?: PaymentSplit[]) => void;
+  onConfirm: (paymentMethod: string, amountPaid: number, paymentSplits?: PaymentSplit[], customerName?: string) => void;
   total: number;
   orderNumber: string;
 }
@@ -45,6 +45,7 @@ export function PaymentModal({
   const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
   const [newPaymentMethod, setNewPaymentMethod] = useState("aba");
   const [newPaymentAmount, setNewPaymentAmount] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const { toast } = useToast();
 
   // Reset state when dialog opens
@@ -55,6 +56,7 @@ export function PaymentModal({
       setPaymentSplits([]);
       setNewPaymentAmount("");
       setNewPaymentMethod("aba");
+      setCustomerName("");
     }
   }, [open, total]);
 
@@ -89,14 +91,15 @@ export function PaymentModal({
         return;
       }
       
-      onConfirm(paymentSplits[0].method, totalPaid, paymentSplits);
+      onConfirm(paymentSplits[0].method, totalPaid, paymentSplits, customerName.trim() || undefined);
     } else {
-      onConfirm(paymentMethod, parseFloat(amountPaid) || 0);
+      onConfirm(paymentMethod, parseFloat(amountPaid) || 0, undefined, customerName.trim() || undefined);
     }
     setAmountPaid(total.toString());
     setPaymentMethod("cash");
     setPaymentSplits([]);
     setNewPaymentAmount("");
+    setCustomerName("");
   };
 
   const change = Math.max(0, parseFloat(amountPaid || "0") - total);
@@ -156,6 +159,18 @@ export function PaymentModal({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="customer-name">Customer Name (Optional)</Label>
+            <Input
+              id="customer-name"
+              type="text"
+              placeholder="Enter customer name..."
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              data-testid="input-customer-name"
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="total">Total Amount</Label>
             <div className="text-2xl font-bold font-mono" data-testid="text-payment-total">
