@@ -16,9 +16,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CreditCard, Banknote, Wallet, Smartphone, X } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { CreditCard, Banknote, Wallet, Smartphone, X, Check, ChevronsUpDown } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import type { Customer } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 interface PaymentSplit {
   method: string;
@@ -47,7 +63,25 @@ export function PaymentModal({
   const [newPaymentAmount, setNewPaymentAmount] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [openCombobox, setOpenCombobox] = useState(false);
   const { toast } = useToast();
+
+  // Fetch customers list
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+    queryFn: async () => {
+      const response = await fetch("/api/customers", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch customers");
+      return response.json();
+    },
+  });
+
+  // Handle customer selection from combobox
+  const handleSelectCustomer = (customer: Customer) => {
+    setCustomerName(customer.name || "");
+    setCustomerPhone(customer.phone || "");
+    setOpenCombobox(false);
+  };
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -59,6 +93,7 @@ export function PaymentModal({
       setNewPaymentMethod("aba");
       setCustomerName("");
       setCustomerPhone("");
+      setOpenCombobox(false);
     }
   }, [open, total]);
 
@@ -162,11 +197,60 @@ export function PaymentModal({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="customer-name">Customer Name (Optional)</Label>
+            <Label>Customer Name (Optional)</Label>
+            <div className="flex gap-2">
+              <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openCombobox}
+                    className="justify-between flex-1"
+                    data-testid="button-select-customer"
+                  >
+                    {customerName || "Select saved customer..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search customers..." />
+                    <CommandList>
+                      <CommandEmpty>No customers found.</CommandEmpty>
+                      <CommandGroup heading="Saved Customers">
+                        {customers.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            value={customer.name || ""}
+                            onSelect={() => handleSelectCustomer(customer)}
+                            data-testid={`customer-option-${customer.id}`}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                customerName === customer.name ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{customer.name}</span>
+                              {customer.phone && (
+                                <span className="text-xs text-muted-foreground">{customer.phone}</span>
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">
+              Or manually enter customer name:
+            </div>
             <Input
-              id="customer-name"
               type="text"
-              placeholder="Enter customer name..."
+              placeholder="Enter new customer name..."
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               data-testid="input-customer-name"
