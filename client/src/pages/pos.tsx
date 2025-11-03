@@ -84,6 +84,9 @@ export default function POS() {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
       
+      // Invalidate due management queries for real-time updates
+      queryClient.invalidateQueries({ queryKey: ["/api/due/customers-summary"] });
+      
       // Invalidate inventory queries
       queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
       queryClient.invalidateQueries({ 
