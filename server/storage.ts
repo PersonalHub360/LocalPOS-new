@@ -1188,8 +1188,12 @@ export class DatabaseStorage implements IStorage {
 
   async getCustomers(branchId?: string | null): Promise<Customer[]> {
     if (branchId) {
+      // Include customers with matching branchId OR NULL branchId (unassigned customers)
       return await db.select().from(customers)
-        .where(eq(customers.branchId, branchId))
+        .where(or(
+          eq(customers.branchId, branchId),
+          isNull(customers.branchId)
+        ))
         .orderBy(desc(customers.createdAt));
     }
     return await db.select().from(customers).orderBy(desc(customers.createdAt));
