@@ -442,7 +442,7 @@ export default function POS() {
       total: total.toString(),
       status: "completed",
       paymentMethod,
-      paymentStatus: "paid",
+      paymentStatus: paymentMethod === "due" ? "due" : "paid",
       items: orderItems.map((item) => ({
         productId: item.product.id,
         quantity: item.quantity,
