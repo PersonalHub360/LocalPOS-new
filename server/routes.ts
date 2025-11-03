@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema } from "@shared/schema";
+import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema, insertCustomerSchema, insertDuePaymentSchema, insertDuePaymentAllocationSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 
@@ -1429,6 +1429,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid adjustment data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to create payment adjustment" });
+    }
+  });
+
+  app.get("/api/customers", async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const customers = await storage.getCustomers(branchId);
+      res.json(customers);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch customers" });
+    }
+  });
+
+  app.get("/api/customers/:id", async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.id);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch customer" });
+    }
+  });
+
+  app.post("/api/customers", async (req, res) => {
+    try {
+      const validatedData = insertCustomerSchema.parse(req.body);
+      const customer = await storage.createCustomer(validatedData);
+      res.status(201).json(customer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid customer data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create customer" });
+    }
+  });
+
+  app.patch("/api/customers/:id", async (req, res) => {
+    try {
+      const customer = await storage.updateCustomer(req.params.id, req.body);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update customer" });
+    }
+  });
+
+  app.delete("/api/customers/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteCustomer(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete customer" });
+    }
+  });
+
+  app.get("/api/due/payments", async (req, res) => {
+    try {
+      const customerId = req.query.customerId as string | undefined;
+      const branchId = req.query.branchId as string | undefined;
+      const payments = await storage.getDuePayments(customerId, branchId);
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/due/payments", async (req, res) => {
+    try {
+      const { allocations, ...paymentData } = req.body;
+      
+      if (!allocations || !Array.isArray(allocations)) {
+        return res.status(400).json({ error: "Allocations array is required" });
+      }
+      
+      const validatedPayment = insertDuePaymentSchema.parse(paymentData);
+      
+      const payment = await storage.recordPaymentWithAllocations(
+        validatedPayment,
+        allocations
+      );
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid payment data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record payment" });
+    }
+  });
+
+  app.get("/api/due/customers-summary", async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const summary = await storage.getAllCustomersDueSummary(branchId);
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch customers summary" });
+    }
+  });
+
+  app.get("/api/due/customers/:id/summary", async (req, res) => {
+    try {
+      const summary = await storage.getCustomerDueSummary(req.params.id);
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch customer summary" });
     }
   });
 
