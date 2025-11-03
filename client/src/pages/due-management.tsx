@@ -11,8 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, CreditCard, User, DollarSign, FileText, Wallet } from "lucide-react";
-import { format } from "date-fns";
+import { Calendar, CreditCard, User, DollarSign, FileText, Wallet, Download, Upload, FileSpreadsheet } from "lucide-react";
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useBranch } from "@/contexts/BranchContext";
@@ -21,6 +21,9 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 interface CustomerDueSummary {
   customer: Customer;
@@ -65,14 +68,17 @@ export default function DueManagement() {
   const [customerOrders, setCustomerOrders] = useState<OrderWithDetails[]>([]);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, boolean>>({});
   const [orderAllocations, setOrderAllocations] = useState<Record<string, number>>({});
+  const [dateRange, setDateRange] = useState<string>("all");
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const { toast } = useToast();
-  const { selectedBranch } = useBranch();
+  const { selectedBranchId } = useBranch();
 
   const { data: customerSummaries = [], isLoading } = useQuery<CustomerDueSummary[]>({
-    queryKey: ["/api/due/customers-summary", selectedBranch?.id],
+    queryKey: ["/api/due/customers-summary", selectedBranchId],
     queryFn: async () => {
-      const url = selectedBranch?.id
-        ? `/api/due/customers-summary?branchId=${selectedBranch.id}`
+      const url = selectedBranchId
+        ? `/api/due/customers-summary?branchId=${selectedBranchId}`
         : "/api/due/customers-summary";
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch customer summaries");
@@ -81,10 +87,10 @@ export default function DueManagement() {
   });
 
   const { data: allOrders = [] } = useQuery<OrderWithDetails[]>({
-    queryKey: ["/api/orders", selectedBranch?.id],
+    queryKey: ["/api/orders", selectedBranchId],
     queryFn: async () => {
-      const url = selectedBranch?.id
-        ? `/api/orders?branchId=${selectedBranch.id}`
+      const url = selectedBranchId
+        ? `/api/orders?branchId=${selectedBranchId}`
         : "/api/orders";
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch orders");
@@ -116,7 +122,7 @@ export default function DueManagement() {
         note: data.payment.note || "",
         unappliedAmount: "0",
         recordedBy: null,
-        branchId: selectedBranch?.id || null,
+        branchId: selectedBranchId || null,
         allocations: data.allocations,
       });
     },
@@ -151,11 +157,6 @@ export default function DueManagement() {
       summary.customer.phone?.toLowerCase().includes(searchLower)
     );
   });
-
-  // Calculate totals
-  const totalDueAmount = filteredCustomers.reduce((sum, s) => sum + s.balance, 0);
-  const totalCustomers = filteredCustomers.length;
-  const totalCredit = filteredCustomers.reduce((sum, s) => sum + s.credit, 0);
 
   const handleRecordPayment = (customer: CustomerDueSummary) => {
     setSelectedCustomer(customer);
@@ -295,6 +296,202 @@ export default function DueManagement() {
     });
   };
 
+  // Date filtering logic
+  const handleDateRangeChange = (range: string) => {
+    setDateRange(range);
+    const today = new Date();
+    
+    if (range === "today") {
+      setStartDate(startOfDay(today));
+      setEndDate(endOfDay(today));
+    } else if (range === "this-month") {
+      setStartDate(startOfMonth(today));
+      setEndDate(endOfMonth(today));
+    } else if (range === "all") {
+      setStartDate(undefined);
+      setEndDate(undefined);
+    }
+  };
+
+  // Filter customers by date range
+  const dateFilteredCustomers = filteredCustomers.filter((summary) => {
+    if (!startDate || !endDate) return true;
+    
+    // Filter based on orders' creation dates
+    const customerOrders = allOrders.filter(
+      (order) => order.customerId === summary.customer.id &&
+        (order.paymentStatus === "due" || order.paymentStatus === "partial")
+    );
+    
+    return customerOrders.some((order) => {
+      const orderDate = new Date(order.createdAt);
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+  });
+
+  // Calculate totals
+  const totalDueAmount = dateFilteredCustomers.reduce((sum, s) => sum + s.balance, 0);
+  const totalCustomers = dateFilteredCustomers.length;
+  const totalCredit = dateFilteredCustomers.reduce((sum, s) => sum + s.credit, 0);
+
+  // Export to CSV
+  const handleExportCSV = () => {
+    const csvData = dateFilteredCustomers.map((summary) => ({
+      "Customer Name": summary.customer.name || "",
+      "Phone": summary.customer.phone || "",
+      "Total Due": summary.totalDue.toFixed(2),
+      "Total Paid": summary.totalPaid.toFixed(2),
+      "Balance": summary.balance.toFixed(2),
+      "Credit": summary.credit.toFixed(2),
+      "Due Orders": summary.ordersCount,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(csvData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Due Customers");
+    XLSX.writeFile(wb, `due-customers-${format(new Date(), "yyyy-MM-dd")}.csv`);
+    
+    toast({
+      title: "Success",
+      description: "Data exported to CSV successfully",
+    });
+  };
+
+  // Export to Excel
+  const handleExportExcel = () => {
+    const excelData = dateFilteredCustomers.map((summary) => ({
+      "Customer Name": summary.customer.name || "",
+      "Phone": summary.customer.phone || "",
+      "Total Due": summary.totalDue.toFixed(2),
+      "Total Paid": summary.totalPaid.toFixed(2),
+      "Balance": summary.balance.toFixed(2),
+      "Credit": summary.credit.toFixed(2),
+      "Due Orders": summary.ordersCount,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Due Customers");
+    XLSX.writeFile(wb, `due-customers-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    
+    toast({
+      title: "Success",
+      description: "Data exported to Excel successfully",
+    });
+  };
+
+  // Export to PDF
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.text("Due Customers Report", 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, 32);
+
+    const tableData = dateFilteredCustomers.map((summary) => [
+      summary.customer.name || "",
+      summary.customer.phone || "",
+      `$${summary.totalDue.toFixed(2)}`,
+      `$${summary.totalPaid.toFixed(2)}`,
+      `$${summary.balance.toFixed(2)}`,
+      `$${summary.credit.toFixed(2)}`,
+      summary.ordersCount.toString(),
+    ]);
+
+    (doc as any).autoTable({
+      head: [["Customer", "Phone", "Total Due", "Paid", "Balance", "Credit", "Orders"]],
+      body: tableData,
+      startY: 40,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+
+    doc.save(`due-customers-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    
+    toast({
+      title: "Success",
+      description: "Data exported to PDF successfully",
+    });
+  };
+
+  // Download sample CSV
+  const handleDownloadSample = () => {
+    const sampleData = [
+      {
+        "Customer Name": "John Doe",
+        "Phone": "555-1234",
+        "Email": "john@example.com",
+      },
+      {
+        "Customer Name": "Jane Smith",
+        "Phone": "555-5678",
+        "Email": "jane@example.com",
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sample");
+    XLSX.writeFile(wb, "customer-import-sample.csv");
+    
+    toast({
+      title: "Success",
+      description: "Sample file downloaded successfully",
+    });
+  };
+
+  // Import customers from file
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = event.target?.result;
+        const workbook = XLSX.read(data, { type: "binary" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const row of jsonData) {
+          try {
+            const rowData = row as any;
+            await apiRequest("POST", "/api/due/customers", {
+              name: rowData["Customer Name"],
+              phone: rowData["Phone"] || null,
+              email: rowData["Email"] || null,
+              branchId: selectedBranchId || null,
+              notes: null,
+            });
+            successCount++;
+          } catch (error) {
+            errorCount++;
+          }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["/api/due/customers-summary"] });
+        
+        toast({
+          title: "Import Complete",
+          description: `Successfully imported ${successCount} customers. ${errorCount} errors.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Import Failed",
+          description: "Failed to process the import file",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = "";
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-6 space-y-6">
@@ -350,19 +547,107 @@ export default function DueManagement() {
           </Card>
         </div>
 
-        {/* Search Filter */}
+        {/* Filters and Actions */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Search Customers</CardTitle>
+            <CardTitle className="text-lg">Filters & Actions</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="max-w-md">
-              <Input
-                placeholder="Search by customer name or phone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                data-testid="input-search"
-              />
+            <div className="space-y-4">
+              {/* Search */}
+              <div>
+                <Label>Search</Label>
+                <Input
+                  placeholder="Search by customer name or phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  data-testid="input-search"
+                />
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Date Range</Label>
+                  <Select value={dateRange} onValueChange={handleDateRangeChange}>
+                    <SelectTrigger data-testid="select-date-range">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="this-month">This Month</SelectItem>
+                      <SelectItem value="custom">Custom Range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {dateRange === "custom" && (
+                  <>
+                    <div>
+                      <Label>Start Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start" data-testid="button-start-date">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            {startDate ? format(startDate, "MMM dd, yyyy") : "Pick date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent mode="single" selected={startDate} onSelect={setStartDate} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div>
+                      <Label>End Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start" data-testid="button-end-date">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            {endDate ? format(endDate, "MMM dd, yyyy") : "Pick date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <CalendarComponent mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Export and Import Buttons */}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+                  <Download className="w-4 h-4 mr-1" />
+                  Export CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+                  <FileSpreadsheet className="w-4 h-4 mr-1" />
+                  Export Excel
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportPDF} data-testid="button-export-pdf">
+                  <Download className="w-4 h-4 mr-1" />
+                  Export PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleDownloadSample} data-testid="button-download-sample">
+                  <Download className="w-4 h-4 mr-1" />
+                  Download Sample
+                </Button>
+                <Button variant="outline" size="sm" asChild data-testid="button-import">
+                  <label>
+                    <Upload className="w-4 h-4 mr-1" />
+                    Import File
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={handleImportFile}
+                      className="hidden"
+                    />
+                  </label>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -375,7 +660,7 @@ export default function DueManagement() {
           <CardContent>
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">Loading...</div>
-            ) : filteredCustomers.length === 0 ? (
+            ) : dateFilteredCustomers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No customers with due payments found</p>
@@ -396,7 +681,7 @@ export default function DueManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredCustomers.map((summary) => (
+                    {dateFilteredCustomers.map((summary) => (
                       <TableRow key={summary.customer.id} data-testid={`row-customer-${summary.customer.id}`}>
                         <TableCell className="font-medium" data-testid={`text-customer-name-${summary.customer.id}`}>
                           {summary.customer.name || "-"}
