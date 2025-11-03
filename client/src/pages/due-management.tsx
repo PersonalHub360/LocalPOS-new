@@ -94,23 +94,26 @@ export default function DueManagement() {
     // Date filter
     const orderDate = order.completedAt ? new Date(order.completedAt) : new Date(order.createdAt);
     const now = new Date();
+    let matchesDateFilter = true;
 
     if (dateFilter === "today") {
-      return orderDate.toDateString() === now.toDateString();
+      matchesDateFilter = orderDate.toDateString() === now.toDateString();
     } else if (dateFilter === "this-week") {
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - now.getDay());
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
-      return isWithinInterval(orderDate, { start: weekStart, end: weekEnd });
+      matchesDateFilter = isWithinInterval(orderDate, { start: weekStart, end: weekEnd });
     } else if (dateFilter === "this-month") {
-      return (
+      matchesDateFilter = (
         orderDate.getMonth() === now.getMonth() &&
         orderDate.getFullYear() === now.getFullYear()
       );
     } else if (dateFilter === "custom" && customDate) {
-      return orderDate.toDateString() === customDate.toDateString();
+      matchesDateFilter = orderDate.toDateString() === customDate.toDateString();
     }
+
+    if (!matchesDateFilter) return false;
 
     // Month filter
     if (monthFilter) {
