@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,8 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar, CreditCard, User, Phone, DollarSign, FileText } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Calendar, CreditCard, User, Phone, DollarSign, FileText, Eye, Edit, Trash2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Order } from "@shared/schema";
 
 type OrderWithDetails = Order & {
@@ -38,9 +43,34 @@ export default function DueManagement() {
   const [dateFilter, setDateFilter] = useState("all");
   const [customDate, setCustomDate] = useState<Date>();
   const [monthFilter, setMonthFilter] = useState<Date>();
+  const [viewOrder, setViewOrder] = useState<OrderWithDetails | null>(null);
+  const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const { data: orders = [], isLoading } = useQuery<OrderWithDetails[]>({
     queryKey: ["/api/orders"],
+  });
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      return await apiRequest("DELETE", `/api/orders/${orderId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Success",
+        description: "Due bill deleted successfully",
+      });
+      setDeleteOrderId(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete due bill",
+        variant: "destructive",
+      });
+    },
   });
 
   // Filter orders to only show those with "due" payment
@@ -301,6 +331,7 @@ export default function DueManagement() {
                       <TableHead>Total Amount</TableHead>
                       <TableHead>Due Amount</TableHead>
                       <TableHead>Payment Method</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -337,6 +368,34 @@ export default function DueManagement() {
                               <span className="capitalize">{order.paymentMethod}</span>
                             )}
                           </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setViewOrder(order)}
+                                data-testid={`button-view-${order.id}`}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setLocation(`/sales?edit=${order.id}`)}
+                                data-testid={`button-edit-${order.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDeleteOrderId(order.id)}
+                                data-testid={`button-delete-${order.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -347,6 +406,117 @@ export default function DueManagement() {
           </CardContent>
         </Card>
       </div>
+
+      {/* View Order Dialog */}
+      <Dialog open={!!viewOrder} onOpenChange={() => setViewOrder(null)}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-view-order">
+          <DialogHeader>
+            <DialogTitle>Order Details</DialogTitle>
+            <DialogDescription>
+              View complete information for order #{viewOrder?.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+          {viewOrder && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Order Number</p>
+                  <p className="font-medium" data-testid="view-order-number">{viewOrder.orderNumber}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Date</p>
+                  <p className="font-medium" data-testid="view-order-date">
+                    {format(viewOrder.completedAt ? new Date(viewOrder.completedAt) : new Date(viewOrder.createdAt), "MMM dd, yyyy")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Customer Name</p>
+                  <p className="font-medium" data-testid="view-customer-name">{viewOrder.customerName || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Phone</p>
+                  <p className="font-medium" data-testid="view-customer-phone">{viewOrder.customerPhone || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Dining Option</p>
+                  <p className="font-medium capitalize" data-testid="view-dining-option">{viewOrder.diningOption}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="font-medium capitalize" data-testid="view-status">{viewOrder.status}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-2">Payment Information</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Subtotal</p>
+                    <p className="font-mono" data-testid="view-subtotal">${parseFloat(viewOrder.subtotal).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Discount</p>
+                    <p className="font-mono" data-testid="view-discount">${parseFloat(viewOrder.discount).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total</p>
+                    <p className="font-mono font-bold text-lg" data-testid="view-total">${parseFloat(viewOrder.total).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Due Amount</p>
+                    <p className="font-mono font-bold text-primary text-lg" data-testid="view-due-amount">
+                      ${getDueAmount(viewOrder).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                {viewOrder.paymentSplits && (() => {
+                  try {
+                    const splits = JSON.parse(viewOrder.paymentSplits);
+                    return (
+                      <div className="mt-4">
+                        <p className="text-sm text-muted-foreground mb-2">Payment Splits</p>
+                        <div className="space-y-2">
+                          {splits.map((split: PaymentSplit, index: number) => (
+                            <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
+                              <span className="capitalize font-medium">{split.method}</span>
+                              <span className="font-mono">${split.amount.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteOrderId} onOpenChange={() => setDeleteOrderId(null)}>
+        <AlertDialogContent data-testid="dialog-delete-confirmation">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Due Bill</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this due bill? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteOrderId && deleteOrderMutation.mutate(deleteOrderId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
