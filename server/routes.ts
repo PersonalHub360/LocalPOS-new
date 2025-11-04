@@ -80,6 +80,11 @@ function getDateRange(filter: string, customDate?: string): { startDate: Date; e
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint (must be before authentication middleware)
+  app.get("/health", async (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Authentication routes
   app.post("/api/auth/login", async (req, res) => {
     try {
