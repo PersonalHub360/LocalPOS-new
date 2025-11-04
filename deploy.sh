@@ -61,7 +61,12 @@ sudo -u $DEPLOY_USER bash -c "cd $APP_DIR && npm ci"
 
 # Build application
 echo "Building application..."
-sudo -u $DEPLOY_USER bash -c "cd $APP_DIR && npm run build"
+# Check if dist/public already exists (from local build), if so skip build
+if [ -d "$APP_DIR/dist/public" ] && [ "$(ls -A $APP_DIR/dist/public)" ]; then
+    echo "✓ Build artifacts already exist, skipping build..."
+else
+    sudo -u $DEPLOY_USER bash -c "cd $APP_DIR && npm run build"
+fi
 
 # Run database migrations as nodejs user (with environment variables loaded)
 echo "Running database migrations..."
