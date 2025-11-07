@@ -1,0 +1,60 @@
+cd LocalPOS-new
+
+# Clean and rebuild
+rm -rf dist
+npm run build
+
+# Create packages
+tar -czf bfcpos-deploy.tar.gz \
+  --exclude='node_modules' \
+  --exclude='.git' \
+  --exclude='.env*' \
+  --exclude='*.log' \
+  --exclude='.DS_Store' \
+  client server shared migrations scripts dist \
+  package.json package-lock.json \
+  tsconfig.json vite.config.ts tailwind.config.ts \
+  postcss.config.js drizzle.config.ts components.json \
+  deploy-bfc.sh start-bfc.sh ecosystem-bfc.config.cjs bfcpos.service nginx-bfc.conf
+
+tar -czf adorapos-deploy.tar.gz \
+  --exclude='node_modules' \
+  --exclude='.git' \
+  --exclude='.env*' \
+  --exclude='*.log' \
+  --exclude='.DS_Store' \
+  client server shared migrations scripts dist \
+  package.json package-lock.json \
+  tsconfig.json vite.config.ts tailwind.config.ts \
+  postcss.config.js drizzle.config.ts components.json \
+  deploy-adora.sh start-adora.sh ecosystem-adora.config.cjs adorapos.service nginx-adora.conf
+
+# Upload
+scp -i "C:\Users\9RZGXQ3\Downloads\api-server-key.pem" bfcpos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/
+scp -i "C:\Users\9RZGXQ3\Downloads\api-server-key.pem" adorapos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/
+
+# Deploy BFC POS
+cd /var/www/bfcpos
+sudo tar -xzf /tmp/bfcpos-deploy.tar.gz -C /var/www/bfcpos --overwrite
+sudo chown -R nodejs:nodejs /var/www/bfcpos
+sudo systemctl restart bfcpos
+
+# Deploy Adora POS
+cd /var/www/adorapos
+sudo tar -xzf /tmp/adorapos-deploy.tar.gz -C /var/www/adorapos --overwrite
+sudo chown -R nodejs:nodejs /var/www/adorapos
+sudo systemctl restart adorapos
+
+# Wait a moment for services to start
+sleep 5
+
+# Verify both services are running
+curl http://localhost:7000/health
+curl http://localhost:8000/health
+
+# Check service status
+sudo systemctl status bfcpos adorapos
+
+# If there are any errors, check the logs
+sudo journalctl -u bfcpos -n 30 --no-pager
+sudo journalctl -u adorapos -n 30 --no-pager

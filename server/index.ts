@@ -24,6 +24,12 @@ const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+// Determine if we should use secure cookies
+// Secure cookies only work over HTTPS. For localhost (HTTP), we must use secure: false
+// In production behind Nginx with HTTPS, set SECURE_COOKIES=true in .env.production
+// Default to false for safety (works on both HTTP and HTTPS)
+const useSecureCookies = process.env.SECURE_COOKIES === "true";
+
 app.use(
   session({
     store: new PgSession({
@@ -35,9 +41,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: useSecureCookies, // Only secure in production when not on localhost
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      sameSite: useSecureCookies ? "none" : "lax", // none requires secure, lax works with both
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
   })
