@@ -45,7 +45,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, Pencil, Printer, Trash2, Download, FileSpreadsheet, FileText, Search, Calendar as CalendarIcon, Trash } from "lucide-react";
+import { Eye, Pencil, Printer, Trash2, Download, FileSpreadsheet, FileText, Search, Calendar as CalendarIcon, Trash, Upload } from "lucide-react";
+import { generateReceiptHTML, type ReceiptTemplate } from "@/lib/receipt-templates";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format, startOfDay, endOfDay, subDays, isWithinInterval } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -98,6 +99,8 @@ export default function SalesManage() {
   const [newPaymentMethod, setNewPaymentMethod] = useState<string>("cash");
   const [newPaymentAmount, setNewPaymentAmount] = useState<string>("");
   const [selectedSales, setSelectedSales] = useState<Set<string>>(new Set());
+  const [printSale, setPrintSale] = useState<Order | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<ReceiptTemplate>("classic");
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const { toast} = useToast();
 
@@ -259,29 +262,24 @@ export default function SalesManage() {
     }
   }, [viewSale, editSale]);
 
-  const handlePrint = async (sale: Order) => {
+  const handlePrint = async (sale: Order, template?: ReceiptTemplate) => {
     try {
       // Fetch order items
       const response = await fetch(`/api/orders/${sale.id}/items`);
       if (!response.ok) throw new Error("Failed to fetch order items");
       const items: OrderItemWithProduct[] = await response.json();
 
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) return;
+      // Fetch settings for receipt customization
+      const settingsResponse = await fetch("/api/settings");
+      const settings = settingsResponse.ok ? await settingsResponse.json() : null;
 
-      const itemsRows = items.map(item => `
-        <tr>
-          <td>${item.productName}</td>
-          <td style="text-align: center;">${item.quantity}</td>
-          <td style="text-align: right;">$${item.price}</td>
-          <td style="text-align: center;">-</td>
-          <td style="text-align: right;">$${item.total}</td>
-        </tr>
-      `).join('');
+      // Use provided template or default to classic
+      const templateToUse = template || selectedTemplate;
 
-      // Calculate total in KHR (1 USD = 4,100 KHR)
+      // Calculate total in KHR
       const totalUSD = parseFloat(sale.total);
-      const totalKHR = (totalUSD * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      const totalKHRNum = totalUSD * 4100;
+      const totalKHR = totalKHRNum.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
       // Parse payment splits if available
       let paymentDetails = `<p><strong>Pay by:</strong> ${sale.paymentMethod || "N/A"}</p>`;
@@ -309,75 +307,46 @@ export default function SalesManage() {
             `;
           }
         } catch (error) {
-          // If parsing fails, fall back to default payment method display
           console.error("Failed to parse payment splits:", error);
         }
       }
 
-      const content = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Sale Receipt - INV-${sale.orderNumber}</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
-              h1 { color: #ea580c; margin-bottom: 20px; }
-              .header-info { margin-bottom: 20px; }
-              .header-info p { margin: 5px 0; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-              th { background-color: #f3f4f6; font-weight: 600; }
-              .text-center { text-align: center; }
-              .text-right { text-align: right; }
-              .summary { margin-top: 20px; text-align: right; }
-              .summary p { margin: 8px 0; }
-              .total { font-weight: bold; font-size: 1.3em; color: #ea580c; }
-              .total-khr { color: #666; font-size: 0.95em; margin-top: 4px; }
-              hr { margin: 20px 0; border: none; border-top: 2px solid #e5e7eb; }
-            </style>
-          </head>
-          <body>
-            <h1>Sale Receipt</h1>
-            <div class="header-info">
-              <p><strong>Sale ID:</strong> ${sale.id}</p>
-              <p><strong>Invoice No:</strong> INV-${sale.orderNumber}</p>
-              <p><strong>Date:</strong> ${format(new Date(sale.createdAt), "PPpp")}</p>
-              <p><strong>Customer:</strong> ${sale.customerName || "Walk-in Customer"}</p>
-              <p><strong>Dining Option:</strong> ${sale.diningOption}</p>
-            </div>
-            
-            <h3>Order Items</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Product Name</th>
-                  <th class="text-center">Quantity</th>
-                  <th class="text-right">Price</th>
-                  <th class="text-center">Discount</th>
-                  <th class="text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${itemsRows}
-              </tbody>
-            </table>
+      // Generate receipt HTML using template
+      const receiptData = {
+        sale,
+        items: items.map(item => ({
+          id: item.id,
+          orderId: item.orderId,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total,
+          productName: item.productName,
+        })),
+        settings,
+        totalKHR: totalKHRNum,
+        paymentDetails,
+      };
 
-            <div class="summary">
-              <p><strong>Subtotal:</strong> $${sale.subtotal}</p>
-              <p><strong>Discount:</strong> $${sale.discount}</p>
-              <p class="total"><strong>Total:</strong> $${sale.total}</p>
-              <p class="total-khr"><strong>Total in KHR:</strong> ៛${totalKHR}</p>
-              <hr>
-              ${paymentDetails}
-              <p><strong>Payment Status:</strong> ${sale.paymentStatus}</p>
-            </div>
-          </body>
-        </html>
-      `;
+      const content = generateReceiptHTML(templateToUse, receiptData);
+
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast({
+          title: "Error",
+          description: "Please allow popups to print receipts",
+          variant: "destructive",
+        });
+        return;
+      }
 
       printWindow.document.write(content);
       printWindow.document.close();
-      printWindow.print();
+      
+      // Wait for content to load before printing
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
     } catch (error) {
       console.error("Error printing receipt:", error);
       toast({
@@ -385,6 +354,18 @@ export default function SalesManage() {
         description: "Failed to print receipt",
         variant: "destructive",
       });
+    }
+  };
+
+  const handlePrintClick = (sale: Order) => {
+    // Show template selection dialog
+    setPrintSale(sale);
+  };
+
+  const handleConfirmPrint = () => {
+    if (printSale) {
+      handlePrint(printSale, selectedTemplate);
+      setPrintSale(null);
     }
   };
 
@@ -444,15 +425,25 @@ export default function SalesManage() {
       primaryPaymentMethod = methods.length === 1 ? paymentSplits[0].method : "split";
     }
 
+    const updateData: any = {
+      customerName: editSale.customerName,
+      paymentStatus: editSale.paymentStatus,
+      paymentMethod: primaryPaymentMethod,
+      paymentSplits: paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : null,
+      status: editSale.status,
+    };
+
+    // Add createdAt if it was modified
+    if (editSale.createdAt) {
+      const createdAtValue = typeof editSale.createdAt === 'string' 
+        ? editSale.createdAt 
+        : new Date(editSale.createdAt).toISOString();
+      updateData.createdAt = createdAtValue;
+    }
+
     updateMutation.mutate({
       id: editSale.id,
-      data: {
-        customerName: editSale.customerName,
-        paymentStatus: editSale.paymentStatus,
-        paymentMethod: primaryPaymentMethod,
-        paymentSplits: paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : null,
-        status: editSale.status,
-      },
+      data: updateData,
     });
   };
 
@@ -535,6 +526,177 @@ export default function SalesManage() {
     });
   };
 
+  const handleDownloadSample = () => {
+    const sampleData = [
+      ["Invoice No", "Date & Time", "Customer Name", "Customer Phone", "Subtotal", "Discount", "Total", "Payment Method", "Payment Status", "Order Status", "Dining Option"],
+      ["INV-001", "2025-11-07 10:00:00", "John Doe", "012345678", "100.00", "0.00", "100.00", "cash", "paid", "completed", "dine-in"],
+      ["INV-002", "2025-11-07 11:30:00", "Jane Smith", "098765432", "250.50", "10.00", "240.50", "card", "paid", "completed", "takeaway"],
+      ["INV-003", "2025-11-07 14:15:00", "Walk-in Customer", "", "75.25", "5.00", "70.25", "aba", "paid", "completed", "dine-in"],
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
+
+    const fileName = `sales_import_sample.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+
+    toast({
+      title: "Success",
+      description: "Sample file downloaded successfully",
+    });
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isCSV = file.name.endsWith('.csv');
+
+    if (!isExcel && !isCSV) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload a CSV or Excel file (.csv, .xlsx, .xls)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      try {
+        let rows: any[][] = [];
+        
+        if (isExcel) {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false }) as any[][];
+          rows = jsonData.slice(1); // Skip header row
+        } else {
+          const text = event.target?.result as string;
+          const lines = text.split('\n').slice(1); // Skip header row
+          rows = lines.map(line => {
+            if (!line.trim()) return [];
+            // Simple CSV parsing - handle quoted fields
+            const fields: string[] = [];
+            let currentField = '';
+            let insideQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              const nextChar = line[i + 1];
+              
+              if (char === '"') {
+                if (insideQuotes && nextChar === '"') {
+                  currentField += '"';
+                  i++; // Skip next quote
+                } else {
+                  insideQuotes = !insideQuotes;
+                }
+              } else if (char === ',' && !insideQuotes) {
+                fields.push(currentField.trim());
+                currentField = '';
+              } else {
+                currentField += char;
+              }
+            }
+            fields.push(currentField.trim());
+            return fields;
+          }).filter(row => row.length > 0);
+        }
+
+        // Prepare data for API
+        const salesData = rows.map((row, index) => {
+          try {
+            // Expected columns: Invoice No, Date & Time, Customer Name, Customer Phone, Subtotal, Discount, Total, Payment Method, Payment Status, Order Status, Dining Option
+            const invoiceNo = row[0]?.toString().trim() || '';
+            const dateTime = row[1]?.toString().trim() || new Date().toISOString();
+            const customerName = row[2]?.toString().trim() || 'Walk-in Customer';
+            const customerPhone = row[3]?.toString().trim() || '';
+            const subtotal = parseFloat(row[4]?.toString().replace(/[^0-9.-]/g, '') || '0');
+            const discount = parseFloat(row[5]?.toString().replace(/[^0-9.-]/g, '') || '0');
+            const total = parseFloat(row[6]?.toString().replace(/[^0-9.-]/g, '') || '0');
+            const paymentMethod = row[7]?.toString().trim().toLowerCase() || 'cash';
+            const paymentStatus = row[8]?.toString().trim().toLowerCase() || 'paid';
+            const orderStatus = row[9]?.toString().trim().toLowerCase() || 'completed';
+            const diningOption = row[10]?.toString().trim().toLowerCase() || 'dine-in';
+
+            // Parse date - try multiple formats
+            let parsedDate = new Date();
+            if (dateTime) {
+              const dateStr = dateTime.toString();
+              // Try ISO format first
+              parsedDate = new Date(dateStr);
+              // If invalid, try common formats
+              if (isNaN(parsedDate.getTime())) {
+                parsedDate = new Date(dateStr.replace(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/, '$1-$2-$3T$4:$5:$6'));
+              }
+              if (isNaN(parsedDate.getTime())) {
+                parsedDate = new Date(); // Fallback to current date
+              }
+            }
+
+            return {
+              orderNumber: invoiceNo.replace(/^INV-?/i, ''), // Remove INV- prefix if present
+              createdAt: parsedDate.toISOString(),
+              customerName,
+              customerPhone: customerPhone || null,
+              subtotal: subtotal.toString(),
+              discount: discount.toString(),
+              total: total.toString(),
+              paymentMethod,
+              paymentStatus,
+              status: orderStatus,
+              diningOption,
+            };
+          } catch (error) {
+            console.error(`Error parsing row ${index + 2}:`, error);
+            return null;
+          }
+        }).filter(sale => sale !== null);
+
+        if (salesData.length === 0) {
+          toast({
+            title: "No valid data",
+            description: "No valid sales records found in the file",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Send to API
+        const response = await apiRequest("POST", "/api/sales/import", { sales: salesData });
+        
+        toast({
+          title: "Success",
+          description: `Successfully imported ${salesData.length} sales record(s)`,
+        });
+
+        // Refresh sales list
+        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      } catch (error: any) {
+        console.error("Import error:", error);
+        toast({
+          title: "Import failed",
+          description: error.message || "Failed to import sales data",
+          variant: "destructive",
+        });
+      }
+    };
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+
+    // Reset input
+    e.target.value = '';
+  };
+
   const filteredSales = sales.filter((sale) => {
     if (sale.status !== "completed") {
       return false;
@@ -578,24 +740,50 @@ export default function SalesManage() {
             <h1 className="text-3xl font-bold" data-testid="text-sales-title">Sales Management</h1>
             <p className="text-muted-foreground mt-1">Manage sales activities and records</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button data-testid="button-export">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Export to Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportToPDF} data-testid="button-export-pdf">
-                <FileText className="w-4 h-4 mr-2" />
-                Export to PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-2">
+            <input
+              type="file"
+              id="import-sales-file"
+              accept=".csv,.xlsx,.xls"
+              style={{ display: 'none' }}
+              onChange={handleImport}
+              data-testid="input-import-sales-file"
+            />
+            <Button
+              variant="outline"
+              onClick={() => document.getElementById('import-sales-file')?.click()}
+              data-testid="button-import-sales"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import Sales
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadSample}
+              data-testid="button-download-sample"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Download Sample
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button data-testid="button-export">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Export to Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportToPDF} data-testid="button-export-pdf">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Export to PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -809,7 +997,7 @@ export default function SalesManage() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  onClick={() => handlePrint(sale)}
+                                  onClick={() => handlePrintClick(sale)}
                                   data-testid={`button-print-${sale.id}`}
                                 >
                                   <Printer className="w-4 h-4" />
@@ -936,16 +1124,46 @@ export default function SalesManage() {
                             <TableHead data-testid="header-product-name">Product Name</TableHead>
                             <TableHead data-testid="header-quantity-sold">Quantity Sold</TableHead>
                             <TableHead data-testid="header-total-revenue">Total Revenue</TableHead>
+                            <TableHead data-testid="header-actions">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredSummary.map((item, index) => (
-                            <TableRow key={index} data-testid={`row-summary-${index}`}>
-                              <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
-                              <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
-                              <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
-                            </TableRow>
-                          ))}
+                          {filteredSummary.map((item, index) => {
+                            // Find sales containing this product for View action
+                            const productSales = filteredSales.filter(sale => {
+                              // This is a simplified check - in a real scenario, you'd need to check order items
+                              return true; // Placeholder - would need to check actual order items
+                            });
+                            
+                            return (
+                              <TableRow key={index} data-testid={`row-summary-${index}`}>
+                                <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
+                                <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
+                                <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          onClick={() => {
+                                            // Filter detailed report by product name
+                                            setActiveTab("detailed");
+                                            setSearchTerm(item.product.split(" - ")[0] || item.product);
+                                          }}
+                                          data-testid={`button-view-summary-${index}`}
+                                        >
+                                          <Eye className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>View Sales</TooltipContent>
+                                    </Tooltip>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
@@ -1113,6 +1331,23 @@ export default function SalesManage() {
                     onChange={(e) =>
                       setEditSale({ ...editSale, customerName: e.target.value })
                     }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="sale-date-time">Date & Time</Label>
+                  <Input
+                    id="sale-date-time"
+                    type="datetime-local"
+                    data-testid="input-edit-sale-datetime"
+                    value={editSale.createdAt 
+                      ? (typeof editSale.createdAt === 'string' 
+                          ? new Date(editSale.createdAt).toISOString().slice(0, 16)
+                          : new Date(editSale.createdAt).toISOString().slice(0, 16))
+                      : ""}
+                    onChange={(e) => {
+                      const newDate = e.target.value ? new Date(e.target.value) : new Date();
+                      setEditSale({ ...editSale, createdAt: newDate.toISOString() as any });
+                    }}
                   />
                 </div>
                 <div>
@@ -1338,6 +1573,155 @@ export default function SalesManage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
+      {/* Template Selection Dialog for Printing */}
+      <Dialog open={!!printSale} onOpenChange={() => setPrintSale(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-print-template">
+          <DialogHeader>
+            <DialogTitle>Select Receipt Template</DialogTitle>
+            <DialogDescription>
+              Choose a template style for your receipt, preview it, then print
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="template-select">Receipt Template</Label>
+              <Select
+                value={selectedTemplate}
+                onValueChange={(value: ReceiptTemplate) => setSelectedTemplate(value)}
+              >
+                <SelectTrigger id="template-select" data-testid="select-print-template">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="classic">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Classic - Traditional receipt style</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="modern">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Modern - Clean and minimal design</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="compact">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Compact - Small format for thermal printers</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="detailed">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Detailed - Full information with borders</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="elegant">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      <span>Elegant - Premium style with gradients</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-2">
+                Select a template and click "Preview Receipt" to see how it will look
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!printSale) return;
+                  try {
+                    const response = await fetch(`/api/orders/${printSale.id}/items`);
+                    if (!response.ok) throw new Error("Failed to fetch order items");
+                    const items: OrderItemWithProduct[] = await response.json();
+                    const settingsResponse = await fetch("/api/settings");
+                    const settings = settingsResponse.ok ? await settingsResponse.json() : null;
+
+                    const totalUSD = parseFloat(printSale.total);
+                    const totalKHRNum = totalUSD * 4100;
+
+                    let paymentDetails = `<p><strong>Pay by:</strong> ${printSale.paymentMethod || "N/A"}</p>`;
+                    if (printSale.paymentSplits) {
+                      try {
+                        const splits: PaymentSplit[] = JSON.parse(printSale.paymentSplits);
+                        if (splits.length > 0) {
+                          const splitsHtml = splits.map(split => {
+                            const methodLabel = getPaymentMethodLabel(split.method);
+                            const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                            return `
+                              <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                                <span>${methodLabel}:</span>
+                                <span><strong>$${split.amount.toFixed(2)}</strong> (៛${amountKHR})</span>
+                              </div>
+                            `;
+                          }).join('');
+                          paymentDetails = `
+                            <div style="margin-top: 10px;">
+                              <p style="margin-bottom: 10px;"><strong>Payment Split:</strong></p>
+                              <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; background-color: #f9fafb;">
+                                ${splitsHtml}
+                              </div>
+                            </div>
+                          `;
+                        }
+                      } catch (error) {
+                        console.error("Failed to parse payment splits:", error);
+                      }
+                    }
+
+                    const receiptData = {
+                      sale: printSale,
+                      items: items.map(item => ({
+                        id: item.id,
+                        orderId: item.orderId,
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        price: item.price,
+                        total: item.total,
+                        productName: item.productName,
+                      })),
+                      settings,
+                      totalKHR: totalKHRNum,
+                      paymentDetails,
+                    };
+
+                    const content = generateReceiptHTML(selectedTemplate, receiptData);
+                    const previewWindow = window.open("", "_blank");
+                    if (previewWindow) {
+                      previewWindow.document.write(content);
+                      previewWindow.document.close();
+                    }
+                  } catch (error) {
+                    toast({
+                      title: "Error",
+                      description: "Failed to preview receipt",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                data-testid="button-preview-receipt"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                Preview Receipt
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPrintSale(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmPrint} data-testid="button-confirm-print">
+              <Printer className="w-4 h-4 mr-2" />
+              Print Receipt
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={!!deleteSaleId} onOpenChange={() => setDeleteSaleId(null)}>
         <AlertDialogContent data-testid="dialog-delete-sale">
           <AlertDialogHeader>

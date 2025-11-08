@@ -48,8 +48,23 @@ export async function setupVite(app: Express, server: Server) {
     allowedHosts: true as const,
   };
 
+  // Ensure root is set correctly - resolve from server directory to client
+  const baseDir = import.meta.dirname || __dirname;
+  const clientRoot = path.resolve(baseDir, "..", "client");
+  const projectRoot = path.resolve(baseDir, "..");
+
   const vite = await createViteServer({
     ...viteConfig,
+    root: clientRoot, // Explicitly set root to client directory
+    resolve: {
+      ...viteConfig.resolve,
+      alias: {
+        ...viteConfig.resolve?.alias,
+        "@": path.resolve(clientRoot, "src"),
+        "@shared": path.resolve(projectRoot, "shared"),
+        "@assets": path.resolve(projectRoot, "attached_assets"),
+      },
+    },
     configFile: false,
     customLogger: {
       ...viteLogger,

@@ -50,6 +50,9 @@ import {
   Banknote,
   Plus,
   ArrowLeft,
+  Eye,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import {
   Table,
@@ -642,6 +645,7 @@ export default function BankStatement() {
                       <TableHead>Payment Method</TableHead>
                       <TableHead className="text-right">Amount Paid</TableHead>
                       <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -687,6 +691,66 @@ export default function BankStatement() {
                           </TableCell>
                           <TableCell className="text-right font-mono font-medium">
                             ${parseFloat(order.total).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  // Navigate to sales page to view this order
+                                  window.location.href = `/sales?orderId=${order.id}`;
+                                }}
+                                data-testid={`button-view-${order.id}`}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  // Navigate to sales page to edit this order
+                                  window.location.href = `/sales?orderId=${order.id}&edit=true`;
+                                }}
+                                data-testid={`button-edit-${order.id}`}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={async () => {
+                                  if (confirm(`Are you sure you want to delete order #${order.orderNumber}? This action cannot be undone.`)) {
+                                    try {
+                                      const response = await fetch(`/api/orders/${order.id}`, {
+                                        method: "DELETE",
+                                        credentials: "include",
+                                      });
+                                      if (response.ok) {
+                                        queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+                                        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                                        queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
+                                        toast({
+                                          title: "Success",
+                                          description: `Order #${order.orderNumber} deleted successfully`,
+                                        });
+                                      } else {
+                                        throw new Error("Failed to delete order");
+                                      }
+                                    } catch (error) {
+                                      toast({
+                                        title: "Error",
+                                        description: "Failed to delete order",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }
+                                }}
+                                data-testid={`button-delete-${order.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

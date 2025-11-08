@@ -513,12 +513,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const items = await storage.getOrderItemsWithProducts(order.id);
-      const itemsWithProductName = items.map(item => ({
-        ...item,
-        productName: item.product.name,
-      }));
+      const itemsWithProductName = items
+        .filter(item => item.product) // Filter out items with null products
+        .map(item => ({
+          id: item.id,
+          orderId: item.orderId,
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total,
+          productName: item.product.name,
+        }));
       res.json(itemsWithProductName);
     } catch (error) {
+      console.error("Error fetching order items:", error);
       res.status(500).json({ error: "Failed to fetch order items" });
     }
   });
@@ -587,7 +595,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/orders/:id", async (req, res) => {
     try {
-      const order = await storage.updateOrder(req.params.id, req.body);
+      const updates: any = { ...req.body };
+      
+      // Convert createdAt from ISO string to Date if provided
+      if (updates.createdAt && typeof updates.createdAt === 'string') {
+        updates.createdAt = new Date(updates.createdAt);
+      }
+      
+      const order = await storage.updateOrder(req.params.id, updates);
       if (!order) {
         return res.status(404).json({ error: "Order not found" });
       }
@@ -685,6 +700,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(sales);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch sales" });
+    }
+  });
+
+  app.post("/api/sales/import", async (req, res) => {
+    try {
+      const { sales: salesData } = req.body;
+      
+      if (!Array.isArray(salesData) || salesData.length === 0) {
+        return res.status(400).json({ error: "Invalid sales data. Expected an array of sales." });
+      }
+
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: [] as Array<{ index: number; orderNumber: string; error: string }>,
+      };
+
+      for (let i = 0; i < salesData.length; i++) {
+        const saleData = salesData[i];
+        try {
+          // Validate required fields
+          if (!saleData.orderNumber && !saleData.total) {
+            results.failed++;
+            results.errors.push({
+              index: i + 1,
+              orderNumber: saleData.orderNumber || 'N/A',
+              error: "Missing required fields: orderNumber or total",
+            });
+            continue;
+          }
+
+          // Prepare order data
+          const orderData: any = {
+            orderNumber: saleData.orderNumber || undefined, // Will be generated if not provided
+            customerName: saleData.customerName || "Walk-in Customer",
+            customerPhone: saleData.customerPhone || null,
+            subtotal: saleData.subtotal || saleData.total || "0",
+            discount: saleData.discount || "0",
+            discountType: "amount",
+            total: saleData.total || saleData.subtotal || "0",
+            paymentMethod: saleData.paymentMethod || "cash",
+            paymentStatus: saleData.paymentStatus || "paid",
+            status: saleData.status || "completed",
+            diningOption: saleData.diningOption || "dine-in",
+            orderSource: "import",
+          };
+
+          // Set createdAt if provided
+          if (saleData.createdAt) {
+            orderData.createdAt = new Date(saleData.createdAt);
+          }
+
+          // Set completedAt if status is completed
+          if (orderData.status === "completed") {
+            orderData.completedAt = orderData.createdAt ? new Date(orderData.createdAt) : new Date();
+          }
+
+          // Set paidAmount based on payment status
+          if (orderData.paymentStatus === "paid") {
+            orderData.paidAmount = orderData.total;
+          } else {
+            orderData.paidAmount = "0";
+          }
+
+          // Create the order
+          await storage.createOrder(orderData);
+          results.success++;
+        } catch (error: any) {
+          results.failed++;
+          results.errors.push({
+            index: i + 1,
+            orderNumber: saleData.orderNumber || 'N/A',
+            error: error.message || "Unknown error",
+          });
+        }
+      }
+
+      res.json({
+        message: `Import completed: ${results.success} successful, ${results.failed} failed`,
+        results,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to import sales", message: error.message });
     }
   });
 

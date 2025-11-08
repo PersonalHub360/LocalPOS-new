@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -458,7 +459,6 @@ export default function Reports() {
 
             <div class="footer">
               <p>Thank you for your business!</p>
-              <p>Powered by BondPos</p>
             </div>
 
             <script>
@@ -904,31 +904,84 @@ export default function Reports() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  onClick={() => handleViewOrder(sale)}
-                                  disabled={loadingOrderDetails}
-                                  data-testid={`button-view-${sale.id}`}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost"
-                                  onClick={() => handleEditOrder(sale.id)}
-                                  data-testid={`button-edit-${sale.id}`}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  onClick={() => handlePrintOrder(sale)}
-                                  data-testid={`button-print-${sale.id}`}
-                                >
-                                  <FileText className="w-4 h-4" />
-                                </Button>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      onClick={() => handleViewOrder(sale)}
+                                      disabled={loadingOrderDetails}
+                                      data-testid={`button-view-${sale.id}`}
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>View Details</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={() => handleEditOrder(sale.id)}
+                                      data-testid={`button-edit-${sale.id}`}
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit Order</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      onClick={() => handlePrintOrder(sale)}
+                                      data-testid={`button-print-${sale.id}`}
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Print Receipt</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={async () => {
+                                        if (confirm(`Are you sure you want to delete order #${sale.orderNumber}? This action cannot be undone.`)) {
+                                          try {
+                                            const response = await fetch(`/api/orders/${sale.id}`, {
+                                              method: "DELETE",
+                                              credentials: "include",
+                                            });
+                                            if (response.ok) {
+                                              queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+                                              queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                                              toast({
+                                                title: "Success",
+                                                description: `Order #${sale.orderNumber} deleted successfully`,
+                                              });
+                                            } else {
+                                              throw new Error("Failed to delete order");
+                                            }
+                                          } catch (error) {
+                                            toast({
+                                              title: "Error",
+                                              description: "Failed to delete order",
+                                              variant: "destructive",
+                                            });
+                                          }
+                                        }
+                                      }}
+                                      data-testid={`button-delete-${sale.id}`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete Order</TooltipContent>
+                                </Tooltip>
                               </div>
                             </TableCell>
                           </TableRow>

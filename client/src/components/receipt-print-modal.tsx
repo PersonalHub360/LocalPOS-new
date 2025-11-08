@@ -8,10 +8,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Printer, Receipt, Utensils, Calendar, Hash } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Printer, Receipt, Utensils, Calendar, Hash, FileText } from "lucide-react";
 import type { Order, OrderItem, Product, Settings } from "@shared/schema";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import type { ReceiptTemplate } from "@/lib/receipt-templates";
+import { generateReceiptHTML } from "@/lib/receipt-templates";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReceiptPrintModalProps {
   open: boolean;
@@ -59,10 +71,127 @@ export function ReceiptPrintModal({
     queryKey: ["/api/settings"],
     enabled: open,
   });
+  const { toast } = useToast();
 
-  const handlePrint = () => {
-    window.print();
-    onPrint();
+  const [selectedTemplate, setSelectedTemplate] = useState<ReceiptTemplate>("classic");
+
+  const handlePrint = async () => {
+    try {
+      // Calculate total in KHR
+      const totalUSD = order.total;
+      const totalKHRNum = totalUSD * 4100;
+      const totalKHR = totalKHRNum.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+      // Parse payment splits if available
+      let paymentDetails = `<p><strong>Pay by:</strong> ${order.paymentSplits ? "Split Payment" : "Cash"}</p>`;
+      if (order.paymentSplits) {
+        try {
+          const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+          if (splits.length > 0) {
+            const splitsHtml = splits.map(split => {
+              const methodLabels: Record<string, string> = {
+                cash: "Cash",
+                card: "Card",
+                aba: "ABA",
+                acleda: "Acleda",
+                due: "Due",
+                cash_aba: "Cash And ABA",
+                cash_acleda: "Cash And Acleda",
+              };
+              const methodLabel = methodLabels[split.method] || split.method;
+              const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+              return `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                  <span>${methodLabel}:</span>
+                  <span><strong>$${split.amount.toFixed(2)}</strong> (៛${amountKHR})</span>
+                </div>
+              `;
+            }).join('');
+            paymentDetails = `
+              <div style="margin-top: 10px;">
+                <p style="margin-bottom: 10px;"><strong>Payment Split:</strong></p>
+                <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; background-color: #f9fafb;">
+                  ${splitsHtml}
+                </div>
+              </div>
+            `;
+          }
+        } catch (error) {
+          console.error("Failed to parse payment splits:", error);
+        }
+      }
+
+      // Create a mock Order object for the template generator
+      const mockOrder: Order = {
+        id: `temp-${Date.now()}`,
+        orderNumber: order.orderNumber,
+        tableId: order.tableId || null,
+        customerId: null,
+        branchId: null,
+        diningOption: order.diningOption,
+        customerName: null,
+        customerPhone: null,
+        orderSource: "pos",
+        subtotal: order.subtotal.toString(),
+        discount: order.discount.toString(),
+        discountType: "amount",
+        total: order.total.toString(),
+        dueAmount: null,
+        paidAmount: order.total.toString(),
+        status: "completed",
+        paymentStatus: "paid",
+        paymentMethod: order.paymentSplits ? "split" : "cash",
+        paymentSplits: order.paymentSplits || null,
+        createdAt: new Date(),
+        completedAt: new Date(),
+      };
+
+      // Generate receipt HTML using template
+      const receiptData = {
+        sale: mockOrder,
+        items: order.items.map(item => ({
+          id: `temp-${Date.now()}-${Math.random()}`,
+          orderId: mockOrder.id,
+          productId: item.product.id,
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total,
+          productName: item.product.name,
+        })),
+        settings,
+        totalKHR: totalKHRNum,
+        paymentDetails,
+      };
+
+      const content = generateReceiptHTML(selectedTemplate, receiptData);
+
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast({
+          title: "Error",
+          description: "Please allow popups to print receipts",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      printWindow.document.write(content);
+      printWindow.document.close();
+      
+      // Wait for content to load before printing
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+
+      onPrint();
+    } catch (error) {
+      console.error("Error printing receipt:", error);
+      toast({
+        title: "Error",
+        description: "Failed to print receipt",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -76,6 +205,56 @@ export function ReceiptPrintModal({
             <DialogTitle className="text-xl">Receipt Preview</DialogTitle>
           </div>
         </DialogHeader>
+
+        {/* Template Selection */}
+        <div className="space-y-2 px-2">
+          <Label htmlFor="receipt-template">Receipt Template</Label>
+          <Select
+            value={selectedTemplate}
+            onValueChange={(value: ReceiptTemplate) => setSelectedTemplate(value)}
+          >
+            <SelectTrigger id="receipt-template" data-testid="select-receipt-template">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="classic">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>Classic</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="modern">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>Modern</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="compact">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>Compact</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="detailed">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>Detailed</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="elegant">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>Elegant</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Select a template style for your receipt
+          </p>
+        </div>
+
+        <Separator />
 
         <div className="space-y-4 py-4" id="receipt-content">
           <div className="relative">
@@ -294,9 +473,6 @@ export function ReceiptPrintModal({
                 <p className="text-sm font-semibold">Thank you for your business!</p>
                 <div className="w-1 h-1 rounded-full bg-primary animate-pulse" />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Powered by <span className="font-semibold text-primary">BondPos</span> POS System
-              </p>
             </div>
           </div>
         </div>

@@ -532,9 +532,28 @@ export class DatabaseStorage implements IStorage {
     const itemsWithProducts = await Promise.all(
       items.map(async (item) => {
         const product = await this.getProduct(item.productId);
+        if (!product) {
+          // Return a placeholder product if the actual product is deleted
+          return {
+            ...item,
+            product: {
+              id: item.productId,
+              name: "Deleted Product",
+              description: null,
+              price: item.price,
+              purchaseCost: null,
+              categoryId: "",
+              branchId: null,
+              imageUrl: null,
+              unit: "piece",
+              quantity: "0",
+              createdAt: new Date(),
+            } as Product,
+          };
+        }
         return {
           ...item,
-          product: product!,
+          product,
         };
       })
     );
