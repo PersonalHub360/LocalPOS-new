@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -45,6 +46,31 @@ export function AddEditUserDialog({ open, onClose, user }: AddEditUserDialogProp
       isActive: user?.isActive || "true",
     },
   });
+
+  // Reset form when user prop changes
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        username: user.username || "",
+        password: "",
+        fullName: user.fullName || "",
+        email: user.email || "",
+        role: user.role || "staff",
+        employeeId: user.employeeId || "",
+        isActive: user.isActive || "true",
+      });
+    } else {
+      form.reset({
+        username: "",
+        password: "",
+        fullName: "",
+        email: "",
+        role: "staff",
+        employeeId: "",
+        isActive: "true",
+      });
+    }
+  }, [user, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: UserFormData) => {

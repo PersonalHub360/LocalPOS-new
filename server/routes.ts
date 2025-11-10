@@ -149,12 +149,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (req.session.userId) {
       const user = await storage.getUser(req.session.userId);
       if (user) {
+        // Get user's permissions
+        let permissions: string[] = [];
+        
+        // Admin users have all permissions
+        if (user.role === "admin") {
+          permissions = ["*"]; // Special marker for all permissions
+        } else {
+          // Try to get roleId from user, or look it up by role name
+          let roleId = user.roleId;
+          
+          // If no roleId but user has a role name, look it up (case-insensitive)
+          if (!roleId && user.role) {
+            // Try exact match first
+            let role = await storage.getRoleByName(user.role);
+            
+            // If not found, try case-insensitive lookup
+            if (!role) {
+              const allRoles = await storage.getRoles();
+              role = allRoles.find(r => r.name.toLowerCase() === user.role?.toLowerCase());
+            }
+            
+            if (role) {
+              roleId = role.id;
+            }
+          }
+          
+          // Fetch permissions if we have a roleId
+          if (roleId) {
+            const rolePermissions = await storage.getPermissionsForRole(roleId);
+            permissions = rolePermissions.map(p => p.name);
+          }
+        }
+        
         return res.json({
           id: user.id,
           username: user.username,
           fullName: user.fullName,
           email: user.email,
           role: user.role,
+          roleId: user.roleId,
+          permissions,
           userType: "user",
         });
       }
@@ -169,6 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: branch.name,
           location: branch.location,
           role: "branch",
+          permissions: ["*"], // Branches have all permissions
           userType: "branch",
         });
       }
