@@ -433,13 +433,32 @@ export const insertInventoryAdjustmentSchema = createInsertSchema(inventoryAdjus
 export type InsertInventoryAdjustment = z.infer<typeof insertInventoryAdjustmentSchema>;
 export type InventoryAdjustment = typeof inventoryAdjustments.$inferSelect;
 
+// Roles table - defined before users to allow reference
+export const roles = pgTable("roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertRoleSchema = createInsertSchema(roles).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  name: z.string().min(1, "Role name is required"),
+});
+
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type Role = typeof roles.$inferSelect;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
   email: text("email"),
-  role: text("role").notNull().default("staff"),
+  role: text("role").notNull().default("staff"), // Keep for backward compatibility
+  roleId: varchar("role_id").references(() => roles.id, { onDelete: "set null" }), // New: reference to roles table
   employeeId: varchar("employee_id"),
   isActive: text("is_active").notNull().default("true"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
@@ -452,6 +471,42 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Permissions table - stores all available permissions in the system
+export const permissions = pgTable("permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  category: text("category").notNull(), // e.g., "sales", "inventory", "settings", etc.
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertPermissionSchema = createInsertSchema(permissions).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  name: z.string().min(1, "Permission name is required"),
+  category: z.string().min(1, "Category is required"),
+});
+
+export type InsertPermission = z.infer<typeof insertPermissionSchema>;
+export type Permission = typeof permissions.$inferSelect;
+
+// Role-Permissions junction table
+export const rolePermissions = pgTable("role_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roleId: varchar("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  permissionId: varchar("permission_id").notNull().references(() => permissions.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertRolePermissionSchema = createInsertSchema(rolePermissions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;
+export type RolePermission = typeof rolePermissions.$inferSelect;
 
 export const paymentAdjustments = pgTable("payment_adjustments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -1436,6 +1436,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Roles routes
+  app.get("/api/roles", async (req, res) => {
+    try {
+      const roles = await storage.getRoles();
+      res.json(roles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch roles" });
+    }
+  });
+
+  app.get("/api/roles/:id", async (req, res) => {
+    try {
+      const role = await storage.getRole(req.params.id);
+      if (!role) {
+        return res.status(404).json({ error: "Role not found" });
+      }
+      res.json(role);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch role" });
+    }
+  });
+
+  app.post("/api/roles", async (req, res) => {
+    try {
+      const { insertRoleSchema } = await import("@shared/schema");
+      const validatedData = insertRoleSchema.parse(req.body);
+      const role = await storage.createRole(validatedData);
+      res.status(201).json(role);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid role data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create role" });
+    }
+  });
+
+  app.patch("/api/roles/:id", async (req, res) => {
+    try {
+      const role = await storage.updateRole(req.params.id, req.body);
+      if (!role) {
+        return res.status(404).json({ error: "Role not found" });
+      }
+      res.json(role);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  app.delete("/api/roles/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteRole(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Role not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete role" });
+    }
+  });
+
+  // Permissions routes
+  app.get("/api/permissions", async (req, res) => {
+    try {
+      const permissions = await storage.getPermissions();
+      res.json(permissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch permissions" });
+    }
+  });
+
+  app.get("/api/permissions/:id", async (req, res) => {
+    try {
+      const permission = await storage.getPermission(req.params.id);
+      if (!permission) {
+        return res.status(404).json({ error: "Permission not found" });
+      }
+      res.json(permission);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch permission" });
+    }
+  });
+
+  app.get("/api/permissions/category/:category", async (req, res) => {
+    try {
+      const permissions = await storage.getPermissionsByCategory(req.params.category);
+      res.json(permissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch permissions" });
+    }
+  });
+
+  app.post("/api/permissions", async (req, res) => {
+    try {
+      const { insertPermissionSchema } = await import("@shared/schema");
+      const validatedData = insertPermissionSchema.parse(req.body);
+      const permission = await storage.createPermission(validatedData);
+      res.status(201).json(permission);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid permission data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create permission" });
+    }
+  });
+
+  app.patch("/api/permissions/:id", async (req, res) => {
+    try {
+      const permission = await storage.updatePermission(req.params.id, req.body);
+      if (!permission) {
+        return res.status(404).json({ error: "Permission not found" });
+      }
+      res.json(permission);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update permission" });
+    }
+  });
+
+  app.delete("/api/permissions/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deletePermission(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Permission not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete permission" });
+    }
+  });
+
+  // Role-Permissions routes
+  app.get("/api/roles/:roleId/permissions", async (req, res) => {
+    try {
+      const permissions = await storage.getPermissionsForRole(req.params.roleId);
+      res.json(permissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch role permissions" });
+    }
+  });
+
+  app.post("/api/roles/:roleId/permissions", async (req, res) => {
+    try {
+      const { permissionIds } = req.body;
+      if (!Array.isArray(permissionIds)) {
+        return res.status(400).json({ error: "permissionIds must be an array" });
+      }
+      await storage.setRolePermissions(req.params.roleId, permissionIds);
+      const permissions = await storage.getPermissionsForRole(req.params.roleId);
+      res.json(permissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set role permissions" });
+    }
+  });
+
   app.get("/api/branches", async (req, res) => {
     try {
       const branches = await storage.getBranches();

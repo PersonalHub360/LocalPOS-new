@@ -88,7 +88,7 @@ fi
 # Run database migrations as nodejs user (with environment variables loaded)
 echo "Running database migrations..."
 # Continue even if migrations fail (tables might already exist)
-sudo -u $DEPLOY_USER bash -c "set -a && source $APP_DIR/.env.production && set +a && cd $APP_DIR && npm run db:migrate" || echo "Warning: Migration had issues, but continuing deployment..."
+sudo -u $DEPLOY_USER bash -c "set -a && source $APP_DIR/.env.production && set +a && cd $APP_DIR && npm run db:migrate:all" || echo "Warning: Migration had issues, but continuing deployment..."
 
 # Remove devDependencies if they were installed (only if we did full install)
 if [ ! -d "$APP_DIR/dist/public" ] || [ ! -f "$APP_DIR/dist/index.js" ]; then

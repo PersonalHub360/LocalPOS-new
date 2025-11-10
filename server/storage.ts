@@ -41,6 +41,12 @@ import {
   type InsertDuePayment,
   type DuePaymentAllocation,
   type InsertDuePaymentAllocation,
+  type Role,
+  type InsertRole,
+  type Permission,
+  type InsertPermission,
+  type RolePermission,
+  type InsertRolePermission,
   categories,
   products,
   tables,
@@ -63,6 +69,9 @@ import {
   customers,
   duePayments,
   duePaymentAllocations,
+  roles,
+  permissions,
+  rolePermissions,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc, sql, isNull, or } from "drizzle-orm";
@@ -190,6 +199,29 @@ export interface IStorage {
   deleteUser(id: string): Promise<boolean>;
   validateUserCredentials(username: string, password: string): Promise<User | null>;
   validateBranchCredentials(username: string, password: string): Promise<Branch | null>;
+  
+  // Roles management
+  getRoles(): Promise<Role[]>;
+  getRole(id: string): Promise<Role | undefined>;
+  getRoleByName(name: string): Promise<Role | undefined>;
+  createRole(role: InsertRole): Promise<Role>;
+  updateRole(id: string, role: Partial<InsertRole>): Promise<Role | undefined>;
+  deleteRole(id: string): Promise<boolean>;
+  
+  // Permissions management
+  getPermissions(): Promise<Permission[]>;
+  getPermission(id: string): Promise<Permission | undefined>;
+  getPermissionsByCategory(category: string): Promise<Permission[]>;
+  createPermission(permission: InsertPermission): Promise<Permission>;
+  updatePermission(id: string, permission: Partial<InsertPermission>): Promise<Permission | undefined>;
+  deletePermission(id: string): Promise<boolean>;
+  
+  // Role-Permissions management
+  getRolePermissions(roleId: string): Promise<RolePermission[]>;
+  getPermissionsForRole(roleId: string): Promise<Permission[]>;
+  assignPermissionToRole(roleId: string, permissionId: string): Promise<RolePermission>;
+  removePermissionFromRole(roleId: string, permissionId: string): Promise<boolean>;
+  setRolePermissions(roleId: string, permissionIds: string[]): Promise<void>;
   
   getBranches(): Promise<Branch[]>;
   getBranch(id: string): Promise<Branch | undefined>;
@@ -1151,6 +1183,130 @@ export class DatabaseStorage implements IStorage {
     if (!isValid) return null;
     
     return branch;
+  }
+
+  // Roles management
+  async getRoles(): Promise<Role[]> {
+    return await db.select().from(roles).orderBy(asc(roles.name));
+  }
+
+  async getRole(id: string): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.id, id));
+    return result[0];
+  }
+
+  async getRoleByName(name: string): Promise<Role | undefined> {
+    const result = await db.select().from(roles).where(eq(roles.name, name));
+    return result[0];
+  }
+
+  async createRole(insertRole: InsertRole): Promise<Role> {
+    const result = await db.insert(roles).values(insertRole).returning();
+    return result[0];
+  }
+
+  async updateRole(id: string, updates: Partial<InsertRole>): Promise<Role | undefined> {
+    const result = await db.update(roles).set(updates).where(eq(roles.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteRole(id: string): Promise<boolean> {
+    const result = await db.delete(roles).where(eq(roles.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Permissions management
+  async getPermissions(): Promise<Permission[]> {
+    return await db.select().from(permissions).orderBy(asc(permissions.category), asc(permissions.name));
+  }
+
+  async getPermission(id: string): Promise<Permission | undefined> {
+    const result = await db.select().from(permissions).where(eq(permissions.id, id));
+    return result[0];
+  }
+
+  async getPermissionsByCategory(category: string): Promise<Permission[]> {
+    return await db.select().from(permissions)
+      .where(eq(permissions.category, category))
+      .orderBy(asc(permissions.name));
+  }
+
+  async createPermission(insertPermission: InsertPermission): Promise<Permission> {
+    const result = await db.insert(permissions).values(insertPermission).returning();
+    return result[0];
+  }
+
+  async updatePermission(id: string, updates: Partial<InsertPermission>): Promise<Permission | undefined> {
+    const result = await db.update(permissions).set(updates).where(eq(permissions.id, id)).returning();
+    return result[0];
+  }
+
+  async deletePermission(id: string): Promise<boolean> {
+    const result = await db.delete(permissions).where(eq(permissions.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Role-Permissions management
+  async getRolePermissions(roleId: string): Promise<RolePermission[]> {
+    return await db.select().from(rolePermissions)
+      .where(eq(rolePermissions.roleId, roleId));
+  }
+
+  async getPermissionsForRole(roleId: string): Promise<Permission[]> {
+    const result = await db.select({
+      id: permissions.id,
+      name: permissions.name,
+      description: permissions.description,
+      category: permissions.category,
+      createdAt: permissions.createdAt,
+    })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
+      .where(eq(rolePermissions.roleId, roleId));
+    return result;
+  }
+
+  async assignPermissionToRole(roleId: string, permissionId: string): Promise<RolePermission> {
+    // Check if already exists
+    const existing = await db.select().from(rolePermissions)
+      .where(and(
+        eq(rolePermissions.roleId, roleId),
+        eq(rolePermissions.permissionId, permissionId)
+      ));
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+
+    const result = await db.insert(rolePermissions).values({
+      roleId,
+      permissionId,
+    }).returning();
+    return result[0];
+  }
+
+  async removePermissionFromRole(roleId: string, permissionId: string): Promise<boolean> {
+    const result = await db.delete(rolePermissions)
+      .where(and(
+        eq(rolePermissions.roleId, roleId),
+        eq(rolePermissions.permissionId, permissionId)
+      ));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async setRolePermissions(roleId: string, permissionIds: string[]): Promise<void> {
+    // Delete all existing permissions for this role
+    await db.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
+    
+    // Insert new permissions
+    if (permissionIds.length > 0) {
+      await db.insert(rolePermissions).values(
+        permissionIds.map(permissionId => ({
+          roleId,
+          permissionId,
+        }))
+      );
+    }
   }
 
   async getBranches(): Promise<Branch[]> {

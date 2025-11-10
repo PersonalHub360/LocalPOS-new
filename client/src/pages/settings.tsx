@@ -10,11 +10,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { AddEditUserDialog } from "@/components/add-edit-user-dialog";
-import type { Settings, User } from "@shared/schema";
+import type { Settings, User, Role, Permission } from "@shared/schema";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { 
   Save, 
   Building2, 
@@ -27,7 +36,12 @@ import {
   Bell,
   Palette,
   Percent,
-  Trash2
+  Trash2,
+  Settings as SettingsIcon,
+  UserCog,
+  Plus,
+  Edit,
+  Eye
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -41,17 +55,54 @@ export default function SettingsPage() {
     queryKey: ["/api/users"],
   });
 
+  const { data: roles = [], isLoading: rolesLoading, error: rolesError } = useQuery<Role[]>({
+    queryKey: ["/api/roles"],
+    retry: 1,
+  });
+
+  const { data: permissions = [], isLoading: permissionsLoading, error: permissionsError } = useQuery<Permission[]>({
+    queryKey: ["/api/permissions"],
+    retry: 1,
+  });
+
   const [formData, setFormData] = useState<Partial<Settings>>({});
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  
+  // Roles management state
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleDescription, setNewRoleDescription] = useState("");
+  const [deleteRoleDialogOpen, setDeleteRoleDialogOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
+  
+  // Permissions management state
+  const [selectedRoleForPermissions, setSelectedRoleForPermissions] = useState<string>("");
+  const [rolePermissions, setRolePermissions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (settings) {
       setFormData(settings);
     }
   }, [settings]);
+
+  // Load role permissions when role is selected
+  const { data: selectedRolePermissions = [] } = useQuery<Permission[]>({
+    queryKey: [`/api/roles/${selectedRoleForPermissions}/permissions`],
+    enabled: !!selectedRoleForPermissions,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (selectedRolePermissions && selectedRolePermissions.length > 0) {
+      setRolePermissions(new Set(selectedRolePermissions.filter(p => p && p.id).map(p => p.id)));
+    } else {
+      setRolePermissions(new Set());
+    }
+  }, [selectedRolePermissions]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<Settings>) => {
@@ -90,6 +141,49 @@ export default function SettingsPage() {
       toast({
         title: "Error",
         description: "Failed to delete user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: async (roleId: string) => {
+      return apiRequest("DELETE", `/api/roles/${roleId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/roles"] });
+      toast({
+        title: "Role deleted",
+        description: "Role has been removed successfully",
+      });
+      setDeleteRoleDialogOpen(false);
+      setRoleToDelete(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete role",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const setRolePermissionsMutation = useMutation({
+    mutationFn: async ({ roleId, permissionIds }: { roleId: string; permissionIds: string[] }) => {
+      return apiRequest("POST", `/api/roles/${roleId}/permissions`, { permissionIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/roles"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/roles/${selectedRoleForPermissions}/permissions`] });
+      toast({
+        title: "Success",
+        description: "Permissions updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update permissions",
         variant: "destructive",
       });
     },
@@ -147,60 +241,39 @@ export default function SettingsPage() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Settings</h1>
-            <p className="text-muted-foreground mt-1">Configure system settings and preferences</p>
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <SettingsIcon className="w-8 h-8" />
+              Application Settings
+            </h1>
+            <p className="text-muted-foreground mt-1">Manage system configuration and preferences</p>
           </div>
-          <Button 
-            onClick={handleSave} 
-            disabled={updateMutation.isPending}
-            data-testid="button-save-settings"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {updateMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
         </div>
 
-        <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="grid grid-cols-5 lg:grid-cols-10 gap-2 h-auto p-1">
-            <TabsTrigger value="general" className="flex items-center gap-2" data-testid="tab-general">
-              <Building2 className="w-4 h-4" />
-              <span className="hidden lg:inline">General</span>
-            </TabsTrigger>
-            <TabsTrigger value="payment" className="flex items-center gap-2" data-testid="tab-payment">
-              <CreditCard className="w-4 h-4" />
-              <span className="hidden lg:inline">Payment</span>
-            </TabsTrigger>
-            <TabsTrigger value="tax" className="flex items-center gap-2" data-testid="tab-tax">
-              <Percent className="w-4 h-4" />
-              <span className="hidden lg:inline">Tax</span>
-            </TabsTrigger>
-            <TabsTrigger value="receipt" className="flex items-center gap-2" data-testid="tab-receipt">
-              <Receipt className="w-4 h-4" />
-              <span className="hidden lg:inline">Receipt</span>
+        <Tabs defaultValue="currency" className="space-y-6">
+          <TabsList className="grid grid-cols-6 gap-2 h-auto p-1">
+            <TabsTrigger value="currency" className="flex items-center gap-2" data-testid="tab-currency">
+              <DollarSign className="w-4 h-4" />
+              <span>$ Currency</span>
             </TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2" data-testid="tab-users">
               <Users className="w-4 h-4" />
-              <span className="hidden lg:inline">Users</span>
+              <span>Users</span>
             </TabsTrigger>
-            <TabsTrigger value="printer" className="flex items-center gap-2" data-testid="tab-printer">
-              <Printer className="w-4 h-4" />
-              <span className="hidden lg:inline">Printer</span>
+            <TabsTrigger value="permissions" className="flex items-center gap-2" data-testid="tab-permissions">
+              <UserCog className="w-4 h-4" />
+              <span>Permissions</span>
             </TabsTrigger>
-            <TabsTrigger value="currency" className="flex items-center gap-2" data-testid="tab-currency">
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden lg:inline">Currency</span>
-            </TabsTrigger>
-            <TabsTrigger value="backup" className="flex items-center gap-2" data-testid="tab-backup">
-              <Database className="w-4 h-4" />
-              <span className="hidden lg:inline">Backup</span>
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2" data-testid="tab-notifications">
-              <Bell className="w-4 h-4" />
-              <span className="hidden lg:inline">Alerts</span>
+            <TabsTrigger value="financial" className="flex items-center gap-2" data-testid="tab-financial">
+              <CreditCard className="w-4 h-4" />
+              <span>Financial</span>
             </TabsTrigger>
             <TabsTrigger value="theme" className="flex items-center gap-2" data-testid="tab-theme">
               <Palette className="w-4 h-4" />
-              <span className="hidden lg:inline">Theme</span>
+              <span>Theme</span>
+            </TabsTrigger>
+            <TabsTrigger value="activity-logs" className="flex items-center gap-2" data-testid="tab-activity-logs">
+              <Bell className="w-4 h-4" />
+              <span>Activity Logs</span>
             </TabsTrigger>
           </TabsList>
 
@@ -616,115 +689,264 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="users" className="space-y-6">
+            {/* User Management Section */}
             <Card>
               <CardHeader>
-                <CardTitle>User & Access Management</CardTitle>
-                <CardDescription>Manage staff users and permissions</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="text-lg font-medium">Staff Users</h3>
-                      <p className="text-sm text-muted-foreground">Add and manage staff access</p>
-                    </div>
-                    <Button onClick={handleAddUser} data-testid="button-add-user">Add User</Button>
-                  </div>
-
-                  <Separator />
-
-                  {usersLoading ? (
-                    <div className="text-center py-8 text-muted-foreground">Loading users...</div>
-                  ) : users.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">No users found. Add a user to get started.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {users.map((user) => (
-                        <div key={user.id} className="flex items-center justify-between p-4 border rounded-md">
-                          <div className="flex-1">
-                            <p className="font-medium">{user.fullName}</p>
-                            <p className="text-sm text-muted-foreground">{getRoleDescription(user.role)}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={user.isActive === "true" ? "default" : "secondary"}>
-                              {user.isActive === "true" ? "Active" : "Inactive"}
-                            </Badge>
-                            <span className="text-sm font-medium capitalize">{user.role}</span>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => handleEditUser(user)}
-                              data-testid={`button-edit-user-${user.id}`}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.id)}
-                              data-testid={`button-delete-user-${user.id}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <Separator />
-
+                <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="font-medium mb-3">Role Permissions</h4>
-                    <p className="text-sm text-muted-foreground mb-4">Configure default permissions for cashier role</p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Access to Reports</Label>
-                          <p className="text-xs text-muted-foreground">View sales and analytics reports</p>
-                        </div>
-                        <Switch 
-                          checked={formData.permAccessReports === "true"}
-                          onCheckedChange={(checked) => updateField("permAccessReports", checked ? "true" : "false")}
-                          data-testid="switch-perm-reports" 
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Access to Settings</Label>
-                          <p className="text-xs text-muted-foreground">Modify system configuration</p>
-                        </div>
-                        <Switch 
-                          checked={formData.permAccessSettings === "true"}
-                          onCheckedChange={(checked) => updateField("permAccessSettings", checked ? "true" : "false")}
-                          data-testid="switch-perm-settings" 
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Process Refunds</Label>
-                          <p className="text-xs text-muted-foreground">Issue refunds and reversals</p>
-                        </div>
-                        <Switch 
-                          checked={formData.permProcessRefunds === "true"}
-                          onCheckedChange={(checked) => updateField("permProcessRefunds", checked ? "true" : "false")}
-                          data-testid="switch-perm-refunds" 
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Manage Inventory</Label>
-                          <p className="text-xs text-muted-foreground">Add and edit inventory items</p>
-                        </div>
-                        <Switch 
-                          checked={formData.permManageInventory === "true"}
-                          onCheckedChange={(checked) => updateField("permManageInventory", checked ? "true" : "false")}
-                          data-testid="switch-perm-inventory" 
-                        />
-                      </div>
-                    </div>
+                    <CardTitle>User Management</CardTitle>
+                    <CardDescription>Manage users and assign roles</CardDescription>
                   </div>
+                  <Button onClick={handleAddUser} data-testid="button-create-user">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create User
+                  </Button>
                 </div>
+              </CardHeader>
+              <CardContent>
+                {usersLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading users...</div>
+                ) : users.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No users found. Create a user to get started.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Full Name</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((user) => {
+                        const userRole = (roles && roles.find(r => r && r.id === user.roleId)) || { name: user.role };
+                        return (
+                          <TableRow key={user.id}>
+                            <TableCell>{user.email || user.username}</TableCell>
+                            <TableCell>{user.fullName}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{userRole.name}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditUser(user)}
+                                  data-testid={`button-edit-user-${user.id}`}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(user.id)}
+                                  data-testid={`button-delete-user-${user.id}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Roles Management Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Roles Management</CardTitle>
+                    <CardDescription>Create and manage user roles</CardDescription>
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      setSelectedRole(null);
+                      setNewRoleName("");
+                      setNewRoleDescription("");
+                      setRoleDialogOpen(true);
+                    }}
+                    data-testid="button-add-role"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Role
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Create/Edit Role Form */}
+                {roleDialogOpen && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{selectedRole ? "Edit Role" : "Create New Role"}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label htmlFor="role-name">Role Name *</Label>
+                        <Input
+                          id="role-name"
+                          value={selectedRole ? newRoleName : newRoleName}
+                          onChange={(e) => setNewRoleName(e.target.value)}
+                          placeholder="Enter role name"
+                          data-testid="input-role-name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="role-description">Description</Label>
+                        <Textarea
+                          id="role-description"
+                          value={newRoleDescription}
+                          onChange={(e) => setNewRoleDescription(e.target.value)}
+                          placeholder="Enter role description"
+                          data-testid="input-role-description"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setRoleDialogOpen(false);
+                            setSelectedRole(null);
+                            setNewRoleName("");
+                            setNewRoleDescription("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            if (selectedRole) {
+                              // Update role
+                              if (!newRoleName.trim()) {
+                                toast({
+                                  title: "Error",
+                                  description: "Role name is required",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              try {
+                                await apiRequest("PATCH", `/api/roles/${selectedRole.id}`, {
+                                  name: newRoleName,
+                                  description: newRoleDescription || null,
+                                });
+                                queryClient.invalidateQueries({ queryKey: ["/api/roles"] });
+                                toast({
+                                  title: "Success",
+                                  description: "Role updated successfully",
+                                });
+                                setRoleDialogOpen(false);
+                                setSelectedRole(null);
+                                setNewRoleName("");
+                                setNewRoleDescription("");
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to update role",
+                                  variant: "destructive",
+                                });
+                              }
+                            } else {
+                              // Create role
+                              if (!newRoleName.trim()) {
+                                toast({
+                                  title: "Error",
+                                  description: "Role name is required",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              try {
+                                await apiRequest("POST", "/api/roles", {
+                                  name: newRoleName,
+                                  description: newRoleDescription || null,
+                                });
+                                queryClient.invalidateQueries({ queryKey: ["/api/roles"] });
+                                toast({
+                                  title: "Success",
+                                  description: "Role created successfully",
+                                });
+                                setRoleDialogOpen(false);
+                                setNewRoleName("");
+                                setNewRoleDescription("");
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to create role",
+                                  variant: "destructive",
+                                });
+                              }
+                            }
+                          }}
+                          data-testid="button-create-role"
+                        >
+                          {selectedRole ? "Update Role" : "Create Role"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Roles Table */}
+                {rolesLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading roles...</div>
+                ) : rolesError ? (
+                  <div className="text-center py-8 text-red-500">Error loading roles. Please refresh the page.</div>
+                ) : !roles || roles.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No roles found. Create a role to get started.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Role Name</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {roles.filter(role => role && role.id).map((role) => (
+                        <TableRow key={role.id}>
+                          <TableCell className="font-medium">{role.name}</TableCell>
+                          <TableCell>{role.description || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedRole(role);
+                                  setNewRoleName(role.name);
+                                  setNewRoleDescription(role.description || "");
+                                  setRoleDialogOpen(true);
+                                }}
+                                data-testid={`button-edit-role-${role.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setRoleToDelete(role.id);
+                                  setDeleteRoleDialogOpen(true);
+                                }}
+                                data-testid={`button-delete-role-${role.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1065,6 +1287,204 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="permissions" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Group Permissions</CardTitle>
+                <CardDescription>Manage permissions for each role/position.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <Label htmlFor="select-role">Select Role:</Label>
+                  <Select
+                    value={selectedRoleForPermissions}
+                    onValueChange={(value) => {
+                      setSelectedRoleForPermissions(value);
+                    }}
+                  >
+                    <SelectTrigger id="select-role" className="mt-2">
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles && roles.length > 0 ? roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      )) : null}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedRoleForPermissions && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">Permissions</h4>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const permissionIds = Array.from(rolePermissions);
+                          setRolePermissionsMutation.mutate({
+                            roleId: selectedRoleForPermissions,
+                            permissionIds,
+                          });
+                        }}
+                        disabled={setRolePermissionsMutation.isPending}
+                      >
+                        {setRolePermissionsMutation.isPending ? "Saving..." : "Save Permissions"}
+                      </Button>
+                    </div>
+
+                    {permissionsLoading ? (
+                      <div className="text-center py-8 text-muted-foreground">Loading permissions...</div>
+                    ) : permissionsError ? (
+                      <div className="text-center py-8 text-red-500">Error loading permissions. Please refresh the page.</div>
+                    ) : !permissions || permissions.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">No permissions found.</div>
+                    ) : (
+                      <div className="space-y-4">
+                        {Array.from(new Set(permissions.filter(p => p && p.category).map(p => p.category))).map((category) => (
+                          <div key={category} className="space-y-2">
+                            <h5 className="font-medium text-sm text-muted-foreground uppercase">{category}</h5>
+                            <div className="space-y-2 pl-4">
+                              {permissions
+                                .filter(p => p && p.category === category)
+                                .map((permission) => (
+                                  <div key={permission.id} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      id={`permission-${permission.id}`}
+                                      checked={rolePermissions.has(permission.id)}
+                                      onCheckedChange={(checked) => {
+                                        const newPermissions = new Set(rolePermissions);
+                                        if (checked) {
+                                          newPermissions.add(permission.id);
+                                        } else {
+                                          newPermissions.delete(permission.id);
+                                        }
+                                        setRolePermissions(newPermissions);
+                                      }}
+                                    />
+                                    <Label
+                                      htmlFor={`permission-${permission.id}`}
+                                      className="text-sm font-normal cursor-pointer"
+                                    >
+                                      {permission.name}
+                                      {permission.description && (
+                                        <span className="text-xs text-muted-foreground ml-2">
+                                          - {permission.description}
+                                        </span>
+                                      )}
+                                    </Label>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!selectedRoleForPermissions && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Select a role to manage its permissions
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="financial" className="space-y-6">
+            {/* Payment Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Settings</CardTitle>
+                <CardDescription>Configure payment methods and preferences</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Cash Payment</Label>
+                      <p className="text-sm text-muted-foreground">Allow cash transactions</p>
+                    </div>
+                    <Switch 
+                      checked={(formData as any).enableCashPayment === "true"}
+                      onCheckedChange={(checked) => updateField("enableCashPayment" as any, checked ? "true" : "false")}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Card Payment</Label>
+                      <p className="text-sm text-muted-foreground">Allow card transactions</p>
+                    </div>
+                    <Switch 
+                      checked={(formData as any).enableCardPayment === "true"}
+                      onCheckedChange={(checked) => updateField("enableCardPayment" as any, checked ? "true" : "false")}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Mobile Payment</Label>
+                      <p className="text-sm text-muted-foreground">Allow mobile payment methods</p>
+                    </div>
+                    <Switch 
+                      checked={(formData as any).enableMobilePayment === "true"}
+                      onCheckedChange={(checked) => updateField("enableMobilePayment" as any, checked ? "true" : "false")}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Tax Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Tax Settings</CardTitle>
+                <CardDescription>Configure tax rates and calculations</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Tax</Label>
+                      <p className="text-sm text-muted-foreground">Apply tax to transactions</p>
+                    </div>
+                    <Switch 
+                      checked={(formData as any).enableTax === "true"}
+                      onCheckedChange={(checked) => updateField("enableTax" as any, checked ? "true" : "false")}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="tax-rate">Tax Rate (%)</Label>
+                    <Input 
+                      id="tax-rate" 
+                      type="number" 
+                      value={(formData as any).taxRate || 0} 
+                      onChange={(e) => updateField("taxRate" as any, parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="activity-logs" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Activity Logs</CardTitle>
+                <CardDescription>View system activity and user actions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-12 text-muted-foreground">
+                  Activity logs feature coming soon
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="notifications" className="space-y-6">
             <Card>
               <CardHeader>
@@ -1267,6 +1687,30 @@ export default function SettingsPage() {
               data-testid="button-confirm-delete"
             >
               {deleteUserMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteRoleDialogOpen} onOpenChange={setDeleteRoleDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Role</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this role? This action cannot be undone. Users with this role will have their role set to null.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (roleToDelete) {
+                  deleteRoleMutation.mutate(roleToDelete);
+                }
+              }}
+              disabled={deleteRoleMutation.isPending}
+            >
+              {deleteRoleMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
