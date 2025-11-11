@@ -64,6 +64,7 @@ export function PaymentModal({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [openCombobox, setOpenCombobox] = useState(false);
+  const [isSplitMode, setIsSplitMode] = useState(false);
   const { toast } = useToast();
 
   // Fetch customers list
@@ -94,6 +95,7 @@ export function PaymentModal({
       setCustomerName("");
       setCustomerPhone("");
       setOpenCombobox(false);
+      setIsSplitMode(false);
     }
   }, [open, total]);
 
@@ -187,7 +189,7 @@ export function PaymentModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-payment">
+      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-payment">
         <DialogHeader>
           <DialogTitle>Process Payment</DialogTitle>
           <DialogDescription>
@@ -276,7 +278,7 @@ export function PaymentModal({
             </div>
           </div>
 
-          {paymentSplits.length === 0 ? (
+          {!isSplitMode && paymentSplits.length === 0 ? (
             <>
               <div className="space-y-2">
                 <Label htmlFor="payment-method">Payment Method</Label>
@@ -320,13 +322,42 @@ export function PaymentModal({
                   </div>
                 </div>
               )}
+
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsSplitMode(true)}
+                  className="w-full"
+                  data-testid="button-enable-split"
+                >
+                  Split Bill
+                </Button>
+              </div>
             </>
           ) : null}
 
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-semibold mb-3">Split Payment</h3>
-            
-            <div className="grid grid-cols-2 gap-3 mb-3">
+          {(isSplitMode || paymentSplits.length > 0) && (
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">Split Payment</h3>
+                {isSplitMode && paymentSplits.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsSplitMode(false);
+                      setPaymentSplits([]);
+                    }}
+                    data-testid="button-disable-split"
+                  >
+                    Cancel Split
+                  </Button>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="space-y-2">
                 <Label htmlFor="new-payment-method">Payment Method</Label>
                 <Select value={newPaymentMethod} onValueChange={setNewPaymentMethod}>
@@ -441,6 +472,7 @@ export function PaymentModal({
               </div>
             )}
           </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

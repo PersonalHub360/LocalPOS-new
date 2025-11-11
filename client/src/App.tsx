@@ -155,36 +155,45 @@ function AppHeader() {
 
   return (
     <>
-      <header className="h-16 border-b border-border bg-gradient-to-r from-primary via-secondary to-accent px-6 flex items-center gap-4">
-        <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white hover:bg-white/20" />
-        <BranchSelector />
-        <div className="flex-1" />
+      <header className="min-h-16 border-b border-border bg-gradient-to-r from-primary via-secondary to-accent px-2 sm:px-4 md:px-6 py-2 md:py-0 flex flex-wrap items-center gap-2 sm:gap-4">
+        <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white hover:bg-white/20 shrink-0" />
+        <div className="min-w-0 shrink-0">
+          <BranchSelector />
+        </div>
+        <div className="flex-1 min-w-0" />
         {isPOSPage && (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30" data-testid="button-new-order">
-              <Plus className="w-4 h-4" />
-              New
+          <div className="flex gap-1 sm:gap-2 flex-wrap shrink-0">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-1 sm:gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30 shrink-0" 
+              data-testid="button-new-order"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">New</span>
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
-              className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30" 
+              className="gap-1 sm:gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30 shrink-0" 
               onClick={() => setQrOrdersOpen(true)}
               data-testid="button-menu-orders"
             >
-              <Grid3x3 className="w-4 h-4" />
-              QR Menu Orders
+              <Grid3x3 className="w-4 h-4 shrink-0" />
+              <span className="hidden md:inline">QR Menu Orders</span>
+              <span className="md:hidden">QR Orders</span>
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => setDraftListModalOpen(true)}
               data-testid="button-draft-list"
-              className="gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
+              className="gap-1 sm:gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30 shrink-0 relative"
             >
-              Draft List
+              <span className="hidden sm:inline">Draft List</span>
+              <span className="sm:hidden">Drafts</span>
               {draftOrders.length > 0 && (
-                <Badge variant="secondary" className="ml-1 bg-white text-primary" data-testid="badge-draft-count">
+                <Badge variant="secondary" className="ml-1 bg-white text-primary shrink-0" data-testid="badge-draft-count">
                   {draftOrders.length}
                 </Badge>
               )}
@@ -192,10 +201,10 @@ function AppHeader() {
           </div>
         )}
         {user && (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 text-sm text-white font-medium" data-testid="text-user-info">
-              <User className="w-4 h-4" />
-              <span>{user.fullName || user.username}</span>
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-white font-medium min-w-0" data-testid="text-user-info">
+              <User className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline truncate max-w-[120px] md:max-w-none">{user.fullName || user.username}</span>
             </div>
             <Button
               variant="ghost"
@@ -203,14 +212,16 @@ function AppHeader() {
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               data-testid="button-logout"
-              className="gap-2 text-white hover:bg-white/20"
+              className="gap-1 sm:gap-2 text-white hover:bg-white/20 shrink-0"
             >
-              <LogOut className="w-4 h-4" />
-              Logout
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
         )}
-        <ThemeToggle />
+        <div className="shrink-0">
+          <ThemeToggle />
+        </div>
       </header>
       <QRMenuOrdersModal open={qrOrdersOpen} onOpenChange={setQrOrdersOpen} />
       <DraftListModal
@@ -245,7 +256,7 @@ function AuthenticatedApp() {
   }
 
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
+    <SidebarProvider defaultOpen={true} style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1">

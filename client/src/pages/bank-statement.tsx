@@ -71,7 +71,7 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "custom";
+type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
 
 const adjustmentFormSchema = insertPaymentAdjustmentSchema.extend({
   amount: z.coerce.number().positive("Amount must be positive"),
@@ -140,27 +140,83 @@ export default function BankStatement() {
 
   const getFilteredSales = () => {
     const now = new Date();
+    const currentYear = now.getFullYear();
     let startDate = new Date();
+    let endDate = new Date();
 
     switch (dateFilter) {
       case "today":
         startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
         break;
       case "yesterday":
         startDate.setDate(now.getDate() - 1);
         startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
         break;
       case "thismonth":
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        startDate.setHours(0, 0, 0, 0);
+        startDate = new Date(currentYear, now.getMonth(), 1);
+        endDate = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
         break;
       case "lastmonth":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        startDate.setHours(0, 0, 0, 0);
+        startDate = new Date(currentYear, now.getMonth() - 1, 1);
+        endDate = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+        break;
+      case "january":
+        startDate = new Date(currentYear, 0, 1);
+        endDate = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+        break;
+      case "february":
+        startDate = new Date(currentYear, 1, 1);
+        endDate = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+        break;
+      case "march":
+        startDate = new Date(currentYear, 2, 1);
+        endDate = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+        break;
+      case "april":
+        startDate = new Date(currentYear, 3, 1);
+        endDate = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+        break;
+      case "may":
+        startDate = new Date(currentYear, 4, 1);
+        endDate = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+        break;
+      case "june":
+        startDate = new Date(currentYear, 5, 1);
+        endDate = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+        break;
+      case "july":
+        startDate = new Date(currentYear, 6, 1);
+        endDate = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+        break;
+      case "august":
+        startDate = new Date(currentYear, 7, 1);
+        endDate = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+        break;
+      case "september":
+        startDate = new Date(currentYear, 8, 1);
+        endDate = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+        break;
+      case "october":
+        startDate = new Date(currentYear, 9, 1);
+        endDate = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+        break;
+      case "november":
+        startDate = new Date(currentYear, 10, 1);
+        endDate = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+        break;
+      case "december":
+        startDate = new Date(currentYear, 11, 1);
+        endDate = new Date(currentYear, 12, 0, 23, 59, 59, 999);
         break;
       case "custom":
         if (customStartDate) {
           startDate = customStartDate;
+        }
+        if (customEndDate) {
+          endDate = customEndDate;
         }
         break;
     }
@@ -169,10 +225,10 @@ export default function BankStatement() {
       const saleDate = new Date(sale.createdAt);
       let dateMatch = false;
 
-      if (dateFilter === "custom" && customEndDate) {
-        dateMatch = saleDate >= startDate && saleDate <= customEndDate;
+      if (dateFilter === "custom" && customStartDate && customEndDate) {
+        dateMatch = saleDate >= startDate && saleDate <= endDate;
       } else {
-        dateMatch = saleDate >= startDate;
+        dateMatch = saleDate >= startDate && saleDate <= endDate;
       }
 
       return dateMatch && sale.status === "completed";
@@ -301,17 +357,17 @@ export default function BankStatement() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-bank-statement-title">
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-bank-statement-title">
             Bank Statement
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             Payment dashboard and sales breakdown by payment method
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="default" data-testid="button-add-adjustment">
@@ -319,7 +375,7 @@ export default function BankStatement() {
                 Add Manual Amount
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]" data-testid="dialog-add-adjustment">
+            <DialogContent className="w-[95vw] sm:max-w-[500px]" data-testid="dialog-add-adjustment">
               <DialogHeader>
                 <DialogTitle>Add Manual Payment Adjustment</DialogTitle>
                 <DialogDescription>
@@ -438,6 +494,18 @@ export default function BankStatement() {
                   <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="thismonth">This Month</SelectItem>
                   <SelectItem value="lastmonth">Last Month</SelectItem>
+                  <SelectItem value="january">January</SelectItem>
+                  <SelectItem value="february">February</SelectItem>
+                  <SelectItem value="march">March</SelectItem>
+                  <SelectItem value="april">April</SelectItem>
+                  <SelectItem value="may">May</SelectItem>
+                  <SelectItem value="june">June</SelectItem>
+                  <SelectItem value="july">July</SelectItem>
+                  <SelectItem value="august">August</SelectItem>
+                  <SelectItem value="september">September</SelectItem>
+                  <SelectItem value="october">October</SelectItem>
+                  <SelectItem value="november">November</SelectItem>
+                  <SelectItem value="december">December</SelectItem>
                   <SelectItem value="custom">Custom Date</SelectItem>
                 </SelectContent>
               </Select>

@@ -28,6 +28,18 @@ const DATE_FILTER_OPTIONS = [
   { label: "Yesterday", value: "yesterday" },
   { label: "This Month", value: "thisMonth" },
   { label: "Last Month", value: "lastMonth" },
+  { label: "January", value: "january" },
+  { label: "February", value: "february" },
+  { label: "March", value: "march" },
+  { label: "April", value: "april" },
+  { label: "May", value: "may" },
+  { label: "June", value: "june" },
+  { label: "July", value: "july" },
+  { label: "August", value: "august" },
+  { label: "September", value: "september" },
+  { label: "October", value: "october" },
+  { label: "November", value: "november" },
+  { label: "December", value: "december" },
   { label: "Custom Date", value: "custom" },
 ];
 
@@ -60,34 +72,80 @@ export default function ItemManage() {
     
     let matchesDate = true;
     const productDate = new Date(product.createdAt);
-    productDate.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const currentYear = now.getFullYear();
     
     if (dateFilter === "today") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === today.getTime();
     } else if (dateFilter === "yesterday") {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
+      productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === yesterday.getTime();
     } else if (dateFilter === "thisMonth") {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      startOfMonth.setHours(0, 0, 0, 0);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      endOfMonth.setHours(23, 59, 59, 999);
-      matchesDate = productDate.getTime() >= startOfMonth.getTime() && productDate.getTime() <= endOfMonth.getTime();
+      const startOfMonth = new Date(currentYear, now.getMonth(), 1);
+      const endOfMonth = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= startOfMonth && productDate <= endOfMonth;
     } else if (dateFilter === "lastMonth") {
-      const now = new Date();
-      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      startOfLastMonth.setHours(0, 0, 0, 0);
-      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-      endOfLastMonth.setHours(23, 59, 59, 999);
-      matchesDate = productDate.getTime() >= startOfLastMonth.getTime() && productDate.getTime() <= endOfLastMonth.getTime();
+      const startOfLastMonth = new Date(currentYear, now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      matchesDate = productDate >= startOfLastMonth && productDate <= endOfLastMonth;
+    } else if (dateFilter === "january") {
+      const start = new Date(currentYear, 0, 1);
+      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "february") {
+      const start = new Date(currentYear, 1, 1);
+      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "march") {
+      const start = new Date(currentYear, 2, 1);
+      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "april") {
+      const start = new Date(currentYear, 3, 1);
+      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "may") {
+      const start = new Date(currentYear, 4, 1);
+      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "june") {
+      const start = new Date(currentYear, 5, 1);
+      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "july") {
+      const start = new Date(currentYear, 6, 1);
+      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "august") {
+      const start = new Date(currentYear, 7, 1);
+      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "september") {
+      const start = new Date(currentYear, 8, 1);
+      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "october") {
+      const start = new Date(currentYear, 9, 1);
+      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "november") {
+      const start = new Date(currentYear, 10, 1);
+      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "december") {
+      const start = new Date(currentYear, 11, 1);
+      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
     } else if (dateFilter === "custom" && customDate) {
       const selectedDate = new Date(customDate);
       selectedDate.setHours(0, 0, 0, 0);
+      productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === selectedDate.getTime();
     }
 
@@ -635,11 +693,11 @@ export default function ItemManage() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
-            <p className="text-muted-foreground mt-1">Manage inventory and menu items</p>
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="w-full sm:w-auto">
+            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
+            <p className="text-sm md:text-base text-muted-foreground mt-1">Manage inventory and menu items</p>
             {filteredProducts.length > 0 && (
               <div className="flex items-center gap-4 mt-3">
                 <div className="flex items-center gap-2">
@@ -667,7 +725,7 @@ export default function ItemManage() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
@@ -675,7 +733,7 @@ export default function ItemManage() {
                   Manage Categories
                 </Button>
               </DialogTrigger>
-              <DialogContent data-testid="dialog-category">
+              <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-category">
                 <DialogHeader>
                   <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
                   <DialogDescription>
@@ -787,7 +845,7 @@ export default function ItemManage() {
                   Add Item
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-item">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-item">
                 <DialogHeader>
                   <DialogTitle>{editingItem ? "Edit Item" : "Add New Item"}</DialogTitle>
                   <DialogDescription>
@@ -931,7 +989,7 @@ export default function ItemManage() {
                       )}
                     />
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField
                         control={itemForm.control}
                         name="purchaseCost"
@@ -961,7 +1019,7 @@ export default function ItemManage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField
                         control={itemForm.control}
                         name="unit"

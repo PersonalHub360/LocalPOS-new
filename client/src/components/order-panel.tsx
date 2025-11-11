@@ -10,7 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Minus, Plus, X, Search, Printer, CreditCard, FileText, Utensils } from "lucide-react";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { cn } from "@/lib/utils";
 import type { Product, Table } from "@shared/schema";
 
 export interface OrderItemData {
@@ -38,6 +41,8 @@ interface OrderPanelProps {
   discountType: 'amount' | 'percentage';
   onDiscountTypeChange: (type: 'amount' | 'percentage') => void;
   onDiscountChange?: (value: number, type: 'amount' | 'percentage') => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const PRESET_PERCENTAGES = [5, 10, 15, 20];
@@ -62,7 +67,11 @@ export function OrderPanel({
   discountType,
   onDiscountTypeChange,
   onDiscountChange,
+  open,
+  onOpenChange,
 }: OrderPanelProps) {
+  const isDesktop = useIsDesktop();
+  const isOpen = open ?? true; // Default to open if not controlled
   const subtotal = orderItems.reduce(
     (sum, item) => sum + parseFloat(item.product.price) * item.quantity,
     0
@@ -99,25 +108,30 @@ export function OrderPanel({
     }
   };
 
-  return (
-    <div className="w-80 border-l border-border bg-card flex flex-col h-full">
-      <div className="p-4 border-b border-border space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Order Summary</h2>
+  const orderPanelContent = (
+    <div className={cn(
+      "border-t md:border-t-0 md:border-l border-border bg-card flex flex-col h-full min-w-0 overflow-hidden",
+      isDesktop ? "w-full md:w-96 lg:w-[28rem] xl:w-[32rem]" : "w-full"
+    )}>
+      <div className="p-3 sm:p-4 border-b border-border space-y-3 sm:space-y-4 flex-shrink-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <h2 className="text-base sm:text-lg font-semibold truncate min-w-0">Order Summary</h2>
           {orderItems.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
               onClick={onClearOrder}
               data-testid="button-clear-order"
+              className="shrink-0 text-xs sm:text-sm"
             >
-              Clear All
+              <span className="hidden sm:inline">Clear All</span>
+              <span className="sm:hidden">Clear</span>
             </Button>
           )}
         </div>
         
         <Select value={selectedTable || ""} onValueChange={onSelectTable}>
-          <SelectTrigger data-testid="select-table">
+          <SelectTrigger data-testid="select-table" className="w-full">
             <SelectValue placeholder="Select Table" />
           </SelectTrigger>
           <SelectContent>
@@ -130,12 +144,12 @@ export function OrderPanel({
         </Select>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-3">
+      <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
+        <div className="p-3 sm:p-4 space-y-3">
           {orderItems.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-sm">No items in order</p>
-              <p className="text-xs mt-1">Add products to get started</p>
+            <div className="text-center py-8 sm:py-12 text-muted-foreground px-2 sm:px-3 min-w-0">
+              <p className="text-xs sm:text-sm break-words leading-relaxed whitespace-normal">No items in order</p>
+              <p className="text-xs mt-2 break-words leading-relaxed whitespace-normal">Add products to get started</p>
             </div>
           ) : (
             orderItems.map((item) => (
@@ -218,21 +232,21 @@ export function OrderPanel({
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t border-border space-y-4">
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Sub total :</span>
-            <span className="font-mono" data-testid="text-subtotal">${subtotal.toFixed(2)}</span>
+      <div className="p-3 sm:p-4 border-t border-border space-y-3 sm:space-y-4 flex-shrink-0 bg-card">
+        <div className="space-y-2 text-xs sm:text-sm">
+          <div className="flex justify-between items-center gap-2 min-w-0">
+            <span className="text-muted-foreground whitespace-nowrap shrink-0">Sub total :</span>
+            <span className="font-mono shrink-0" data-testid="text-subtotal">${subtotal.toFixed(2)}</span>
           </div>
           
           <div className="space-y-2">
-            <div className="flex justify-between items-center gap-2">
-              <span className="text-muted-foreground">Discount :</span>
-              <div className="flex items-center gap-1">
+            <div className="flex justify-between items-center gap-1 sm:gap-2 min-w-0">
+              <span className="text-muted-foreground whitespace-nowrap text-xs sm:text-sm shrink-0">Discount :</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <Button
                   variant={discountType === 'amount' ? 'default' : 'outline'}
                   size="sm"
-                  className="h-7 px-2 text-xs"
+                  className="h-6 sm:h-7 px-1.5 sm:px-2 text-xs shrink-0"
                   onClick={() => handleDiscountTypeChange('amount')}
                   data-testid="button-discount-amount"
                 >
@@ -241,13 +255,13 @@ export function OrderPanel({
                 <Button
                   variant={discountType === 'percentage' ? 'default' : 'outline'}
                   size="sm"
-                  className="h-7 px-2 text-xs"
+                  className="h-6 sm:h-7 px-1.5 sm:px-2 text-xs shrink-0"
                   onClick={() => handleDiscountTypeChange('percentage')}
                   data-testid="button-discount-percentage"
                 >
                   %
                 </Button>
-                <div className="relative">
+                <div className="relative shrink-0">
                   <Input
                     type="number"
                     min="0"
@@ -259,12 +273,12 @@ export function OrderPanel({
                       const maxValue = discountType === 'percentage' ? 100 : subtotal;
                       onManualDiscountChange(Math.min(Math.max(0, value), maxValue));
                     }}
-                    className="w-20 h-7 text-right font-mono pr-6"
+                    className="w-16 sm:w-20 h-6 sm:h-7 text-right font-mono pr-4 sm:pr-6 text-xs"
                     placeholder={discountType === 'percentage' ? '0' : '0.00'}
                     data-testid="input-discount-value"
                   />
                   {discountType === 'percentage' && (
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">
+                    <span className="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 text-xs sm:text-sm text-muted-foreground pointer-events-none">
                       %
                     </span>
                   )}
@@ -279,7 +293,7 @@ export function OrderPanel({
                     key={percentage}
                     variant={activePreset === percentage ? 'default' : 'ghost'}
                     size="sm"
-                    className="h-6 px-2 text-xs"
+                    className="h-6 px-2 text-xs shrink-0"
                     onClick={() => handlePresetClick(percentage)}
                     data-testid={`button-preset-${percentage}`}
                   >
@@ -297,9 +311,9 @@ export function OrderPanel({
           </div>
           
           <div className="h-px bg-border my-2" />
-          <div className="flex justify-between font-semibold text-base">
-            <span>Total :</span>
-            <span className="font-mono" data-testid="text-total">${total.toFixed(2)}</span>
+          <div className="flex justify-between items-center gap-2 font-semibold text-sm sm:text-base min-w-0">
+            <span className="whitespace-nowrap shrink-0">Total :</span>
+            <span className="font-mono shrink-0" data-testid="text-total">${total.toFixed(2)}</span>
           </div>
         </div>
 
@@ -307,17 +321,18 @@ export function OrderPanel({
           <Button
             onClick={() => onProcessPayment("kot")}
             disabled={orderItems.length === 0}
-            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+            className="gap-1 sm:gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs sm:text-sm h-9 sm:h-10 whitespace-nowrap shrink-0"
             data-testid="button-receipt-print"
           >
-            <Printer className="w-4 h-4" />
-            Receipt Print
+            <Printer className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+            <span className="hidden sm:inline">Receipt Print</span>
+            <span className="sm:hidden">Print</span>
           </Button>
           <Button
             variant="outline"
             onClick={onSaveDraft}
             disabled={orderItems.length === 0}
-            className="gap-2 bg-sky-500 hover:bg-sky-600 text-white border-sky-500"
+            className="gap-1 sm:gap-2 bg-sky-500 hover:bg-sky-600 text-white border-sky-500 text-xs sm:text-sm h-9 sm:h-10 whitespace-nowrap shrink-0"
             data-testid="button-draft"
           >
             Draft
@@ -328,13 +343,31 @@ export function OrderPanel({
           variant="secondary"
           onClick={() => onProcessPayment("print")}
           disabled={orderItems.length === 0}
-          className="w-full gap-2"
+          className="w-full gap-1 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 whitespace-nowrap shrink-0"
           data-testid="button-complete-order"
         >
-          <FileText className="w-4 h-4" />
-          Complete Order
+          <FileText className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />
+          <span className="hidden sm:inline">Complete Order</span>
+          <span className="sm:hidden">Complete</span>
         </Button>
       </div>
     </div>
+  );
+
+  // On desktop (>= 1280px), render normally
+  if (isDesktop) {
+    return orderPanelContent;
+  }
+
+  // On smaller screens (< 1280px), render as Sheet (absolute overlay)
+  return (
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-[50vw] max-w-none sm:max-w-none md:max-w-none p-0 [&>button]:hidden"
+      >
+        {orderPanelContent}
+      </SheetContent>
+    </Sheet>
   );
 }

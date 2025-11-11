@@ -206,14 +206,14 @@ export function AppSidebar() {
       <SidebarHeader className="border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+            <SidebarMenuButton size="lg" asChild className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground min-h-[3.5rem] sm:min-h-0">
               <Link href="/">
-                <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-                  <Store className="size-5" />
+                <div className="flex aspect-square size-8 sm:size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shrink-0">
+                  <Store className="size-4 sm:size-5" />
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-bold text-base">BondPos</span>
-                  <span className="truncate text-xs opacity-80">Restaurant Management</span>
+                <div className="grid flex-1 text-left text-xs sm:text-sm leading-tight min-w-0">
+                  <span className="truncate font-bold text-sm sm:text-base">BondPos</span>
+                  <span className="truncate text-[10px] sm:text-xs opacity-80">Restaurant Management</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -223,7 +223,7 @@ export function AppSidebar() {
       
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider opacity-70">
+          <SidebarGroupLabel className="text-[10px] sm:text-xs uppercase tracking-wider opacity-70 px-2">
             Main Menu
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -236,11 +236,11 @@ export function AppSidebar() {
                       asChild 
                       isActive={isActive} 
                       tooltip={item.title}
-                      className="group"
+                      className="group text-xs sm:text-sm"
                     >
                       <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon className="group-data-[active=true]:text-sidebar-primary-foreground" />
-                        <span className="group-data-[active=true]:font-semibold">{item.title}</span>
+                        <item.icon className="size-4 sm:size-5 group-data-[active=true]:text-sidebar-primary-foreground shrink-0" />
+                        <span className="group-data-[active=true]:font-semibold truncate">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -253,7 +253,7 @@ export function AppSidebar() {
         <SidebarSeparator />
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider opacity-70">
+          <SidebarGroupLabel className="text-[10px] sm:text-xs uppercase tracking-wider opacity-70 px-2">
             Operations
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -266,11 +266,11 @@ export function AppSidebar() {
                       asChild 
                       isActive={isActive} 
                       tooltip={item.title}
-                      className="group"
+                      className="group text-xs sm:text-sm"
                     >
                       <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon className="group-data-[active=true]:text-sidebar-primary-foreground" />
-                        <span className="group-data-[active=true]:font-semibold">{item.title}</span>
+                        <item.icon className="size-4 sm:size-5 group-data-[active=true]:text-sidebar-primary-foreground shrink-0" />
+                        <span className="group-data-[active=true]:font-semibold truncate">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -283,7 +283,7 @@ export function AppSidebar() {
         <SidebarSeparator />
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-xs uppercase tracking-wider opacity-70">
+          <SidebarGroupLabel className="text-[10px] sm:text-xs uppercase tracking-wider opacity-70 px-2">
             Management
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -296,11 +296,11 @@ export function AppSidebar() {
                       asChild 
                       isActive={isActive} 
                       tooltip={item.title}
-                      className="group"
+                      className="group text-xs sm:text-sm"
                     >
                       <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <item.icon className="group-data-[active=true]:text-sidebar-primary-foreground" />
-                        <span className="group-data-[active=true]:font-semibold">{item.title}</span>
+                        <item.icon className="size-4 sm:size-5 group-data-[active=true]:text-sidebar-primary-foreground shrink-0" />
+                        <span className="group-data-[active=true]:font-semibold truncate">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -316,19 +316,19 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground" data-testid="sidebar-profile">
-                  <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold shadow-sm">
+                <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground min-h-[3.5rem] sm:min-h-0" data-testid="sidebar-profile">
+                  <div className="flex aspect-square size-8 sm:size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold shadow-sm shrink-0">
                     {user?.fullName 
                       ? user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
                       : user?.username 
                         ? user.username.slice(0, 2).toUpperCase()
                         : "U"}
                   </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{user?.fullName || "User"}</span>
-                    <span className="truncate text-xs opacity-80">{user?.email || user?.username || ""}</span>
+                  <div className="grid flex-1 text-left text-xs sm:text-sm leading-tight min-w-0">
+                    <span className="truncate font-semibold text-xs sm:text-sm">{user?.fullName || "User"}</span>
+                    <span className="truncate text-[10px] sm:text-xs opacity-80">{user?.email || user?.username || ""}</span>
                   </div>
-                  <ChevronRight className="ml-auto size-4 opacity-60" />
+                  <ChevronRight className="ml-auto size-3 sm:size-4 opacity-60 shrink-0" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent

@@ -6,6 +6,7 @@ import { cva, VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,7 +39,10 @@ type SidebarContextProps = {
   setOpen: (open: boolean) => void
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
+  openTablet: boolean
+  setOpenTablet: (open: boolean) => void
   isMobile: boolean
+  isDesktop: boolean
   toggleSidebar: () => void
 }
 
@@ -67,11 +71,31 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void
 }) {
   const isMobile = useIsMobile()
+  const isDesktop = useIsDesktop()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [openTablet, setOpenTablet] = React.useState(false)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
+  // Initialize: on desktop, default to open unless cookie says otherwise
+  const [_open, _setOpen] = React.useState(() => {
+    // Check if we're on desktop (window width check)
+    const isDesktopInitial = typeof window !== 'undefined' && window.innerWidth >= 1280
+    const cookieValue = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    
+    if (isDesktopInitial) {
+      // On desktop: if cookie exists, use it; otherwise use defaultOpen (true)
+      if (cookieValue) {
+        return cookieValue.split("=")[1] === "true"
+      }
+      return defaultOpen
+    } else {
+      // On smaller screens: always start closed
+      return false
+    }
+  })
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -88,10 +112,42 @@ function SidebarProvider({
     [setOpenProp, open]
   )
 
+  // Update open state when desktop breakpoint changes
+  React.useEffect(() => {
+    if (isDesktop) {
+      // On desktop: if defaultOpen is true, always open it
+      // This ensures sidebar opens by default on desktop
+      if (defaultOpen) {
+        setOpen(true)
+      } else {
+        // defaultOpen is false, respect cookie
+        const cookieValue = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+        if (cookieValue) {
+          setOpen(cookieValue.split("=")[1] === "true")
+        } else {
+          setOpen(false)
+        }
+      }
+    } else {
+      // On smaller screens, close by default
+      setOpen(false)
+      setOpenTablet(false)
+    }
+  }, [isDesktop, defaultOpen, setOpen])
+
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
-  }, [isMobile, setOpen, setOpenMobile])
+    if (isMobile) {
+      return setOpenMobile((open) => !open)
+    } else if (!isDesktop) {
+      // Tablet/small desktop: use tablet state
+      return setOpenTablet((open) => !open)
+    } else {
+      return setOpen((open) => !open)
+    }
+  }, [isMobile, isDesktop, setOpen, setOpenTablet])
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
@@ -119,11 +175,14 @@ function SidebarProvider({
       open,
       setOpen,
       isMobile,
+      isDesktop,
       openMobile,
       setOpenMobile,
+      openTablet,
+      setOpenTablet,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [state, open, setOpen, isMobile, isDesktop, openMobile, setOpenMobile, openTablet, setOpenTablet, toggleSidebar]
   )
 
   return (
@@ -163,7 +222,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, isDesktop, state, openMobile, setOpenMobile, openTablet, setOpenTablet } = useSidebar()
 
   if (collapsible === "none") {
     return (
@@ -180,6 +239,7 @@ function Sidebar({
     )
   }
 
+  // Mobile: use Sheet component
   if (isMobile) {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
@@ -205,9 +265,36 @@ function Sidebar({
     )
   }
 
+  // Tablet/Small Desktop (< 1280px): use Sheet with absolute positioning
+  if (!isDesktop) {
+    return (
+      <Sheet open={openTablet} onOpenChange={setOpenTablet} {...props}>
+        <SheetContent
+          data-sidebar="sidebar"
+          data-slot="sidebar"
+          data-tablet="true"
+          className="bg-sidebar text-sidebar-foreground w-[var(--sidebar-width)] p-0 [&>button]:hidden"
+          style={
+            {
+              "--sidebar-width": SIDEBAR_WIDTH,
+            } as React.CSSProperties
+          }
+          side={side}
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>Sidebar</SheetTitle>
+            <SheetDescription>Displays the sidebar.</SheetDescription>
+          </SheetHeader>
+          <div className="flex h-full w-full flex-col">{children}</div>
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  // Desktop (>= 1280px): use fixed positioning with normal behavior
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block"
+      className="group peer text-sidebar-foreground hidden xl:block"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -229,7 +316,7 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-[var(--sidebar-width)] transition-[left,right,width] duration-200 ease-linear md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-[var(--sidebar-width)] transition-[left,right,width] duration-200 ease-linear xl:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",

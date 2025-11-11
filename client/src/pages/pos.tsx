@@ -3,7 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Bell, Plus, Grid3x3, FileText, Utensils } from "lucide-react";
+import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart } from "lucide-react";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { ProductCard } from "@/components/product-card";
 import { OrderPanel, type OrderItemData } from "@/components/order-panel";
 import { PaymentModal } from "@/components/payment-modal";
@@ -33,6 +34,8 @@ export default function POS() {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [manualDiscount, setManualDiscount] = useState<number>(0);
   const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount');
+  const [orderPanelOpen, setOrderPanelOpen] = useState(false);
+  const isDesktop = useIsDesktop();
   const { toast } = useToast();
 
   // Handle discount changes properly to avoid race conditions
@@ -543,43 +546,59 @@ export default function POS() {
   );
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 border-b border-border bg-background px-6 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4 flex-1 max-w-2xl">
-            <h1 className="text-xl font-semibold whitespace-nowrap">Point of Sale (POS)</h1>
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+    <div className="flex flex-col md:flex-row h-full overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <header className="h-auto md:h-16 border-b border-border bg-background px-3 sm:px-4 md:px-6 py-2 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2 md:gap-0 flex-shrink-0 overflow-x-auto">
+          <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0 max-w-2xl">
+            <h1 className="text-base sm:text-lg md:text-xl font-semibold whitespace-nowrap shrink-0">Point of Sale (POS)</h1>
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground shrink-0" />
               <Input
                 placeholder="Search Product..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 max-w-md"
+                className="pl-8 sm:pl-9 w-full md:max-w-md text-sm sm:text-base"
                 data-testid="input-search-products"
               />
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" data-testid="button-notifications">
-              <Bell className="w-5 h-5" />
+          <div className="flex items-center gap-2 shrink-0">
+            {!isDesktop && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 sm:h-10 sm:w-10 relative" 
+                onClick={() => setOrderPanelOpen(true)}
+                data-testid="button-toggle-order-panel"
+              >
+                <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
+                {orderItems.length > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                    {orderItems.reduce((sum, item) => sum + item.quantity, 0)}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10" data-testid="button-notifications">
+              <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="px-6 py-4 border-b border-border bg-background">
-            <div className="flex items-center gap-2 mb-4">
-              <Badge variant="secondary">Dashboard</Badge>
-              <span className="text-muted-foreground">/</span>
-              <span className="text-sm">POS</span>
+        <div className="flex-1 overflow-hidden flex flex-col min-w-0">
+          <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 border-b border-border bg-background flex-shrink-0">
+            <div className="flex items-center gap-2 mb-3 sm:mb-4 overflow-x-auto pb-1">
+              <Badge variant="secondary" className="text-xs sm:text-sm shrink-0">Dashboard</Badge>
+              <span className="text-muted-foreground shrink-0">/</span>
+              <span className="text-xs sm:text-sm shrink-0">POS</span>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
               <Button
                 variant={selectedCategory === null ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory(null)}
-                className="whitespace-nowrap"
+                className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
                 data-testid="button-category-all"
               >
                 Show All
@@ -590,7 +609,7 @@ export default function POS() {
                   variant={selectedCategory === category.id ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectedCategory(category.id)}
-                  className="whitespace-nowrap"
+                  className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
                   data-testid={`button-category-${category.slug}`}
                 >
                   {category.name}
@@ -599,26 +618,26 @@ export default function POS() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
             {productsLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {[...Array(8)].map((_, i) => (
                   <div key={i} className="animate-pulse">
-                    <div className="aspect-square bg-muted rounded-lg mb-3" />
-                    <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-                    <div className="h-4 bg-muted rounded w-1/2" />
+                    <div className="aspect-square bg-muted rounded-lg mb-2 sm:mb-3" />
+                    <div className="h-3 sm:h-4 bg-muted rounded w-3/4 mb-1 sm:mb-2" />
+                    <div className="h-3 sm:h-4 bg-muted rounded w-1/2" />
                   </div>
                 ))}
               </div>
             ) : filteredProducts.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
+              <div className="flex items-center justify-center h-full text-muted-foreground px-4">
                 <div className="text-center">
-                  <p className="text-lg font-medium mb-1">No products found</p>
-                  <p className="text-sm">Try adjusting your search or filter</p>
+                  <p className="text-base sm:text-lg font-medium mb-1">No products found</p>
+                  <p className="text-xs sm:text-sm">Try adjusting your search or filter</p>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {filteredProducts.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -652,6 +671,8 @@ export default function POS() {
         discountType={discountType}
         onDiscountTypeChange={setDiscountType}
         onDiscountChange={handleDiscountChange}
+        open={isDesktop ? undefined : orderPanelOpen}
+        onOpenChange={isDesktop ? undefined : setOrderPanelOpen}
       />
 
       <PaymentModal

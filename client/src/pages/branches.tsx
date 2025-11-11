@@ -62,15 +62,15 @@ export default function BranchesPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-none border-b px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600">
-        <div className="flex items-center justify-between">
+      <div className="flex-none border-b px-4 md:px-6 py-3 md:py-4 bg-gradient-to-r from-blue-600 to-purple-600">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Branch Management</h1>
-            <p className="text-blue-100 text-sm">Manage multiple store locations</p>
+            <h1 className="text-xl md:text-2xl font-bold text-white">Branch Management</h1>
+            <p className="text-blue-100 text-xs md:text-sm">Manage multiple store locations</p>
           </div>
           <Button
             onClick={() => setIsAddDialogOpen(true)}
-            className="bg-white text-blue-600 hover:bg-blue-50"
+            className="bg-white text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
             data-testid="button-add-branch"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -79,7 +79,7 @@ export default function BranchesPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         {isLoading ? (
           <div className="text-center py-12">Loading branches...</div>
         ) : branches.length === 0 ? (

@@ -26,6 +26,20 @@ const DATE_FILTER_OPTIONS = [
   { label: "All Time", value: "all" },
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
+  { label: "This Month", value: "thisMonth" },
+  { label: "Last Month", value: "lastMonth" },
+  { label: "January", value: "january" },
+  { label: "February", value: "february" },
+  { label: "March", value: "march" },
+  { label: "April", value: "april" },
+  { label: "May", value: "may" },
+  { label: "June", value: "june" },
+  { label: "July", value: "july" },
+  { label: "August", value: "august" },
+  { label: "September", value: "september" },
+  { label: "October", value: "october" },
+  { label: "November", value: "november" },
+  { label: "December", value: "december" },
   { label: "Custom Date", value: "custom" },
 ];
 
@@ -61,23 +75,80 @@ export default function PurchaseManage() {
     const matchesCategory = selectedCategory === "all" || purchase.categoryId === selectedCategory;
     
     let matchesDate = true;
+    const purchaseDate = new Date(purchase.purchaseDate);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
     if (dateFilter === "today") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const purchaseDate = new Date(purchase.purchaseDate);
       purchaseDate.setHours(0, 0, 0, 0);
       matchesDate = purchaseDate.getTime() === today.getTime();
     } else if (dateFilter === "yesterday") {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       yesterday.setHours(0, 0, 0, 0);
-      const purchaseDate = new Date(purchase.purchaseDate);
       purchaseDate.setHours(0, 0, 0, 0);
       matchesDate = purchaseDate.getTime() === yesterday.getTime();
+    } else if (dateFilter === "thisMonth") {
+      const start = new Date(currentYear, now.getMonth(), 1);
+      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "lastMonth") {
+      const start = new Date(currentYear, now.getMonth() - 1, 1);
+      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "january") {
+      const start = new Date(currentYear, 0, 1);
+      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "february") {
+      const start = new Date(currentYear, 1, 1);
+      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "march") {
+      const start = new Date(currentYear, 2, 1);
+      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "april") {
+      const start = new Date(currentYear, 3, 1);
+      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "may") {
+      const start = new Date(currentYear, 4, 1);
+      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "june") {
+      const start = new Date(currentYear, 5, 1);
+      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "july") {
+      const start = new Date(currentYear, 6, 1);
+      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "august") {
+      const start = new Date(currentYear, 7, 1);
+      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "september") {
+      const start = new Date(currentYear, 8, 1);
+      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "october") {
+      const start = new Date(currentYear, 9, 1);
+      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "november") {
+      const start = new Date(currentYear, 10, 1);
+      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
+    } else if (dateFilter === "december") {
+      const start = new Date(currentYear, 11, 1);
+      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+      matchesDate = purchaseDate >= start && purchaseDate <= end;
     } else if (dateFilter === "custom" && customDate) {
       const selectedDate = new Date(customDate);
       selectedDate.setHours(0, 0, 0, 0);
-      const purchaseDate = new Date(purchase.purchaseDate);
       purchaseDate.setHours(0, 0, 0, 0);
       matchesDate = purchaseDate.getTime() === selectedDate.getTime();
     }
@@ -547,17 +618,17 @@ export default function PurchaseManage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-6 border-b">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 border-b gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Purchase Management</h1>
-          <p className="text-sm text-muted-foreground">Manage purchase orders and inventory</p>
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Purchase Management</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Manage purchase orders and inventory</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="space-y-6">
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="flex-1 min-w-[200px]">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="space-y-4 md:space-y-6">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-end">
+            <div className="flex-1 w-full sm:min-w-[200px]">
               <label className="text-sm font-medium mb-2 block">Search Purchases</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -571,7 +642,7 @@ export default function PurchaseManage() {
               </div>
             </div>
 
-            <div className="w-[200px]">
+            <div className="w-full sm:w-[200px]">
               <label className="text-sm font-medium mb-2 block">Category</label>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger data-testid="select-filter-category">
@@ -588,7 +659,7 @@ export default function PurchaseManage() {
               </Select>
             </div>
 
-            <div className="w-[200px]">
+            <div className="w-full sm:w-[200px]">
               <label className="text-sm font-medium mb-2 block">Date Filter</label>
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger data-testid="select-date-filter">
@@ -635,7 +706,7 @@ export default function PurchaseManage() {
                   Manage Categories
                 </Button>
               </DialogTrigger>
-              <DialogContent data-testid="dialog-category">
+              <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-category">
                 <DialogHeader>
                   <DialogTitle>{editingCategory ? "Edit Category" : "Add New Category"}</DialogTitle>
                   <DialogDescription>
@@ -736,7 +807,7 @@ export default function PurchaseManage() {
                   Add Purchase
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-purchase">
+              <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-purchase">
                 <DialogHeader>
                   <DialogTitle>{editingPurchase ? "Edit Purchase" : "Add New Purchase"}</DialogTitle>
                   <DialogDescription>
@@ -1139,7 +1210,7 @@ export default function PurchaseManage() {
       </div>
 
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-view-purchase">
+        <DialogContent className="w-[95vw] max-w-2xl" data-testid="dialog-view-purchase">
           <DialogHeader>
             <DialogTitle>Purchase Details</DialogTitle>
           </DialogHeader>

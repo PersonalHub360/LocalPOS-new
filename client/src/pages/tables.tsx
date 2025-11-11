@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -13,7 +13,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTableSchema, type Table as TableType, type Product } from "@shared/schema";
 import type { z } from "zod";
-import { Plus, Edit, Trash2, Eye, Printer, Users, ShoppingCart, CheckCircle, PlusCircle } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, Printer, Users, ShoppingCart, CheckCircle, PlusCircle, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -26,11 +26,23 @@ export default function Tables() {
   const [selectedTableForItems, setSelectedTableForItems] = useState<TableType | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [quantity, setQuantity] = useState<string>("1");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
   const { data: tables = [] } = useQuery<TableType[]>({
     queryKey: ["/api/tables"],
+  });
+
+  const filteredTables = tables.filter((table) => {
+    const matchesSearch = !searchTerm || 
+      table.tableNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (table.description && table.description.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" || table.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
   });
 
   const { data: products = [] } = useQuery<Product[]>({
@@ -446,15 +458,15 @@ export default function Tables() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-6 border-b">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 border-b gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Table Management</h1>
-          <p className="text-sm text-muted-foreground">Manage your restaurant tables and seating arrangements</p>
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Table Management</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Manage your restaurant tables and seating arrangements</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="space-y-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="space-y-4 md:space-y-6">
           <div className="flex justify-end">
             <Dialog open={tableDialogOpen} onOpenChange={setTableDialogOpen}>
               <DialogTrigger asChild>
@@ -463,7 +475,7 @@ export default function Tables() {
                   Add Table
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md" data-testid="dialog-table">
+              <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-table">
                 <DialogHeader>
                   <DialogTitle>{editingTable ? "Edit Table" : "Add New Table"}</DialogTitle>
                   <DialogDescription>
@@ -535,6 +547,30 @@ export default function Tables() {
           </div>
 
           <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by table number or description..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="available">Available</SelectItem>
+                    <SelectItem value="occupied">Occupied</SelectItem>
+                    <SelectItem value="reserved">Reserved</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
@@ -548,7 +584,7 @@ export default function Tables() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tables.length === 0 ? (
+                    {filteredTables.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-12">
                           <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -556,7 +592,7 @@ export default function Tables() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      tables.map((table) => (
+                      filteredTables.map((table) => (
                         <TableRow key={table.id} data-testid={`row-table-${table.id}`}>
                           <TableCell className="font-medium" data-testid={`text-table-number-${table.id}`}>
                             {table.tableNumber}
@@ -665,7 +701,7 @@ export default function Tables() {
       </div>
 
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-view-table">
+        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-view-table">
           <DialogHeader>
             <DialogTitle>Table Details</DialogTitle>
           </DialogHeader>
@@ -699,7 +735,7 @@ export default function Tables() {
       </Dialog>
 
       <Dialog open={addItemsDialogOpen} onOpenChange={setAddItemsDialogOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-add-items">
+        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-add-items">
           <DialogHeader>
             <DialogTitle>Add Items to Order</DialogTitle>
             <DialogDescription>

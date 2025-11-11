@@ -8,13 +8,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Eye, Edit2, Trash2, Users, Calendar, FileText, DollarSign, BarChart3, Upload, Download, FileSpreadsheet } from "lucide-react";
+import { Plus, Eye, Edit2, Trash2, Users, Calendar, FileText, DollarSign, BarChart3, Upload, Download, FileSpreadsheet, Search, Calendar as CalendarIcon } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { insertEmployeeSchema, type Employee, type InsertEmployee, insertAttendanceSchema, type Attendance, type InsertAttendance, insertLeaveSchema, type Leave, type InsertLeave, insertPayrollSchema, type Payroll, type InsertPayroll, insertStaffSalarySchema, type StaffSalary, type InsertStaffSalary } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -25,10 +27,107 @@ export default function HRM() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const { toast } = useToast();
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const filteredEmployees = employees.filter((employee) => {
+    const matchesSearch = !searchTerm ||
+      employee.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (employee.email && employee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (employee.phone && employee.phone.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" || employee.status === statusFilter;
+    
+    const employeeDate = new Date(employee.joiningDate);
+    let matchesDate = true;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    if (dateFilter === "today") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      employeeDate.setHours(0, 0, 0, 0);
+      matchesDate = employeeDate.getTime() === today.getTime();
+    } else if (dateFilter === "yesterday") {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      employeeDate.setHours(0, 0, 0, 0);
+      matchesDate = employeeDate.getTime() === yesterday.getTime();
+    } else if (dateFilter === "thisMonth") {
+      const start = new Date(currentYear, now.getMonth(), 1);
+      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "lastMonth") {
+      const start = new Date(currentYear, now.getMonth() - 1, 1);
+      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "january") {
+      const start = new Date(currentYear, 0, 1);
+      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "february") {
+      const start = new Date(currentYear, 1, 1);
+      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "march") {
+      const start = new Date(currentYear, 2, 1);
+      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "april") {
+      const start = new Date(currentYear, 3, 1);
+      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "may") {
+      const start = new Date(currentYear, 4, 1);
+      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "june") {
+      const start = new Date(currentYear, 5, 1);
+      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "july") {
+      const start = new Date(currentYear, 6, 1);
+      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "august") {
+      const start = new Date(currentYear, 7, 1);
+      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "september") {
+      const start = new Date(currentYear, 8, 1);
+      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "october") {
+      const start = new Date(currentYear, 9, 1);
+      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "november") {
+      const start = new Date(currentYear, 10, 1);
+      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "december") {
+      const start = new Date(currentYear, 11, 1);
+      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+      matchesDate = employeeDate >= start && employeeDate <= end;
+    } else if (dateFilter === "custom" && customDate) {
+      const selectedDate = new Date(customDate);
+      selectedDate.setHours(0, 0, 0, 0);
+      employeeDate.setHours(0, 0, 0, 0);
+      matchesDate = employeeDate.getTime() === selectedDate.getTime();
+    }
+    
+    return matchesSearch && matchesStatus && matchesDate;
   });
 
   const addForm = useForm<InsertEmployee>({
@@ -379,16 +478,16 @@ export default function HRM() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Human Resource Management</h1>
-            <p className="text-muted-foreground mt-1">Manage employees, attendance, leave, payroll and reports</p>
+            <h1 className="text-2xl md:text-3xl font-bold">Human Resource Management</h1>
+            <p className="text-sm md:text-base text-muted-foreground mt-1">Manage employees, attendance, leave, payroll and reports</p>
           </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <TabsTrigger value="employees" data-testid="tab-employees" className="gap-2">
               <Users className="w-4 h-4" />
               Employees
@@ -418,12 +517,13 @@ export default function HRM() {
           <TabsContent value="employees" className="space-y-4">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Employee Management</CardTitle>
-                    <CardDescription>View and manage all employees</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Employee Management</CardTitle>
+                      <CardDescription>View and manage all employees</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
                     <Button variant="outline" onClick={handleDownloadSampleTemplate} data-testid="button-download-template">
                       <FileSpreadsheet className="w-4 h-4 mr-2" />
                       Employee Template
@@ -466,13 +566,78 @@ export default function HRM() {
                       <Plus className="w-4 h-4 mr-2" />
                       Add Employee
                     </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by ID, name, position, department, email, or phone..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={dateFilter} onValueChange={setDateFilter}>
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                        <SelectValue placeholder="Filter by joining date" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Dates</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="yesterday">Yesterday</SelectItem>
+                        <SelectItem value="thisMonth">This Month</SelectItem>
+                        <SelectItem value="lastMonth">Last Month</SelectItem>
+                        <SelectItem value="january">January</SelectItem>
+                        <SelectItem value="february">February</SelectItem>
+                        <SelectItem value="march">March</SelectItem>
+                        <SelectItem value="april">April</SelectItem>
+                        <SelectItem value="may">May</SelectItem>
+                        <SelectItem value="june">June</SelectItem>
+                        <SelectItem value="july">July</SelectItem>
+                        <SelectItem value="august">August</SelectItem>
+                        <SelectItem value="september">September</SelectItem>
+                        <SelectItem value="october">October</SelectItem>
+                        <SelectItem value="november">November</SelectItem>
+                        <SelectItem value="december">December</SelectItem>
+                        <SelectItem value="custom">Custom Date</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {dateFilter === "custom" && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full sm:w-[160px] justify-start">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {customDate ? format(customDate, "PPP") : "Select Date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={customDate}
+                            onSelect={setCustomDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
                   <div className="text-center py-8">Loading employees...</div>
-                ) : employees.length === 0 ? (
+                ) : filteredEmployees.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No employees found</div>
                 ) : (
                   <Table data-testid="table-employees">
@@ -488,7 +653,7 @@ export default function HRM() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {employees.map((employee) => (
+                      {filteredEmployees.map((employee) => (
                         <TableRow key={employee.id} data-testid={`row-employee-${employee.id}`}>
                           <TableCell className="font-medium">{employee.employeeId}</TableCell>
                           <TableCell>{employee.name}</TableCell>
@@ -694,7 +859,7 @@ export default function HRM() {
         </Tabs>
 
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-add-employee">
+          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-add-employee">
             <DialogHeader>
               <DialogTitle>Add New Employee</DialogTitle>
               <DialogDescription>Fill in the employee details to add to the system</DialogDescription>
@@ -860,7 +1025,7 @@ export default function HRM() {
         </Dialog>
 
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-employee">
+          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-employee">
             <DialogHeader>
               <DialogTitle>Edit Employee</DialogTitle>
               <DialogDescription>Update employee details</DialogDescription>

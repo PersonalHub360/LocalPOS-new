@@ -115,15 +115,15 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-8 space-y-8 overflow-auto h-full bg-background">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 lg:space-y-8 overflow-auto h-full bg-background">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1.5">Overview of your restaurant's performance</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-sm md:text-base text-muted-foreground mt-1.5">Overview of your restaurant's performance</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
+            <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-date-filter">
               <SelectValue placeholder="Select period" />
             </SelectTrigger>
             <SelectContent>
@@ -307,7 +307,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-3">
         <Card data-testid="card-sales-by-category">
           <CardHeader>
             <CardTitle>Sales by Category</CardTitle>
@@ -316,7 +316,7 @@ export default function Dashboard() {
             {salesByCategoryLoading ? (
               <Skeleton className="h-64 w-full" />
             ) : salesByCategory && salesByCategory.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={salesByCategory}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="category" className="text-xs" />

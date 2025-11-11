@@ -58,7 +58,7 @@ import autoTable from "jspdf-autotable";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 
-type DateFilterType = "all" | "today" | "yesterday" | "custom";
+type DateFilterType = "all" | "today" | "yesterday" | "thisMonth" | "lastMonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
 
 interface OrderItemWithProduct {
   id: string;
@@ -113,6 +113,7 @@ export default function SalesManage() {
     const now = new Date();
     let start = new Date(0);
     let end = now;
+    const currentYear = now.getFullYear();
 
     if (summaryDateFilter === "today") {
       start = startOfDay(now);
@@ -121,6 +122,48 @@ export default function SalesManage() {
       const yesterday = subDays(now, 1);
       start = startOfDay(yesterday);
       end = endOfDay(yesterday);
+    } else if (summaryDateFilter === "thisMonth") {
+      start = new Date(currentYear, now.getMonth(), 1);
+      end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "lastMonth") {
+      start = new Date(currentYear, now.getMonth() - 1, 1);
+      end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "january") {
+      start = new Date(currentYear, 0, 1);
+      end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "february") {
+      start = new Date(currentYear, 1, 1);
+      end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "march") {
+      start = new Date(currentYear, 2, 1);
+      end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "april") {
+      start = new Date(currentYear, 3, 1);
+      end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "may") {
+      start = new Date(currentYear, 4, 1);
+      end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "june") {
+      start = new Date(currentYear, 5, 1);
+      end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "july") {
+      start = new Date(currentYear, 6, 1);
+      end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "august") {
+      start = new Date(currentYear, 7, 1);
+      end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "september") {
+      start = new Date(currentYear, 8, 1);
+      end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "october") {
+      start = new Date(currentYear, 9, 1);
+      end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "november") {
+      start = new Date(currentYear, 10, 1);
+      end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+    } else if (summaryDateFilter === "december") {
+      start = new Date(currentYear, 11, 1);
+      end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
     } else if (summaryDateFilter === "custom" && summaryStartDate && summaryEndDate) {
       start = startOfDay(summaryStartDate);
       end = endOfDay(summaryEndDate);
@@ -714,6 +757,8 @@ export default function SalesManage() {
 
     const saleDate = new Date(sale.createdAt);
     let matchesDate = true;
+    const now = new Date();
+    const currentYear = now.getFullYear();
 
     if (dateFilter === "today") {
       const today = startOfDay(new Date());
@@ -723,6 +768,62 @@ export default function SalesManage() {
       const yesterday = startOfDay(subDays(new Date(), 1));
       const yesterdayEnd = endOfDay(subDays(new Date(), 1));
       matchesDate = isWithinInterval(saleDate, { start: yesterday, end: yesterdayEnd });
+    } else if (dateFilter === "thisMonth") {
+      const start = new Date(currentYear, now.getMonth(), 1);
+      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "lastMonth") {
+      const start = new Date(currentYear, now.getMonth() - 1, 1);
+      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "january") {
+      const start = new Date(currentYear, 0, 1);
+      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "february") {
+      const start = new Date(currentYear, 1, 1);
+      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "march") {
+      const start = new Date(currentYear, 2, 1);
+      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "april") {
+      const start = new Date(currentYear, 3, 1);
+      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "may") {
+      const start = new Date(currentYear, 4, 1);
+      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "june") {
+      const start = new Date(currentYear, 5, 1);
+      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "july") {
+      const start = new Date(currentYear, 6, 1);
+      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "august") {
+      const start = new Date(currentYear, 7, 1);
+      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "september") {
+      const start = new Date(currentYear, 8, 1);
+      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "october") {
+      const start = new Date(currentYear, 9, 1);
+      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "november") {
+      const start = new Date(currentYear, 10, 1);
+      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
+    } else if (dateFilter === "december") {
+      const start = new Date(currentYear, 11, 1);
+      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+      matchesDate = isWithinInterval(saleDate, { start, end });
     } else if (dateFilter === "custom" && startDate && endDate) {
       const start = startOfDay(startDate);
       const end = endOfDay(endDate);
@@ -734,13 +835,13 @@ export default function SalesManage() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold" data-testid="text-sales-title">Sales Management</h1>
-            <p className="text-muted-foreground mt-1">Manage sales activities and records</p>
+            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-sales-title">Sales Management</h1>
+            <p className="text-sm md:text-base text-muted-foreground mt-1">Manage sales activities and records</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <input
               type="file"
               id="import-sales-file"
@@ -822,15 +923,29 @@ export default function SalesManage() {
                 </Button>
               )}
               
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Select value={dateFilter} onValueChange={(value: DateFilterType) => setDateFilter(value)}>
-                  <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
+                  <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-date-filter">
                     <SelectValue placeholder="Filter by date" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Dates</SelectItem>
                     <SelectItem value="today">Today</SelectItem>
                     <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="thisMonth">This Month</SelectItem>
+                    <SelectItem value="lastMonth">Last Month</SelectItem>
+                    <SelectItem value="january">January</SelectItem>
+                    <SelectItem value="february">February</SelectItem>
+                    <SelectItem value="march">March</SelectItem>
+                    <SelectItem value="april">April</SelectItem>
+                    <SelectItem value="may">May</SelectItem>
+                    <SelectItem value="june">June</SelectItem>
+                    <SelectItem value="july">July</SelectItem>
+                    <SelectItem value="august">August</SelectItem>
+                    <SelectItem value="september">September</SelectItem>
+                    <SelectItem value="october">October</SelectItem>
+                    <SelectItem value="november">November</SelectItem>
+                    <SelectItem value="december">December</SelectItem>
                     <SelectItem value="custom">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
@@ -839,7 +954,7 @@ export default function SalesManage() {
                   <>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-[160px] justify-start" data-testid="button-start-date">
+                        <Button variant="outline" className="w-full sm:w-[160px] justify-start" data-testid="button-start-date">
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {startDate ? format(startDate, "PPP") : "Start Date"}
                         </Button>
@@ -856,7 +971,7 @@ export default function SalesManage() {
 
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-[160px] justify-start" data-testid="button-end-date">
+                        <Button variant="outline" className="w-full sm:w-[160px] justify-start" data-testid="button-end-date">
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {endDate ? format(endDate, "PPP") : "End Date"}
                         </Button>
@@ -891,14 +1006,14 @@ export default function SalesManage() {
                           data-testid="checkbox-select-all"
                         />
                       </TableHead>
-                      <TableHead data-testid="header-sale-id">Sale ID</TableHead>
+                      <TableHead data-testid="header-sale-id" className="hidden lg:table-cell">Sale ID</TableHead>
                       <TableHead data-testid="header-invoice-no">Invoice No</TableHead>
-                      <TableHead data-testid="header-date-time">Date & Time</TableHead>
+                      <TableHead data-testid="header-date-time" className="hidden md:table-cell">Date & Time</TableHead>
                       <TableHead data-testid="header-customer-name">Customer Name</TableHead>
-                      <TableHead data-testid="header-discount-amount">Discount</TableHead>
+                      <TableHead data-testid="header-discount-amount" className="hidden lg:table-cell">Discount</TableHead>
                       <TableHead data-testid="header-total-amount">Total Amount</TableHead>
-                      <TableHead data-testid="header-pay-by">Pay by</TableHead>
-                      <TableHead data-testid="header-payment-status">Payment Status</TableHead>
+                      <TableHead data-testid="header-pay-by" className="hidden sm:table-cell">Pay by</TableHead>
+                      <TableHead data-testid="header-payment-status" className="hidden md:table-cell">Payment Status</TableHead>
                       <TableHead data-testid="header-actions">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -912,17 +1027,17 @@ export default function SalesManage() {
                             data-testid={`checkbox-select-${sale.id}`}
                           />
                         </TableCell>
-                        <TableCell data-testid={`text-sale-id-${sale.id}`}>{sale.id}</TableCell>
+                        <TableCell className="hidden lg:table-cell" data-testid={`text-sale-id-${sale.id}`}>{sale.id}</TableCell>
                         <TableCell data-testid={`text-invoice-no-${sale.id}`}>INV-{sale.orderNumber}</TableCell>
-                        <TableCell data-testid={`text-date-${sale.id}`}>
+                        <TableCell className="hidden md:table-cell" data-testid={`text-date-${sale.id}`}>
                           {format(new Date(sale.createdAt), "PPpp")}
                         </TableCell>
                         <TableCell data-testid={`text-customer-${sale.id}`}>
                           {sale.customerName || "Walk-in Customer"}
                         </TableCell>
-                        <TableCell data-testid={`text-discount-${sale.id}`}>${sale.discount}</TableCell>
+                        <TableCell className="hidden lg:table-cell" data-testid={`text-discount-${sale.id}`}>${sale.discount}</TableCell>
                         <TableCell data-testid={`text-total-${sale.id}`}>${sale.total}</TableCell>
-                        <TableCell data-testid={`text-pay-by-${sale.id}`}>
+                        <TableCell className="hidden sm:table-cell" data-testid={`text-pay-by-${sale.id}`}>
                           {sale.paymentSplits ? (() => {
                             try {
                               const splits: { method: string; amount: number }[] = JSON.parse(sale.paymentSplits);
@@ -953,7 +1068,7 @@ export default function SalesManage() {
                             return <span className="capitalize">{sale.paymentMethod || "N/A"}</span>;
                           })() : <span className="capitalize">{sale.paymentMethod || "N/A"}</span>}
                         </TableCell>
-                        <TableCell data-testid={`text-payment-status-${sale.id}`}>
+                        <TableCell className="hidden md:table-cell" data-testid={`text-payment-status-${sale.id}`}>
                           <span
                             className={`px-2 py-1 rounded-md text-xs font-medium ${getPaymentStatusBadge(
                               sale.paymentStatus
@@ -1039,15 +1154,29 @@ export default function SalesManage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col gap-3">
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Select value={summaryDateFilter} onValueChange={(value: DateFilterType) => setSummaryDateFilter(value)}>
-                      <SelectTrigger className="w-[180px]" data-testid="select-summary-date-filter">
+                      <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-summary-date-filter">
                         <SelectValue placeholder="Filter by date" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Time</SelectItem>
                         <SelectItem value="today">Today</SelectItem>
                         <SelectItem value="yesterday">Yesterday</SelectItem>
+                        <SelectItem value="thisMonth">This Month</SelectItem>
+                        <SelectItem value="lastMonth">Last Month</SelectItem>
+                        <SelectItem value="january">January</SelectItem>
+                        <SelectItem value="february">February</SelectItem>
+                        <SelectItem value="march">March</SelectItem>
+                        <SelectItem value="april">April</SelectItem>
+                        <SelectItem value="may">May</SelectItem>
+                        <SelectItem value="june">June</SelectItem>
+                        <SelectItem value="july">July</SelectItem>
+                        <SelectItem value="august">August</SelectItem>
+                        <SelectItem value="september">September</SelectItem>
+                        <SelectItem value="october">October</SelectItem>
+                        <SelectItem value="november">November</SelectItem>
+                        <SelectItem value="december">December</SelectItem>
                         <SelectItem value="custom">Custom Range</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1056,7 +1185,7 @@ export default function SalesManage() {
                       <>
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-start-date">
+                            <Button variant="outline" className="w-full sm:w-[160px] justify-start" data-testid="button-summary-start-date">
                               <CalendarIcon className="mr-2 h-4 w-4" />
                               {summaryStartDate ? format(summaryStartDate, "PPP") : "Start Date"}
                             </Button>
@@ -1073,7 +1202,7 @@ export default function SalesManage() {
 
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-[160px] justify-start" data-testid="button-summary-end-date">
+                            <Button variant="outline" className="w-full sm:w-[160px] justify-start" data-testid="button-summary-end-date">
                               <CalendarIcon className="mr-2 h-4 w-4" />
                               {summaryEndDate ? format(summaryEndDate, "PPP") : "End Date"}
                             </Button>
@@ -1177,14 +1306,14 @@ export default function SalesManage() {
 
       {/* View Dialog */}
       <Dialog open={!!viewSale} onOpenChange={() => setViewSale(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-view-sale">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-view-sale">
           <DialogHeader>
             <DialogTitle>Sale Details</DialogTitle>
             <DialogDescription>View complete sale information</DialogDescription>
           </DialogHeader>
           {viewSale && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground">Sale ID</Label>
                   <p className="font-medium" data-testid="view-sale-id">{viewSale.id}</p>
@@ -1313,7 +1442,7 @@ export default function SalesManage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editSale} onOpenChange={() => setEditSale(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-sale">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-sale">
           <DialogHeader>
             <DialogTitle>Edit Sale</DialogTitle>
             <DialogDescription>Modify sale details</DialogDescription>
@@ -1575,7 +1704,7 @@ export default function SalesManage() {
       {/* Delete Confirmation Dialog */}
       {/* Template Selection Dialog for Printing */}
       <Dialog open={!!printSale} onOpenChange={() => setPrintSale(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-print-template">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-print-template">
           <DialogHeader>
             <DialogTitle>Select Receipt Template</DialogTitle>
             <DialogDescription>

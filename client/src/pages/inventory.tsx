@@ -11,11 +11,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Plus, RefreshCw, TrendingUp, TrendingDown, Package, History, Eye, Edit, Trash2, Download, Upload, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, Plus, RefreshCw, TrendingUp, TrendingDown, Package, History, Eye, Edit, Trash2, Download, Upload, FileSpreadsheet, Search, Calendar as CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, InventoryAdjustment, Settings, Category } from "@shared/schema";
 import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import * as XLSX from "xlsx";
 
 export default function Inventory() {
@@ -30,6 +32,9 @@ export default function Inventory() {
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -490,10 +495,93 @@ export default function Inventory() {
     });
   };
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.unit.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.unit.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = selectedCategory === "all" || p.categoryId === selectedCategory;
+    
+    const productDate = new Date(p.createdAt);
+    let matchesDate = true;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    if (dateFilter === "today") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      productDate.setHours(0, 0, 0, 0);
+      matchesDate = productDate.getTime() === today.getTime();
+    } else if (dateFilter === "yesterday") {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      productDate.setHours(0, 0, 0, 0);
+      matchesDate = productDate.getTime() === yesterday.getTime();
+    } else if (dateFilter === "thisMonth") {
+      const start = new Date(currentYear, now.getMonth(), 1);
+      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "lastMonth") {
+      const start = new Date(currentYear, now.getMonth() - 1, 1);
+      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "january") {
+      const start = new Date(currentYear, 0, 1);
+      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "february") {
+      const start = new Date(currentYear, 1, 1);
+      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "march") {
+      const start = new Date(currentYear, 2, 1);
+      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "april") {
+      const start = new Date(currentYear, 3, 1);
+      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "may") {
+      const start = new Date(currentYear, 4, 1);
+      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "june") {
+      const start = new Date(currentYear, 5, 1);
+      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "july") {
+      const start = new Date(currentYear, 6, 1);
+      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "august") {
+      const start = new Date(currentYear, 7, 1);
+      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "september") {
+      const start = new Date(currentYear, 8, 1);
+      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "october") {
+      const start = new Date(currentYear, 9, 1);
+      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "november") {
+      const start = new Date(currentYear, 10, 1);
+      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "december") {
+      const start = new Date(currentYear, 11, 1);
+      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+      matchesDate = productDate >= start && productDate <= end;
+    } else if (dateFilter === "custom" && customDate) {
+      const selectedDate = new Date(customDate);
+      selectedDate.setHours(0, 0, 0, 0);
+      productDate.setHours(0, 0, 0, 0);
+      matchesDate = productDate.getTime() === selectedDate.getTime();
+    }
+    
+    return matchesSearch && matchesCategory && matchesDate;
+  });
 
   const getStockStatus = (qty: number) => {
     if (qty === 0) return { label: "Out of Stock", variant: "destructive" as const, icon: AlertTriangle };
@@ -513,15 +601,15 @@ export default function Inventory() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent" data-testid="text-inventory-title">
+          <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent" data-testid="text-inventory-title">
             Inventory Management
           </h1>
-          <p className="text-muted-foreground mt-1">Track and manage your stock levels and products</p>
+          <p className="text-sm md:text-base text-muted-foreground mt-1">Track and manage your stock levels and products</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button variant="outline" onClick={downloadSampleTemplate} className="gap-2" data-testid="button-download-template">
             <FileSpreadsheet className="w-4 h-4" />
             Sample Template
@@ -600,13 +688,74 @@ export default function Inventory() {
                 </div>
               </div>
               <div className="pt-4">
-                <Input
-                  placeholder="Search products..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="max-w-sm"
-                  data-testid="input-search-products"
-                />
+                <div className="flex flex-col sm:flex-row gap-2 flex-1">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search products..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search-products"
+                    />
+                  </div>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={dateFilter} onValueChange={setDateFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Dates</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="yesterday">Yesterday</SelectItem>
+                      <SelectItem value="thisMonth">This Month</SelectItem>
+                      <SelectItem value="lastMonth">Last Month</SelectItem>
+                      <SelectItem value="january">January</SelectItem>
+                      <SelectItem value="february">February</SelectItem>
+                      <SelectItem value="march">March</SelectItem>
+                      <SelectItem value="april">April</SelectItem>
+                      <SelectItem value="may">May</SelectItem>
+                      <SelectItem value="june">June</SelectItem>
+                      <SelectItem value="july">July</SelectItem>
+                      <SelectItem value="august">August</SelectItem>
+                      <SelectItem value="september">September</SelectItem>
+                      <SelectItem value="october">October</SelectItem>
+                      <SelectItem value="november">November</SelectItem>
+                      <SelectItem value="december">December</SelectItem>
+                      <SelectItem value="custom">Custom Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {dateFilter === "custom" && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full sm:w-[160px] justify-start">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {customDate ? format(customDate, "PPP") : "Select Date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={customDate}
+                          onSelect={setCustomDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -623,11 +772,11 @@ export default function Inventory() {
                         />
                       </TableHead>
                       <TableHead>Product Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
+                      <TableHead className="hidden md:table-cell">Category</TableHead>
+                      <TableHead className="text-right hidden lg:table-cell">Price</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead>Unit</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden sm:table-cell">Unit</TableHead>
+                      <TableHead className="hidden md:table-cell">Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -653,10 +802,10 @@ export default function Inventory() {
                             />
                           </TableCell>
                           <TableCell className="font-medium">{product.name}</TableCell>
-                          <TableCell>{categories.find(c => c.id === product.categoryId)?.name || product.categoryId}</TableCell>
-                          <TableCell className="text-right font-mono">${parseFloat(product.price).toFixed(2)}</TableCell>
+                          <TableCell className="hidden md:table-cell">{categories.find(c => c.id === product.categoryId)?.name || product.categoryId}</TableCell>
+                          <TableCell className="text-right font-mono hidden lg:table-cell">${parseFloat(product.price).toFixed(2)}</TableCell>
                           <TableCell className="text-right font-mono">{qty}</TableCell>
-                          <TableCell>{product.unit}</TableCell>
+                          <TableCell className="hidden sm:table-cell">{product.unit}</TableCell>
                           <TableCell>
                             <Badge variant={status.variant} className="gap-1">
                               <status.icon className="w-3 h-3" />
@@ -892,7 +1041,7 @@ export default function Inventory() {
 
       {/* Adjust Stock Dialog */}
       <Dialog open={adjustmentDialogOpen} onOpenChange={setAdjustmentDialogOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-adjust-stock">
+        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-adjust-stock">
           <DialogHeader>
             <DialogTitle>Adjust Stock Level</DialogTitle>
             <DialogDescription>
@@ -992,7 +1141,7 @@ export default function Inventory() {
 
       {/* Product Add/Edit Dialog */}
       <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-product">
+        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-product">
           <DialogHeader>
             <DialogTitle>{isEditMode ? "Edit Product" : "Add New Product"}</DialogTitle>
             <DialogDescription>
@@ -1088,7 +1237,7 @@ export default function Inventory() {
 
       {/* View Product Dialog */}
       <Dialog open={viewProductDialogOpen} onOpenChange={setViewProductDialogOpen}>
-        <DialogContent className="max-w-md" data-testid="dialog-view-product">
+        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-view-product">
           <DialogHeader>
             <DialogTitle>Product Details</DialogTitle>
           </DialogHeader>
@@ -1139,7 +1288,7 @@ export default function Inventory() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="max-w-sm" data-testid="dialog-delete-product">
+        <DialogContent className="w-[95vw] sm:max-w-sm" data-testid="dialog-delete-product">
           <DialogHeader>
             <DialogTitle>Delete Product</DialogTitle>
             <DialogDescription>

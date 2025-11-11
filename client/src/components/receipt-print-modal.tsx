@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -196,7 +197,7 @@ export function ReceiptPrintModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md" data-testid="modal-receipt-print">
+      <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" data-testid="modal-receipt-print">
         <DialogHeader className="space-y-3 pb-2">
           <div className="flex items-center justify-center gap-2">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
@@ -256,7 +257,8 @@ export function ReceiptPrintModal({
 
         <Separator />
 
-        <div className="space-y-4 py-4" id="receipt-content">
+        <ScrollArea className="max-h-[60vh]">
+          <div className="space-y-4 py-4" id="receipt-content">
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-lg -z-10" />
             <div className="text-center space-y-2 py-6 px-4">
@@ -476,6 +478,7 @@ export function ReceiptPrintModal({
             </div>
           </div>
         </div>
+        </ScrollArea>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button 

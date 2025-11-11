@@ -362,20 +362,33 @@
 
   .login-input-icon {
     position: absolute;
-    left: 1rem;
+    left: 0.75rem;
     top: 50%;
     transform: translateY(-50%);
     color: #94a3b8;
     pointer-events: none;
   }
 
+  @media (min-width: 640px) {
+    .login-input-icon {
+      left: 1rem;
+    }
+  }
+
   .login-input-field {
-    padding-left: 3rem;
+    padding-left: 2.5rem;
     background: white;
     border: 1px solid #e2e8f0;
-    height: 3rem;
+    height: 2.75rem;
     border-radius: 0.5rem;
     transition: all 0.2s ease;
+  }
+
+  @media (min-width: 640px) {
+    .login-input-field {
+      padding-left: 3rem;
+      height: 3rem;
+    }
   }
 
   .dark .login-input-field {
@@ -389,8 +402,8 @@
   }
 
   .social-login-btn {
-    width: 2.5rem;
-    height: 2.5rem;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -398,6 +411,13 @@
     background: white;
     border: 1px solid #e2e8f0;
     transition: all 0.2s ease;
+  }
+
+  @media (min-width: 640px) {
+    .social-login-btn {
+      min-width: 3rem;
+      min-height: 3rem;
+    }
   }
 
   .social-login-btn:hover {

@@ -32,11 +32,11 @@ export function ProductCard({ product, onAddToOrder }: ProductCardProps) {
           </div>
         </div>
       </div>
-      <div className="p-3">
-        <h3 className="font-medium text-sm mb-1 truncate" data-testid={`text-product-name-${product.id}`}>
+      <div className="p-2 sm:p-3 min-h-[60px] sm:min-h-[70px] flex flex-col justify-between">
+        <h3 className="font-medium text-xs sm:text-sm mb-1 line-clamp-2 break-words leading-tight" data-testid={`text-product-name-${product.id}`}>
           {product.name}
         </h3>
-        <p className="text-base font-semibold text-primary font-mono" data-testid={`text-product-price-${product.id}`}>
+        <p className="text-sm sm:text-base font-semibold text-primary font-mono mt-auto" data-testid={`text-product-price-${product.id}`}>
           ${parseFloat(product.price).toFixed(2)}
         </p>
       </div>

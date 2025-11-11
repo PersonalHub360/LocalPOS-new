@@ -1818,6 +1818,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/due/payments/:id/allocations", async (req, res) => {
+    try {
+      const allocations = await storage.getDuePaymentAllocations(req.params.id);
+      res.json(allocations);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payment allocations" });
+    }
+  });
+
   app.get("/api/due/customers-summary", async (req, res) => {
     try {
       const branchId = req.query.branchId as string | undefined;

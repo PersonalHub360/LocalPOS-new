@@ -303,15 +303,17 @@ async function createAdminUser(client) {
   try {
     // Check if admin user already exists with the specific username for this instance
     const existingUser = await client.query(
-      'SELECT id, role_id, username FROM users WHERE username = $1',
-      [adminUsername]
+      'SELECT id, role_id, username, email, full_name FROM users WHERE username = $1 OR email = $2',
+      [adminUsername, adminEmail]
     );
 
     if (existingUser.rows.length > 0) {
-      const existingUsername = existingUser.rows[0].username;
-      console.log(`⚠️  Admin user '${existingUsername}' already exists, skipping user creation (will NOT modify existing user)`);
+      const existingUserData = existingUser.rows[0];
+      console.log(`⚠️  Admin user '${existingUserData.username}' already exists, skipping user creation (will NOT modify existing user)`);
+      console.log(`   Existing user details: username=${existingUserData.username}, email=${existingUserData.email || 'N/A'}`);
       
-      // Still ensure admin role has all permissions
+      // DO NOT modify the existing user in any way - just ensure admin role has all permissions
+      // This only updates the role permissions, not the user itself
       const roleResult = await client.query(
         'SELECT id FROM roles WHERE name = $1',
         ['admin']
@@ -323,16 +325,26 @@ async function createAdminUser(client) {
         const permissionIds = allPermissions.rows.map(row => row.id);
         
         if (permissionIds.length > 0) {
-          // Clear existing permissions
-          await client.query('DELETE FROM role_permissions WHERE role_id = $1', [adminRoleId]);
+          // Check existing permissions for admin role
+          const existingPermissions = await client.query(
+            'SELECT permission_id FROM role_permissions WHERE role_id = $1',
+            [adminRoleId]
+          );
+          const existingPermissionIds = existingPermissions.rows.map(row => row.permission_id);
           
-          // Insert all permissions
-          const values = permissionIds.map((_, index) => 
-            `($1, $${index + 2})`
-          ).join(', ');
-          const query = `INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`;
-          await client.query(query, [adminRoleId, ...permissionIds]);
-          console.log(`✅ Updated admin role with ${permissionIds.length} permissions`);
+          // Only add missing permissions, don't remove existing ones
+          const missingPermissionIds = permissionIds.filter(id => !existingPermissionIds.includes(id));
+          
+          if (missingPermissionIds.length > 0) {
+            const values = missingPermissionIds.map((_, index) => 
+              `($1, $${index + 2})`
+            ).join(', ');
+            const query = `INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`;
+            await client.query(query, [adminRoleId, ...missingPermissionIds]);
+            console.log(`✅ Added ${missingPermissionIds.length} missing permissions to admin role`);
+          } else {
+            console.log(`✅ Admin role already has all ${permissionIds.length} permissions`);
+          }
         }
       }
       return;

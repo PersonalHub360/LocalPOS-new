@@ -12,8 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen, Upload, X, Wallet, TrendingUp } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen, Upload, X, Wallet, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Expense, ExpenseCategory } from "@shared/schema";
 
 const UNIT_OPTIONS = ["Kg", "ml", "Litre", "Gram", "Box", "Unit", "Piece", "Dozen", "Pack"];
@@ -21,6 +23,9 @@ const UNIT_OPTIONS = ["Kg", "ml", "Litre", "Gram", "Box", "Unit", "Piece", "Doze
 export default function ExpenseManage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("expenses");
   
   const [viewExpense, setViewExpense] = useState<Expense | null>(null);
@@ -310,12 +315,95 @@ export default function ExpenseManage() {
     const category = categories.find(c => c.id === expense.categoryId);
     const searchLower = searchTerm.toLowerCase();
     
-    return (
+    const matchesSearch = (
       expense.id.toLowerCase().includes(searchLower) ||
       expense.description.toLowerCase().includes(searchLower) ||
       category?.name.toLowerCase().includes(searchLower) ||
       expense.total.includes(searchTerm)
     );
+    
+    const matchesCategory = selectedCategory === "all" || expense.categoryId === selectedCategory;
+    
+    const expenseDate = new Date(expense.expenseDate);
+    let matchesDate = true;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    if (dateFilter === "today") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      expenseDate.setHours(0, 0, 0, 0);
+      matchesDate = expenseDate.getTime() === today.getTime();
+    } else if (dateFilter === "yesterday") {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      expenseDate.setHours(0, 0, 0, 0);
+      matchesDate = expenseDate.getTime() === yesterday.getTime();
+    } else if (dateFilter === "thisMonth") {
+      const start = new Date(currentYear, now.getMonth(), 1);
+      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "lastMonth") {
+      const start = new Date(currentYear, now.getMonth() - 1, 1);
+      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "january") {
+      const start = new Date(currentYear, 0, 1);
+      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "february") {
+      const start = new Date(currentYear, 1, 1);
+      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "march") {
+      const start = new Date(currentYear, 2, 1);
+      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "april") {
+      const start = new Date(currentYear, 3, 1);
+      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "may") {
+      const start = new Date(currentYear, 4, 1);
+      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "june") {
+      const start = new Date(currentYear, 5, 1);
+      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "july") {
+      const start = new Date(currentYear, 6, 1);
+      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "august") {
+      const start = new Date(currentYear, 7, 1);
+      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "september") {
+      const start = new Date(currentYear, 8, 1);
+      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "october") {
+      const start = new Date(currentYear, 9, 1);
+      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "november") {
+      const start = new Date(currentYear, 10, 1);
+      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "december") {
+      const start = new Date(currentYear, 11, 1);
+      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+      matchesDate = expenseDate >= start && expenseDate <= end;
+    } else if (dateFilter === "custom" && customDate) {
+      const selectedDate = new Date(customDate);
+      selectedDate.setHours(0, 0, 0, 0);
+      expenseDate.setHours(0, 0, 0, 0);
+      matchesDate = expenseDate.getTime() === selectedDate.getTime();
+    }
+    
+    return matchesSearch && matchesCategory && matchesDate;
   });
 
   const totalExpenses = expenses.reduce((sum, expense) => sum + parseFloat(expense.total), 0);
@@ -324,13 +412,13 @@ export default function ExpenseManage() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Expense Management</h1>
-            <p className="text-muted-foreground mt-1 font-medium">Track and manage all business expenses</p>
+            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Expense Management</h1>
+            <p className="text-sm md:text-base text-muted-foreground mt-1 font-medium">Track and manage all business expenses</p>
           </div>
-          <Button onClick={() => setShowAddExpenseDialog(true)} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600" data-testid="button-add-expense">
+          <Button onClick={() => setShowAddExpenseDialog(true)} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 w-full sm:w-auto" data-testid="button-add-expense">
             <Plus className="w-4 h-4 mr-2" />
             Add Expense
           </Button>
@@ -393,7 +481,7 @@ export default function ExpenseManage() {
                 <CardDescription>View and manage all expense records</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -404,6 +492,62 @@ export default function ExpenseManage() {
                       data-testid="input-search-expenses"
                     />
                   </div>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={dateFilter} onValueChange={setDateFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Dates</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="yesterday">Yesterday</SelectItem>
+                      <SelectItem value="thisMonth">This Month</SelectItem>
+                      <SelectItem value="lastMonth">Last Month</SelectItem>
+                      <SelectItem value="january">January</SelectItem>
+                      <SelectItem value="february">February</SelectItem>
+                      <SelectItem value="march">March</SelectItem>
+                      <SelectItem value="april">April</SelectItem>
+                      <SelectItem value="may">May</SelectItem>
+                      <SelectItem value="june">June</SelectItem>
+                      <SelectItem value="july">July</SelectItem>
+                      <SelectItem value="august">August</SelectItem>
+                      <SelectItem value="september">September</SelectItem>
+                      <SelectItem value="october">October</SelectItem>
+                      <SelectItem value="november">November</SelectItem>
+                      <SelectItem value="december">December</SelectItem>
+                      <SelectItem value="custom">Custom Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {dateFilter === "custom" && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full sm:w-[160px] justify-start">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {customDate ? format(customDate, "PPP") : "Select Date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={customDate}
+                          onSelect={setCustomDate}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
                 </div>
 
                 {expensesLoading ? (
@@ -413,17 +557,17 @@ export default function ExpenseManage() {
                     {searchTerm ? "No expenses found matching your search" : "No expenses recorded yet"}
                   </div>
                 ) : (
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-lg overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead data-testid="header-expense-id">Expense ID</TableHead>
-                          <TableHead data-testid="header-date-time">Date & Time</TableHead>
+                          <TableHead className="hidden lg:table-cell" data-testid="header-expense-id">Expense ID</TableHead>
+                          <TableHead data-testid="header-date-time" className="hidden md:table-cell">Date & Time</TableHead>
                           <TableHead data-testid="header-category">Category</TableHead>
-                          <TableHead data-testid="header-description">Description</TableHead>
-                          <TableHead data-testid="header-amount">Amount</TableHead>
-                          <TableHead data-testid="header-unit">Unit</TableHead>
-                          <TableHead data-testid="header-quantity">Quantity</TableHead>
+                          <TableHead data-testid="header-description" className="hidden sm:table-cell">Description</TableHead>
+                          <TableHead className="hidden lg:table-cell" data-testid="header-amount">Amount</TableHead>
+                          <TableHead className="hidden xl:table-cell" data-testid="header-unit">Unit</TableHead>
+                          <TableHead className="hidden xl:table-cell" data-testid="header-quantity">Quantity</TableHead>
                           <TableHead data-testid="header-total">Total</TableHead>
                           <TableHead data-testid="header-actions">Actions</TableHead>
                         </TableRow>
@@ -433,17 +577,17 @@ export default function ExpenseManage() {
                           const category = categories.find(c => c.id === expense.categoryId);
                           return (
                             <TableRow key={expense.id}>
-                              <TableCell data-testid={`text-expense-id-${expense.id}`}>{expense.id}</TableCell>
-                              <TableCell data-testid={`text-date-${expense.id}`}>
+                              <TableCell className="hidden lg:table-cell" data-testid={`text-expense-id-${expense.id}`}>{expense.id}</TableCell>
+                              <TableCell className="hidden md:table-cell" data-testid={`text-date-${expense.id}`}>
                                 {format(new Date(expense.expenseDate), "MMM dd, yyyy HH:mm")}
                               </TableCell>
                               <TableCell data-testid={`text-category-${expense.id}`}>
                                 {category?.name || "Unknown"}
                               </TableCell>
-                              <TableCell data-testid={`text-description-${expense.id}`}>{expense.description}</TableCell>
-                              <TableCell data-testid={`text-amount-${expense.id}`}>${expense.amount}</TableCell>
-                              <TableCell data-testid={`text-unit-${expense.id}`}>{expense.unit}</TableCell>
-                              <TableCell data-testid={`text-quantity-${expense.id}`}>{expense.quantity}</TableCell>
+                              <TableCell className="hidden sm:table-cell" data-testid={`text-description-${expense.id}`}>{expense.description}</TableCell>
+                              <TableCell className="hidden lg:table-cell" data-testid={`text-amount-${expense.id}`}>${expense.amount}</TableCell>
+                              <TableCell className="hidden xl:table-cell" data-testid={`text-unit-${expense.id}`}>{expense.unit}</TableCell>
+                              <TableCell className="hidden xl:table-cell" data-testid={`text-quantity-${expense.id}`}>{expense.quantity}</TableCell>
                               <TableCell className="font-semibold" data-testid={`text-total-${expense.id}`}>
                                 ${expense.total}
                               </TableCell>
@@ -598,7 +742,7 @@ export default function ExpenseManage() {
 
       {/* Add Expense Dialog */}
       <Dialog open={showAddExpenseDialog} onOpenChange={setShowAddExpenseDialog}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-add-expense">
+        <DialogContent className="w-[95vw] sm:max-w-2xl" data-testid="dialog-add-expense">
           <DialogHeader>
             <DialogTitle>Add New Expense</DialogTitle>
             <DialogDescription>Record a new business expense</DialogDescription>
@@ -815,7 +959,7 @@ export default function ExpenseManage() {
 
       {/* Edit Expense Dialog */}
       <Dialog open={!!editExpense} onOpenChange={() => setEditExpense(null)}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-edit-expense">
+        <DialogContent className="w-[95vw] sm:max-w-2xl" data-testid="dialog-edit-expense">
           <DialogHeader>
             <DialogTitle>Edit Expense</DialogTitle>
             <DialogDescription>Modify expense details</DialogDescription>
