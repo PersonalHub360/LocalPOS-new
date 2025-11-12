@@ -41,7 +41,9 @@ import {
   UserCog,
   Plus,
   Edit,
-  Eye
+  Eye,
+  Globe,
+  Image
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -249,8 +251,12 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="currency" className="space-y-4 md:space-y-6">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 h-auto p-1">
+        <Tabs defaultValue="metadata" className="space-y-4 md:space-y-6">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 h-auto p-1">
+            <TabsTrigger value="metadata" className="flex items-center gap-2" data-testid="tab-metadata">
+              <Globe className="w-4 h-4" />
+              <span>Metadata</span>
+            </TabsTrigger>
             <TabsTrigger value="currency" className="flex items-center gap-2" data-testid="tab-currency">
               <DollarSign className="w-4 h-4" />
               <span>$ Currency</span>
@@ -276,6 +282,234 @@ export default function SettingsPage() {
               <span>Activity Logs</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="metadata" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5" />
+                  Application Metadata
+                </CardTitle>
+                <CardDescription>Configure website title, description, logo, and favicon</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="app-name">Application Name</Label>
+                    <Input 
+                      id="app-name" 
+                      value={formData.appName || ""} 
+                      onChange={(e) => updateField("appName", e.target.value)}
+                      placeholder="BondPos"
+                      data-testid="input-app-name" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This will appear in the sidebar header (e.g., "BondPos")
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="app-tagline">Application Tagline</Label>
+                    <Input 
+                      id="app-tagline" 
+                      value={formData.appTagline || ""} 
+                      onChange={(e) => updateField("appTagline", e.target.value)}
+                      placeholder="Restaurant Management"
+                      data-testid="input-app-tagline" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This will appear below the app name in the sidebar (e.g., "Restaurant Management")
+                    </p>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <Label htmlFor="website-title">Website Title</Label>
+                    <Input 
+                      id="website-title" 
+                      value={formData.websiteTitle || formData.businessName || ""} 
+                      onChange={(e) => updateField("websiteTitle", e.target.value)}
+                      placeholder={formData.businessName || "Enter website title"}
+                      data-testid="input-website-title" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This will appear in the browser tab title
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="website-description">Website Description</Label>
+                    <Textarea 
+                      id="website-description" 
+                      value={formData.websiteDescription || ""} 
+                      onChange={(e) => updateField("websiteDescription", e.target.value)}
+                      rows={3}
+                      placeholder="Enter website description for SEO"
+                      data-testid="input-website-description" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Meta description for search engines
+                    </p>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <Label htmlFor="business-logo">Business Logo</Label>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input 
+                          id="business-logo-file" 
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const formData = new FormData();
+                              formData.append("file", file);
+                              try {
+                                const response = await fetch("/api/upload", {
+                                  method: "POST",
+                                  body: formData,
+                                });
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  updateField("businessLogo", data.url);
+                                  toast({
+                                    title: "Success",
+                                    description: "Logo uploaded successfully",
+                                  });
+                                } else {
+                                  throw new Error("Upload failed");
+                                }
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to upload logo",
+                                  variant: "destructive",
+                                });
+                              }
+                            }
+                          }}
+                          className="cursor-pointer"
+                          data-testid="input-business-logo-file" 
+                        />
+                        <span className="text-xs text-muted-foreground self-center">or</span>
+                        <Input 
+                          id="business-logo-url" 
+                          type="url"
+                          value={formData.businessLogo || ""} 
+                          onChange={(e) => updateField("businessLogo", e.target.value)}
+                          placeholder="https://example.com/logo.png"
+                          className="flex-1"
+                          data-testid="input-business-logo-url" 
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Upload an image file or enter a URL (PNG, JPG, or SVG, max 5MB)
+                      </p>
+                      {formData.businessLogo && (
+                        <div className="mt-2">
+                          <img 
+                            src={formData.businessLogo} 
+                            alt="Business Logo Preview" 
+                            className="max-w-[200px] max-h-[100px] object-contain border rounded p-2"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="favicon">Favicon</Label>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input 
+                          id="favicon-file" 
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const formData = new FormData();
+                              formData.append("file", file);
+                              try {
+                                const response = await fetch("/api/upload", {
+                                  method: "POST",
+                                  body: formData,
+                                });
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  updateField("favicon", data.url);
+                                  toast({
+                                    title: "Success",
+                                    description: "Favicon uploaded successfully",
+                                  });
+                                } else {
+                                  throw new Error("Upload failed");
+                                }
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to upload favicon",
+                                  variant: "destructive",
+                                });
+                              }
+                            }
+                          }}
+                          className="cursor-pointer"
+                          data-testid="input-favicon-file" 
+                        />
+                        <span className="text-xs text-muted-foreground self-center">or</span>
+                        <Input 
+                          id="favicon-url" 
+                          type="url"
+                          value={formData.favicon || ""} 
+                          onChange={(e) => updateField("favicon", e.target.value)}
+                          placeholder="https://example.com/favicon.ico"
+                          className="flex-1"
+                          data-testid="input-favicon-url" 
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Upload an image file or enter a URL (typically .ico, .png, or .svg, 32x32 or 16x16 pixels, max 5MB)
+                      </p>
+                      {formData.favicon && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <img 
+                            src={formData.favicon} 
+                            alt="Favicon Preview" 
+                            className="w-8 h-8 object-contain border rounded p-1"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground">Favicon preview</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex justify-end">
+                    <Button 
+                      onClick={handleSave} 
+                      disabled={updateMutation.isPending}
+                      data-testid="button-save-metadata"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {updateMutation.isPending ? "Saving..." : "Save Metadata"}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="general" className="space-y-6">
             <Card>

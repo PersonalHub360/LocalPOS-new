@@ -8,3 +8,5 @@ vite.config.ts.*
 .env.production
 .env.local
 *.log
+uploads/*
+!uploads/.gitkeep

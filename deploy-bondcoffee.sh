@@ -57,6 +57,10 @@ fi
 # Set correct permissions
 sudo chown -R $DEPLOY_USER:$DEPLOY_USER "$APP_DIR"
 
+# Ensure uploads directory exists
+sudo mkdir -p "$APP_DIR/uploads"
+sudo chown -R $DEPLOY_USER:$DEPLOY_USER "$APP_DIR/uploads"
+
 # Copy and enable systemd service file
 echo "Updating systemd service..."
 sudo cp "$APP_DIR/bondcoffeepos.service" /etc/systemd/system/bondcoffeepos.service

@@ -179,6 +179,62 @@ async function applyRolesPermissionsMigration(client) {
   }
 }
 
+async function applyMetadataFieldsMigration(client) {
+  console.log('\n📦 Applying metadata fields migration...');
+  
+  const migrationPath = join(__dirname, '..', 'migrations', '0002_add_metadata_fields.sql');
+  const migrationSQL = readFileSync(migrationPath, 'utf-8');
+
+  const parts = migrationSQL.split('--> statement-breakpoint');
+  const statements = parts
+    .map(part => part.trim())
+    .filter(part => part.length > 0 && !part.startsWith('--'))
+    .map(statement => {
+      statement = statement.replace(/--.*$/gm, '').trim();
+      return statement.endsWith(';') ? statement : statement + ';';
+    })
+    .filter(statement => statement.length > 1);
+
+  // Use savepoints to handle errors without aborting the entire transaction
+  for (let i = 0; i < statements.length; i++) {
+    const statement = statements[i];
+    if (statement.trim() && statement !== ';') {
+      let description = `Migration statement ${i + 1}/${statements.length}`;
+      if (statement.includes('ALTER TABLE')) {
+        const match = statement.match(/ADD COLUMN.*"(\w+)"/i);
+        if (match) {
+          description = `Add column ${match[1]} to settings`;
+        } else {
+          description = `Alter table settings`;
+        }
+      }
+      
+      // Use savepoint for each statement
+      const savepointName = `sp_meta_${i}`;
+      try {
+        await client.query(`SAVEPOINT ${savepointName}`);
+        await client.query(statement);
+        await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+        console.log(`✅ ${description}`);
+      } catch (error) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+        // Check if it's an "already exists" error
+        if (
+          error.code === '42P07' || // relation already exists
+          error.code === '42701' || // duplicate column
+          error.message.includes('already exists') ||
+          error.message.includes('duplicate column') ||
+          error.message.includes('duplicate')
+        ) {
+          console.log(`⚠️  ${description} - already exists, skipping`);
+        } else {
+          throw error;
+        }
+      }
+    }
+  }
+}
+
 async function seedPermissions(client) {
   console.log('\n🌱 Seeding permissions...');
   
@@ -422,12 +478,17 @@ async function runAllMigrations() {
     await applyRolesPermissionsMigration(client);
     await client.query('COMMIT');
 
-    // 3. Seed permissions (run in separate transaction)
+    // 3. Apply metadata fields migration (uses savepoints internally)
+    await client.query('BEGIN');
+    await applyMetadataFieldsMigration(client);
+    await client.query('COMMIT');
+
+    // 4. Seed permissions (run in separate transaction)
     await client.query('BEGIN');
     await seedPermissions(client);
     await client.query('COMMIT');
 
-    // 4. Create admin user (run in separate transaction)
+    // 5. Create admin user (run in separate transaction)
     await client.query('BEGIN');
     await createAdminUser(client);
     await client.query('COMMIT');
@@ -436,6 +497,7 @@ async function runAllMigrations() {
     console.log('\n📝 Summary:');
     console.log('  - Initial database tables created');
     console.log('  - Roles and permissions tables created');
+    console.log('  - Metadata fields added to settings');
     console.log('  - Permissions seeded');
     console.log('  - Admin user created');
     console.log('\n🎉 Migration process finished!');

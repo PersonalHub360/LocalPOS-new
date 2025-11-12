@@ -40,6 +40,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
+import type { Settings } from "@shared/schema";
+import { useState, useEffect } from "react";
 
 interface MenuItem {
   title: string;
@@ -187,6 +189,11 @@ export function AppSidebar() {
     staleTime: 0, // Always consider data stale to ensure fresh permissions
   });
 
+  // Get settings for app name and tagline
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+  });
+
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -201,6 +208,16 @@ export function AppSidebar() {
   const filteredOperationsMenuItems = filterMenuItems(operationsMenuItems, user?.permissions);
   const filteredManagementMenuItems = filterMenuItems(managementMenuItems, user?.permissions);
 
+  // Get app name and tagline from settings with fallbacks
+  const appName = settings?.appName || "BondPos";
+  const appTagline = settings?.appTagline || "Restaurant Management";
+  const [logoError, setLogoError] = useState(false);
+
+  // Reset logo error when settings change
+  useEffect(() => {
+    setLogoError(false);
+  }, [settings?.businessLogo]);
+
   return (
     <Sidebar>
       <SidebarHeader className="border-sidebar-border">
@@ -208,12 +225,21 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground min-h-[3.5rem] sm:min-h-0">
               <Link href="/">
-                <div className="flex aspect-square size-8 sm:size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shrink-0">
-                  <Store className="size-4 sm:size-5" />
-                </div>
+                {settings?.businessLogo && !logoError ? (
+                  <img 
+                    src={settings.businessLogo} 
+                    alt={appName} 
+                    className="flex aspect-square size-8 sm:size-9 rounded-lg bg-sidebar-primary object-contain p-1 shadow-sm shrink-0"
+                    onError={() => setLogoError(true)}
+                  />
+                ) : (
+                  <div className="flex aspect-square size-8 sm:size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shrink-0">
+                    <Store className="size-4 sm:size-5" />
+                  </div>
+                )}
                 <div className="grid flex-1 text-left text-xs sm:text-sm leading-tight min-w-0">
-                  <span className="truncate font-bold text-sm sm:text-base">BondPos</span>
-                  <span className="truncate text-[10px] sm:text-xs opacity-80">Restaurant Management</span>
+                  <span className="truncate font-bold text-sm sm:text-base">{appName}</span>
+                  <span className="truncate text-[10px] sm:text-xs opacity-80">{appTagline}</span>
                 </div>
               </Link>
             </SidebarMenuButton>

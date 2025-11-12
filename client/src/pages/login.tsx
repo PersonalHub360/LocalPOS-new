@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { User, Lock, Eye, EyeOff, Utensils, BarChart3, ShoppingCart, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { Settings } from "@shared/schema";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -22,6 +23,17 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+
+  // Fetch settings for dynamic branding
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+  });
+
+  // Reset logo error when settings change
+  useEffect(() => {
+    setLogoError(false);
+  }, [settings?.businessLogo]);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -64,10 +76,19 @@ export default function Login() {
         <div className="w-full max-w-md space-y-6 sm:space-y-8">
           {/* Logo */}
           <div className="flex items-center gap-2 sm:gap-3 text-white">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-              <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold">BondPos</h1>
+            {settings?.businessLogo && !logoError ? (
+              <img 
+                src={settings.businessLogo} 
+                alt={settings.appName || "Logo"} 
+                className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/20 object-contain p-1 shrink-0"
+                onError={() => setLogoError(true)}
+              />
+            ) : (
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+            )}
+            <h1 className="text-xl sm:text-2xl font-bold">{settings?.appName || "BondPos"}</h1>
           </div>
 
           {/* Sign In Header */}
@@ -212,10 +233,10 @@ export default function Login() {
 
           {/* Content */}
           <h2 className="text-2xl lg:text-3xl font-bold text-foreground px-4">
-            Point of Sale Management System
+            {settings?.appTagline || "Point of Sale Management System"}
           </h2>
           <p className="text-sm lg:text-base text-muted-foreground leading-relaxed px-4">
-            Streamline your restaurant operations with BondPos. Manage orders, track inventory, analyze sales, and generate comprehensive reports - all in one powerful platform.
+            {settings?.websiteDescription || `Streamline your restaurant operations with ${settings?.appName || "BondPos"}. Manage orders, track inventory, analyze sales, and generate comprehensive reports - all in one powerful platform.`}
           </p>
 
           {/* Pagination Dots */}
