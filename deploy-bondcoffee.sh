@@ -1,17 +1,17 @@
 #!/bin/bash
 set -e
 
-# Deployment script for Adora POS System
+# Deployment script for Bond Coffee POS System
 # This script is executed on the EC2 instance via SSH from GitHub Actions
 
 echo "====== Starting Deployment ======"
 echo "Timestamp: $(date)"
 
 # Configuration
-APP_DIR="/var/www/adorapos"
+APP_DIR="/var/www/bondcoffeepos"
 DEPLOY_USER="nodejs"
-BACKUP_DIR="/var/backups/adorapos"
-SERVICE_NAME="adorapos"
+BACKUP_DIR="/var/backups/bondcoffeepos"
+SERVICE_NAME="bondcoffeepos"
 PORT=8000
 
 # Create backup directory if it doesn't exist
@@ -23,12 +23,12 @@ sudo systemctl stop $SERVICE_NAME || true
 
 # Create backup of current version
 if [ -d "$APP_DIR" ] && [ "$(ls -A $APP_DIR)" ]; then
-    BACKUP_FILE="$BACKUP_DIR/adorapos-$(date +%Y%m%d-%H%M%S).tar.gz"
+    BACKUP_FILE="$BACKUP_DIR/bondcoffeepos-$(date +%Y%m%d-%H%M%S).tar.gz"
     echo "Creating backup: $BACKUP_FILE"
     sudo tar -czf "$BACKUP_FILE" -C "$APP_DIR" . || true
     
     # Keep only last 5 backups
-    sudo find "$BACKUP_DIR" -name "adorapos-*.tar.gz" -type f | sort -r | tail -n +6 | xargs -r sudo rm -f
+    sudo find "$BACKUP_DIR" -name "bondcoffeepos-*.tar.gz" -type f | sort -r | tail -n +6 | xargs -r sudo rm -f
 fi
 
 # Extract new version
@@ -38,20 +38,20 @@ cd "$APP_DIR"
 
 # Preserve start.sh if it exists (it's not in the deployment package)
 if [ -f "$APP_DIR/start.sh" ]; then
-    sudo cp "$APP_DIR/start.sh" /tmp/start-adora.sh.backup
+    sudo cp "$APP_DIR/start.sh" /tmp/start-bondcoffee.sh.backup
 fi
 
-sudo tar -xzf /tmp/adorapos-deploy.tar.gz --overwrite
+sudo tar -xzf /tmp/bondcoffeepos-deploy.tar.gz --overwrite
 
 # Restore start.sh if it was backed up
-if [ -f "/tmp/start-adora.sh.backup" ]; then
-    sudo mv /tmp/start-adora.sh.backup "$APP_DIR/start.sh"
+if [ -f "/tmp/start-bondcoffee.sh.backup" ]; then
+    sudo mv /tmp/start-bondcoffee.sh.backup "$APP_DIR/start.sh"
     sudo chmod +x "$APP_DIR/start.sh"
 fi
 
 # Rename ecosystem config if needed
-if [ -f "$APP_DIR/ecosystem-adora.config.cjs" ] && [ ! -f "$APP_DIR/ecosystem.config.cjs" ]; then
-    sudo mv "$APP_DIR/ecosystem-adora.config.cjs" "$APP_DIR/ecosystem.config.cjs"
+if [ -f "$APP_DIR/ecosystem-bondcoffee.config.cjs" ] && [ ! -f "$APP_DIR/ecosystem.config.cjs" ]; then
+    sudo mv "$APP_DIR/ecosystem-bondcoffee.config.cjs" "$APP_DIR/ecosystem.config.cjs"
 fi
 
 # Set correct permissions
@@ -59,7 +59,7 @@ sudo chown -R $DEPLOY_USER:$DEPLOY_USER "$APP_DIR"
 
 # Copy and enable systemd service file
 echo "Updating systemd service..."
-sudo cp "$APP_DIR/adorapos.service" /etc/systemd/system/adorapos.service
+sudo cp "$APP_DIR/bondcoffeepos.service" /etc/systemd/system/bondcoffeepos.service
 sudo systemctl daemon-reload
 
 # Install dependencies - only production if dist exists, otherwise full install for build
@@ -139,7 +139,7 @@ if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
     echo "Rolling back to previous version..."
     
     # Rollback
-    LATEST_BACKUP=$(sudo find "$BACKUP_DIR" -name "adorapos-*.tar.gz" -type f | sort -r | head -1)
+    LATEST_BACKUP=$(sudo find "$BACKUP_DIR" -name "bondcoffeepos-*.tar.gz" -type f | sort -r | head -1)
     if [ -n "$LATEST_BACKUP" ]; then
         echo "Restoring from: $LATEST_BACKUP"
         cd "$APP_DIR"
@@ -152,7 +152,7 @@ if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
 fi
 
 # Cleanup
-rm -f /tmp/adorapos-deploy.tar.gz
+rm -f /tmp/bondcoffeepos-deploy.tar.gz
 
 echo "====== Deployment Complete ======"
 echo "Timestamp: $(date)"

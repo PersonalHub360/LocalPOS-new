@@ -4,11 +4,11 @@
 
 set -e
 
-echo "Creating .env.production files for BFC and Adora POS..."
+echo "Creating .env.production files for BFC and Bond Coffee POS..."
 
 # Generate secure session secrets
 SESSION_SECRET_BFC=$(openssl rand -base64 32)
-SESSION_SECRET_ADORA=$(openssl rand -base64 32)
+SESSION_SECRET_BONDCOFFEE=$(openssl rand -base64 32)
 
 # Create BFC POS .env.production
 sudo tee /var/www/bfcpos/.env.production > /dev/null <<EOF
@@ -19,23 +19,23 @@ PORT=7000
 NODE_ENV=production
 EOF
 
-# Create Adora POS .env.production
-sudo tee /var/www/adorapos/.env.production > /dev/null <<EOF
-# Adora POS System - Production Environment Variables
-DATABASE_URL=postgresql://adorapos_user:AdoraPOS2024!Secure@localhost:5432/adorapos_db
-SESSION_SECRET=$SESSION_SECRET_ADORA
+# Create Bond Coffee POS .env.production
+sudo tee /var/www/bondcoffeepos/.env.production > /dev/null <<EOF
+# Bond Coffee POS System - Production Environment Variables
+DATABASE_URL=postgresql://bondcoffeepos_user:BondCoffeePOS2024!Secure@localhost:5432/bondcoffeepos_db
+SESSION_SECRET=$SESSION_SECRET_BONDCOFFEE
 PORT=8000
 NODE_ENV=production
 EOF
 
 # Set correct ownership and permissions
-sudo chown nodejs:nodejs /var/www/bfcpos/.env.production /var/www/adorapos/.env.production
-sudo chmod 600 /var/www/bfcpos/.env.production /var/www/adorapos/.env.production
+sudo chown nodejs:nodejs /var/www/bfcpos/.env.production /var/www/bondcoffeepos/.env.production
+sudo chmod 600 /var/www/bfcpos/.env.production /var/www/bondcoffeepos/.env.production
 
 echo "✓ .env.production files created successfully!"
 echo ""
 echo "BFC POS .env.production location: /var/www/bfcpos/.env.production"
-echo "Adora POS .env.production location: /var/www/adorapos/.env.production"
+echo "Bond Coffee POS .env.production location: /var/www/bondcoffeepos/.env.production"
 echo ""
 echo "⚠️  Remember to change the database passwords if you used different ones!"
 

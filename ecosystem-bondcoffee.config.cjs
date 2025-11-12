@@ -1,19 +1,19 @@
-// PM2 ecosystem configuration for LocalPOS POS System
+// PM2 ecosystem configuration for Bond Coffee POS System
 // This file manages the Node.js application process
 
 module.exports = {
   apps: [{
-    name: 'localpos-app',
+    name: 'bondcoffeepos-app',
     script: 'dist/index.js',
     interpreter: 'node',
     instances: 1,
     exec_mode: 'cluster',
     
     // Environment variables loaded via systemd EnvironmentFile
-    // See localpos.service for environment configuration
+    // See bondcoffeepos.service for environment configuration
     env_production: {
       NODE_ENV: 'production',
-      PORT: 5000,
+      PORT: 8000,
     },
     
     // Restart policy
@@ -22,8 +22,8 @@ module.exports = {
     max_memory_restart: '1G',
     
     // Logging
-    error_file: '/var/log/localpos/error.log',
-    out_file: '/var/log/localpos/out.log',
+    error_file: '/var/log/bondcoffeepos/error.log',
+    out_file: '/var/log/bondcoffeepos/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     merge_logs: true,
     

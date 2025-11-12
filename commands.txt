@@ -17,7 +17,7 @@ tar -czf bfcpos-deploy.tar.gz \
   postcss.config.js drizzle.config.ts components.json \
   deploy-bfc.sh start-bfc.sh ecosystem-bfc.config.cjs bfcpos.service nginx-bfc.conf
 
-tar -czf adorapos-deploy.tar.gz \
+tar -czf bondcoffeepos-deploy.tar.gz \
   --exclude='node_modules' \
   --exclude='.git' \
   --exclude='.env*' \
@@ -27,11 +27,11 @@ tar -czf adorapos-deploy.tar.gz \
   package.json package-lock.json \
   tsconfig.json vite.config.ts tailwind.config.ts \
   postcss.config.js drizzle.config.ts components.json \
-  deploy-adora.sh start-adora.sh ecosystem-adora.config.cjs adorapos.service nginx-adora.conf
+  deploy-bondcoffee.sh start-bondcoffee.sh ecosystem-bondcoffee.config.cjs bondcoffeepos.service nginx-bondcoffee.conf
 
 # Upload
 scp -i "C:\Users\9RZGXQ3\Downloads\api-server-key.pem" bfcpos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/
-scp -i "C:\Users\9RZGXQ3\Downloads\api-server-key.pem" adorapos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/
+scp -i "C:\Users\9RZGXQ3\Downloads\api-server-key.pem" bondcoffeepos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/
 
 # Deploy BFC POS
 cd /var/www/bfcpos
@@ -39,11 +39,11 @@ sudo tar -xzf /tmp/bfcpos-deploy.tar.gz -C /var/www/bfcpos --overwrite
 sudo chown -R nodejs:nodejs /var/www/bfcpos
 sudo systemctl restart bfcpos
 
-# Deploy Adora POS
-cd /var/www/adorapos
-sudo tar -xzf /tmp/adorapos-deploy.tar.gz -C /var/www/adorapos --overwrite
-sudo chown -R nodejs:nodejs /var/www/adorapos
-sudo systemctl restart adorapos
+# Deploy Bond Coffee POS
+cd /var/www/bondcoffeepos
+sudo tar -xzf /tmp/bondcoffeepos-deploy.tar.gz -C /var/www/bondcoffeepos --overwrite
+sudo chown -R nodejs:nodejs /var/www/bondcoffeepos
+sudo systemctl restart bondcoffeepos
 
 # Wait a moment for services to start
 sleep 5
@@ -53,8 +53,8 @@ curl http://localhost:7000/health
 curl http://localhost:8000/health
 
 # Check service status
-sudo systemctl status bfcpos adorapos
+sudo systemctl status bfcpos bondcoffeepos
 
 # If there are any errors, check the logs
 sudo journalctl -u bfcpos -n 30 --no-pager
-sudo journalctl -u adorapos -n 30 --no-pager
+sudo journalctl -u bondcoffeepos -n 30 --no-pager

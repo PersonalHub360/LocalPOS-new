@@ -48,10 +48,10 @@ async function fixAdminPasswords() {
       adminUsername = 'admin@bfcpos.com';
       adminPassword = 'Admin@2024';
       console.log('📍 Detected BFC POS instance');
-    } else if (port === 8000 || databaseUrl.includes('adorapos_db')) {
-      adminUsername = 'admin@adorapos.com';
+    } else if (port === 8000 || databaseUrl.includes('bondcoffeepos_db')) {
+      adminUsername = 'admin@bondcoffeepos.com';
       adminPassword = 'Admin@2024';
-      console.log('📍 Detected Adora POS instance');
+      console.log('📍 Detected Bond Coffee POS instance');
     } else {
       console.error('❌ Could not detect POS instance. Please set PORT or DATABASE_URL.');
       process.exit(1);

@@ -36,9 +36,9 @@ tar -czf bfcpos-deploy.tar.gz \
   postcss.config.js drizzle.config.ts components.json \
   deploy-bfc.sh start-bfc.sh ecosystem-bfc.config.cjs bfcpos.service nginx-bfc.conf
 
-# Package for Adora POS
-echo "Creating adorapos-deploy.tar.gz..."
-tar -czf adorapos-deploy.tar.gz \
+# Package for Bond Coffee POS
+echo "Creating bondcoffeepos-deploy.tar.gz..."
+tar -czf bondcoffeepos-deploy.tar.gz \
   --exclude='node_modules' \
   --exclude='.git' \
   --exclude='.env*' \
@@ -48,15 +48,15 @@ tar -czf adorapos-deploy.tar.gz \
   package.json package-lock.json \
   tsconfig.json vite.config.ts tailwind.config.ts \
   postcss.config.js drizzle.config.ts components.json \
-  deploy-adora.sh start-adora.sh ecosystem-adora.config.cjs adorapos.service nginx-adora.conf
+  deploy-bondcoffee.sh start-bondcoffee.sh ecosystem-bondcoffee.config.cjs bondcoffeepos.service nginx-bondcoffee.conf
 
 echo "✓ Deployment packages created!"
 echo ""
 echo "Packages ready:"
 echo "  - bfcpos-deploy.tar.gz"
-echo "  - adorapos-deploy.tar.gz"
+echo "  - bondcoffeepos-deploy.tar.gz"
 echo ""
 echo "Next step: Upload to server"
 echo "  scp -i \"C:\\Users\\9RZGXQ3\\Downloads\\api-server-key.pem\" bfcpos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/"
-echo "  scp -i \"C:\\Users\\9RZGXQ3\\Downloads\\api-server-key.pem\" adorapos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/"
+echo "  scp -i \"C:\\Users\\9RZGXQ3\\Downloads\\api-server-key.pem\" bondcoffeepos-deploy.tar.gz ubuntu@54.254.253.106:/tmp/"
 

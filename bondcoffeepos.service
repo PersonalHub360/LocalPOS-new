@@ -1,17 +1,17 @@
 [Unit]
-Description=Adora POS System
+Description=Bond Coffee POS System
 Documentation=https://github.com/yourusername/localpos
 After=network.target
 
 [Service]
 Type=simple
 User=nodejs
-WorkingDirectory=/var/www/adorapos
+WorkingDirectory=/var/www/bondcoffeepos
 Environment=NODE_ENV=production
 Environment=PORT=8000
 
 # PM2 commands - uses wrapper script that loads .env.production
-ExecStart=/var/www/adorapos/start.sh
+ExecStart=/var/www/bondcoffeepos/start.sh
 ExecStop=/home/nodejs/node_modules/.bin/pm2 stop ecosystem.config.cjs
 ExecReload=/home/nodejs/node_modules/.bin/pm2 reload ecosystem.config.cjs
 
