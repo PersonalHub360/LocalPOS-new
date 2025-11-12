@@ -148,17 +148,20 @@ export function ReceiptPrintModal({
       };
 
       // Generate receipt HTML using template
+      // Ensure all items are included in the receipt
+      const receiptItems = order.items.map((item, index) => ({
+        id: `temp-${Date.now()}-${index}`,
+        orderId: mockOrder.id,
+        productId: item.product.id,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.total,
+        productName: item.product.name,
+      }));
+
       const receiptData = {
         sale: mockOrder,
-        items: order.items.map(item => ({
-          id: `temp-${Date.now()}-${Math.random()}`,
-          orderId: mockOrder.id,
-          productId: item.product.id,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.total,
-          productName: item.product.name,
-        })),
+        items: receiptItems,
         settings,
         totalKHR: totalKHRNum,
         paymentDetails,
@@ -198,7 +201,7 @@ export function ReceiptPrintModal({
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" data-testid="modal-receipt-print">
-        <DialogHeader className="space-y-3 pb-2">
+        <DialogHeader className="space-y-3 pb-2 flex-shrink-0">
           <div className="flex items-center justify-center gap-2">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
               <Receipt className="w-5 h-5 text-primary-foreground" />
@@ -208,7 +211,7 @@ export function ReceiptPrintModal({
         </DialogHeader>
 
         {/* Template Selection */}
-        <div className="space-y-2 px-2">
+        <div className="space-y-2 px-2 flex-shrink-0">
           <Label htmlFor="receipt-template">Receipt Template</Label>
           <Select
             value={selectedTemplate}
@@ -255,111 +258,113 @@ export function ReceiptPrintModal({
           </p>
         </div>
 
-        <Separator />
+        <Separator className="flex-shrink-0" />
 
-        <ScrollArea className="max-h-[60vh]">
-          <div className="space-y-4 py-4" id="receipt-content">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-lg -z-10" />
-            <div className="text-center space-y-2 py-6 px-4">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <Utensils className="w-4 h-4 text-primary-foreground" />
+        <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+          <div className="space-y-4 py-4 pr-4" id="receipt-content">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-lg -z-10" />
+              <div className="text-center space-y-2 py-6 px-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                    <Utensils className="w-4 h-4 text-primary-foreground" />
+                  </div>
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                    BondPos
+                  </h2>
                 </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  BondPos
-                </h2>
-              </div>
-              <p className="text-sm text-muted-foreground font-medium">Point of Sale System</p>
-              <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-                <Calendar className="w-3 h-3" />
-                <span>{format(new Date(), "MMM dd, yyyy HH:mm")}</span>
+                <p className="text-sm text-muted-foreground font-medium">Point of Sale System</p>
+                <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                  <Calendar className="w-3 h-3" />
+                  <span>{format(new Date(), "MMM dd, yyyy HH:mm")}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="border-t-2 border-b-2 border-dashed border-border py-3 space-y-2">
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-2">
-                <Hash className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Order #:</span>
-              </div>
-              <Badge variant="secondary" className="font-mono font-semibold">
-                {order.orderNumber}
-              </Badge>
-            </div>
-            {order.tableId && (
+            <div className="border-t-2 border-b-2 border-dashed border-border py-3 space-y-2">
               <div className="flex items-center justify-between px-2">
-                <span className="text-sm text-muted-foreground">Table:</span>
-                <Badge variant="outline" className="font-semibold">
-                  {order.tableId}
+                <div className="flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Order #:</span>
+                </div>
+                <Badge variant="secondary" className="font-mono font-semibold">
+                  {order.orderNumber}
                 </Badge>
               </div>
-            )}
-            <div className="flex items-center justify-between px-2">
-              <span className="text-sm text-muted-foreground">Dining Option:</span>
-              <Badge className="capitalize bg-primary/10 text-primary hover:bg-primary/20">
-                {order.diningOption}
-              </Badge>
+              {order.tableId && (
+                <div className="flex items-center justify-between px-2">
+                  <span className="text-sm text-muted-foreground">Table:</span>
+                  <Badge variant="outline" className="font-semibold">
+                    {order.tableId}
+                  </Badge>
+                </div>
+              )}
+              <div className="flex items-center justify-between px-2">
+                <span className="text-sm text-muted-foreground">Dining Option:</span>
+                <Badge className="capitalize bg-primary/10 text-primary hover:bg-primary/20">
+                  {order.diningOption}
+                </Badge>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-3 px-2">
-            <div className="flex items-center gap-2">
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                Order Items
-              </h3>
-              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-            </div>
-            <div className="space-y-3">
-              {order.items.map((item, index) => {
-                const itemPrice = parseFloat(item.price);
-                const itemTotal = parseFloat(item.total);
-                const priceFormatted = formatDualCurrency(itemPrice, settings);
-                const totalFormatted = formatDualCurrency(itemTotal, settings);
-                
-                return (
-                  <div 
-                    key={index} 
-                    className="bg-accent/30 rounded-lg p-3 hover-elevate transition-all" 
-                    data-testid={`receipt-item-${index}`}
-                  >
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate">{item.product.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs font-mono">
-                            {item.quantity}x
-                          </Badge>
-                          {priceFormatted.secondary && (
-                            <span className="text-xs text-muted-foreground">
-                              {priceFormatted.usd} / {priceFormatted.secondary}
-                            </span>
-                          )}
-                          {!priceFormatted.secondary && (
-                            <span className="text-xs text-muted-foreground">
-                              {priceFormatted.usd}
-                            </span>
-                          )}
+            <div className="space-y-3 px-2">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
+                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                  Order Items ({order.items.length})
+                </h3>
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
+              </div>
+              <div className="max-h-[40vh] min-h-[200px] overflow-y-auto">
+                <div className="space-y-3 pr-2">
+                  {order.items.map((item, index) => {
+                    const itemPrice = parseFloat(item.price);
+                    const itemTotal = parseFloat(item.total);
+                    const priceFormatted = formatDualCurrency(itemPrice, settings);
+                    const totalFormatted = formatDualCurrency(itemTotal, settings);
+                    
+                    return (
+                      <div 
+                        key={`${item.product.id}-${index}`} 
+                        className="bg-accent/30 rounded-lg p-3 hover-elevate transition-all" 
+                        data-testid={`receipt-item-${index}`}
+                      >
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm break-words">{item.product.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs font-mono">
+                                {item.quantity}x
+                              </Badge>
+                              {priceFormatted.secondary && (
+                                <span className="text-xs text-muted-foreground">
+                                  {priceFormatted.usd} / {priceFormatted.secondary}
+                                </span>
+                              )}
+                              {!priceFormatted.secondary && (
+                                <span className="text-xs text-muted-foreground">
+                                  {priceFormatted.usd}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="font-mono font-bold text-primary text-sm">
+                              {totalFormatted.usd}
+                            </p>
+                            {totalFormatted.secondary && (
+                              <p className="font-mono text-xs text-muted-foreground">
+                                {totalFormatted.secondary}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-mono font-bold text-primary text-sm">
-                          {totalFormatted.usd}
-                        </p>
-                        {totalFormatted.secondary && (
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {totalFormatted.secondary}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
 
           <Separator className="my-4" />
 
@@ -480,7 +485,7 @@ export function ReceiptPrintModal({
         </div>
         </ScrollArea>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2 sm:gap-0 flex-shrink-0">
           <Button 
             variant="outline" 
             onClick={onClose} 

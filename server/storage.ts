@@ -85,6 +85,7 @@ export interface IStorage {
   deleteCategory(id: string): Promise<boolean>;
   
   getProducts(branchId?: string | null): Promise<Product[]>;
+  getProductsPaginated(branchId?: string | null, limit?: number, offset?: number, categoryId?: string | null, search?: string, minPrice?: number, maxPrice?: number, inStock?: boolean): Promise<{ products: Product[]; total: number }>;
   getProduct(id: string): Promise<Product | undefined>;
   getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]>;
   getProductByName(name: string, excludeId?: string): Promise<Product | undefined>;
@@ -331,6 +332,77 @@ export class DatabaseStorage implements IStorage {
         .where(or(eq(products.branchId, branchId), isNull(products.branchId)));
     }
     return await db.select().from(products);
+  }
+
+  async getProductsPaginated(
+    branchId?: string | null,
+    limit: number = 50,
+    offset: number = 0,
+    categoryId?: string | null,
+    search?: string,
+    minPrice?: number,
+    maxPrice?: number,
+    inStock?: boolean
+  ): Promise<{ products: Product[]; total: number }> {
+    // Build where conditions
+    const conditions = [];
+    
+    // Branch filter
+    if (branchId) {
+      conditions.push(or(eq(products.branchId, branchId), isNull(products.branchId)));
+    }
+    
+    // Category filter
+    if (categoryId) {
+      conditions.push(eq(products.categoryId, categoryId));
+    }
+    
+    // Search filter
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conditions.push(sql`LOWER(${products.name}) LIKE LOWER(${searchPattern})`);
+    }
+    
+    // Price range filter
+    if (minPrice !== undefined) {
+      conditions.push(gte(sql`CAST(${products.price} AS DECIMAL)`, minPrice));
+    }
+    if (maxPrice !== undefined) {
+      conditions.push(lte(sql`CAST(${products.price} AS DECIMAL)`, maxPrice));
+    }
+    
+    // Stock filter
+    if (inStock !== undefined) {
+      if (inStock) {
+        conditions.push(gte(sql`CAST(${products.quantity} AS DECIMAL)`, 1));
+      } else {
+        conditions.push(lte(sql`CAST(${products.quantity} AS DECIMAL)`, 0));
+      }
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(whereClause);
+    const total = Number(countResult[0]?.count || 0);
+    
+    // Get paginated products
+    let query = db.select().from(products);
+    if (whereClause) {
+      query = query.where(whereClause) as any;
+    }
+    const productResults = await query
+      .limit(limit)
+      .offset(offset)
+      .orderBy(asc(products.name));
+    
+    return {
+      products: productResults,
+      total,
+    };
   }
 
   async getProduct(id: string): Promise<Product | undefined> {

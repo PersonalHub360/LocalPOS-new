@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart, Filter, X } from "lucide-react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { ProductCard } from "@/components/product-card";
 import { OrderPanel, type OrderItemData } from "@/components/order-panel";
@@ -15,6 +17,11 @@ import type { Product, Category, Table, Order, OrderItem } from "@shared/schema"
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useBranch } from "@/contexts/BranchContext";
 import { withBranchId } from "@/lib/branchQuery";
+
+interface ProductsResponse {
+  products: Product[];
+  total: number;
+}
 
 export default function POS() {
   const { selectedBranchId } = useBranch();
@@ -35,8 +42,17 @@ export default function POS() {
   const [manualDiscount, setManualDiscount] = useState<number>(0);
   const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount');
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
+  
+  // Additional filters
+  const [minPrice, setMinPrice] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
+  const [stockFilter, setStockFilter] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
+  
   const isDesktop = useIsDesktop();
   const { toast } = useToast();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   // Handle discount changes properly to avoid race conditions
   const handleDiscountChange = (value: number, type: 'amount' | 'percentage') => {
@@ -48,14 +64,54 @@ export default function POS() {
     queryKey: ["/api/categories"],
   });
 
-  const { data: products = [], isLoading: productsLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products", { branchId: selectedBranchId }],
-    queryFn: async () => {
-      const res = await fetch(withBranchId("/api/products", selectedBranchId), { credentials: "include" });
+  // Infinite query for paginated products
+  const {
+    data: productsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: productsLoading,
+    refetch,
+  } = useInfiniteQuery<ProductsResponse>({
+    queryKey: [
+      "/api/products",
+      {
+        branchId: selectedBranchId,
+        categoryId: selectedCategory,
+        search: searchQuery,
+        minPrice: minPrice ? parseFloat(minPrice) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+        inStock: stockFilter === "inStock" ? true : stockFilter === "outOfStock" ? false : undefined,
+      },
+    ],
+    queryFn: async ({ pageParam = 0 }) => {
+      const params = new URLSearchParams({
+        limit: "50",
+        offset: String(pageParam),
+      });
+      
+      if (selectedCategory) params.append("categoryId", selectedCategory);
+      if (searchQuery) params.append("search", searchQuery);
+      if (minPrice) params.append("minPrice", minPrice);
+      if (maxPrice) params.append("maxPrice", maxPrice);
+      if (stockFilter === "inStock") params.append("inStock", "true");
+      if (stockFilter === "outOfStock") params.append("inStock", "false");
+      
+      const url = withBranchId(`/api/products?${params.toString()}`, selectedBranchId);
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch products");
       return res.json();
     },
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.products.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
   });
+
+  // Flatten all products from all pages
+  const allProducts = productsData?.pages.flatMap((page) => page.products) ?? [];
+  const totalProducts = productsData?.pages[0]?.total ?? 0;
 
   const { data: tables = [] } = useQuery<Table[]>({
     queryKey: ["/api/tables", { branchId: selectedBranchId }],
@@ -214,7 +270,7 @@ export default function POS() {
       const response = await apiRequest("GET", `/api/orders/${orderId}/items`);
       const orderItemsData = await response.json() as OrderItem[];
       
-      const productsMap = new Map(products.map((p) => [p.id, p]));
+      const productsMap = new Map(allProducts.map((p) => [p.id, p]));
       const restoredItems: OrderItemData[] = orderItemsData
         .map((item) => {
           const product = productsMap.get(item.productId);
@@ -256,7 +312,7 @@ export default function POS() {
       const response = await apiRequest("GET", `/api/orders/${orderId}/items`);
       const orderItemsData = await response.json() as OrderItem[];
       
-      const productsMap = new Map(products.map((p) => [p.id, p]));
+      const productsMap = new Map(allProducts.map((p) => [p.id, p]));
       const items = orderItemsData
         .map((item) => {
           const product = productsMap.get(item.productId);
@@ -306,7 +362,7 @@ export default function POS() {
         const response = await apiRequest("GET", `/api/orders/${orderId}/items`);
         const orderItemsData = await response.json() as OrderItem[];
         
-        const productsMap = new Map(products.map((p) => [p.id, p]));
+        const productsMap = new Map(allProducts.map((p) => [p.id, p]));
         const restoredItems: OrderItemData[] = orderItemsData
           .map((item) => {
             const product = productsMap.get(item.productId);
@@ -338,7 +394,7 @@ export default function POS() {
     return () => {
       window.removeEventListener('loadDraft', handleLoadDraft);
     };
-  }, [orders, products, toast]);
+  }, [orders, allProducts, toast]);
 
   // Listen for printDraft event from header
   useEffect(() => {
@@ -352,7 +408,7 @@ export default function POS() {
         const response = await apiRequest("GET", `/api/orders/${orderId}/items`);
         const orderItemsData = await response.json() as OrderItem[];
         
-        const productsMap = new Map(products.map((p) => [p.id, p]));
+        const productsMap = new Map(allProducts.map((p) => [p.id, p]));
         const restoredItems: OrderItemData[] = orderItemsData
           .map((item) => {
             const product = productsMap.get(item.productId);
@@ -389,7 +445,7 @@ export default function POS() {
     return () => {
       window.removeEventListener('printDraft', handlePrintDraft);
     };
-  }, [orders, products, toast]);
+  }, [orders, allProducts, toast]);
 
   const handleProcessPayment = (type: "kot" | "bill" | "print") => {
     if (type === "kot") {
@@ -534,11 +590,35 @@ export default function POS() {
     });
   };
 
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory = !selectedCategory || product.categoryId === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Reset scroll position when filters change
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [selectedCategory, searchQuery, minPrice, maxPrice, stockFilter]);
 
   const subtotal = orderItems.reduce(
     (sum, item) => sum + parseFloat(item.product.price) * item.quantity,
@@ -593,35 +673,113 @@ export default function POS() {
               <span className="text-xs sm:text-sm shrink-0">POS</span>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-              <Button
-                variant={selectedCategory === null ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory(null)}
-                className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
-                data-testid="button-category-all"
-              >
-                Show All
-              </Button>
-              {categories.map((category) => (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-2 overflow-x-auto pb-2 -mx-1 px-1">
                 <Button
-                  key={category.id}
-                  variant={selectedCategory === category.id ? "default" : "outline"}
+                  variant={selectedCategory === null ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedCategory(category.id)}
+                  onClick={() => setSelectedCategory(null)}
                   className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
-                  data-testid={`button-category-${category.slug}`}
+                  data-testid="button-category-all"
                 >
-                  {category.name}
+                  Show All
                 </Button>
-              ))}
+                {categories.map((category) => (
+                  <Button
+                    key={category.id}
+                    variant={selectedCategory === category.id ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedCategory(category.id)}
+                    className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
+                    data-testid={`button-category-${category.slug}`}
+                  >
+                    {category.name}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Advanced Filters */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant={showFilters ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="shrink-0 text-xs sm:text-sm h-7 sm:h-8"
+                >
+                  <Filter className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                  Filters
+                </Button>
+                {(minPrice || maxPrice || stockFilter !== "all") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setMinPrice("");
+                      setMaxPrice("");
+                      setStockFilter("all");
+                    }}
+                    className="shrink-0 text-xs sm:text-sm h-7 sm:h-8"
+                  >
+                    <X className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    Clear Filters
+                  </Button>
+                )}
+                {allProducts.length > 0 && (
+                  <Badge variant="secondary" className="shrink-0 text-xs">
+                    {allProducts.length} of {totalProducts} products
+                  </Badge>
+                )}
+              </div>
+
+              {showFilters && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 p-3 bg-muted/50 rounded-md border">
+                  <div>
+                    <Label className="text-xs">Min Price</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={minPrice}
+                      onChange={(e) => setMinPrice(e.target.value)}
+                      className="h-7 sm:h-8 text-xs sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Max Price</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={maxPrice}
+                      onChange={(e) => setMaxPrice(e.target.value)}
+                      className="h-7 sm:h-8 text-xs sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Stock Status</Label>
+                    <Select value={stockFilter} onValueChange={setStockFilter}>
+                      <SelectTrigger className="h-7 sm:h-8 text-xs sm:text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Products</SelectItem>
+                        <SelectItem value="inStock">In Stock</SelectItem>
+                        <SelectItem value="outOfStock">Out of Stock</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
-            {productsLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                {[...Array(8)].map((_, i) => (
+          <div 
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0"
+          >
+            {productsLoading && allProducts.length === 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+                {[...Array(10)].map((_, i) => (
                   <div key={i} className="animate-pulse">
                     <div className="aspect-square bg-muted rounded-lg mb-2 sm:mb-3" />
                     <div className="h-3 sm:h-4 bg-muted rounded w-3/4 mb-1 sm:mb-2" />
@@ -629,7 +787,7 @@ export default function POS() {
                   </div>
                 ))}
               </div>
-            ) : filteredProducts.length === 0 ? (
+            ) : allProducts.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground px-4">
                 <div className="text-center">
                   <p className="text-base sm:text-lg font-medium mb-1">No products found</p>
@@ -637,15 +795,23 @@ export default function POS() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onAddToOrder={handleAddToOrder}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+                  {allProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      onAddToOrder={handleAddToOrder}
+                    />
+                  ))}
+                </div>
+                {/* Infinite scroll trigger */}
+                <div ref={observerTarget} className="h-4 flex items-center justify-center py-4">
+                  {isFetchingNextPage && (
+                    <div className="text-sm text-muted-foreground">Loading more products...</div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

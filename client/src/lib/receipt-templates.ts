@@ -106,7 +106,12 @@ function generateClassicTemplate(
           .summary div { display: flex; justify-content: space-between; margin: 5px 0; }
           .total { font-weight: bold; font-size: 16px; margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; }
           .footer { text-align: center; margin-top: 20px; font-size: 10px; border-top: 2px dashed #000; padding-top: 10px; }
-          @media print { body { padding: 10px; } @page { margin: 0.5cm; size: 80mm auto; } }
+          @media print { 
+            body { padding: 10px; } 
+            @page { margin: 0.5cm; size: 80mm auto; }
+            table tbody { display: table-row-group; }
+            tr { page-break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
@@ -198,7 +203,12 @@ function generateModernTemplate(
           .summary-total { font-size: 20px; font-weight: 700; color: #1a1a1a; margin-top: 15px; padding-top: 15px; border-top: 2px solid #1a1a1a; }
           .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
           .footer p { font-size: 11px; color: #999; }
-          @media print { body { padding: 20px; } @page { margin: 1cm; } }
+          @media print { 
+            body { padding: 20px; } 
+            @page { margin: 1cm; }
+            table tbody { display: table-row-group; }
+            tr { page-break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
@@ -308,7 +318,12 @@ function generateCompactTemplate(
           .summary div { display: flex; justify-content: space-between; margin: 3px 0; }
           .total { font-weight: bold; font-size: 12px; margin-top: 5px; padding-top: 5px; border-top: 1px solid #000; }
           .footer { text-align: center; margin-top: 10px; font-size: 8px; border-top: 1px dotted #ccc; padding-top: 5px; }
-          @media print { body { padding: 5px; } @page { margin: 0.3cm; size: 80mm auto; } }
+          @media print { 
+            body { padding: 5px; } 
+            @page { margin: 0.3cm; size: 80mm auto; }
+            table tbody { display: table-row-group; }
+            tr { page-break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
@@ -388,7 +403,12 @@ function generateDetailedTemplate(
           .summary-row { display: flex; justify-content: space-between; margin: 10px 0; padding: 8px 0; border-bottom: 1px solid #dee2e6; }
           .summary-total { font-size: 22px; font-weight: 700; color: #212529; margin-top: 15px; padding-top: 15px; border-top: 3px solid #212529; }
           .footer { text-align: center; margin-top: 25px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; }
-          @media print { body { padding: 15px; } @page { margin: 1cm; } }
+          @media print { 
+            body { padding: 15px; } 
+            @page { margin: 1cm; }
+            table tbody { display: table-row-group; }
+            tr { page-break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
@@ -550,7 +570,9 @@ function generateElegantTemplate(
           .footer p { font-size: 12px; color: #6b7280; font-style: italic; }
           @media print { 
             body { padding: 30px; background: white; } 
-            @page { margin: 1.5cm; } 
+            @page { margin: 1.5cm; }
+            table tbody { display: table-row-group; }
+            tr { page-break-inside: avoid; }
           }
         </style>
       </head>

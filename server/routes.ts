@@ -276,11 +276,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/products", async (req, res) => {
     try {
-      const { categoryId, branchId } = req.query;
-      const products = categoryId
-        ? await storage.getProductsByCategory(categoryId as string, branchId as string | undefined)
-        : await storage.getProducts(branchId as string | undefined);
-      res.json(products);
+      const { categoryId, branchId, limit, offset, search, minPrice, maxPrice, inStock } = req.query;
+      
+      // If pagination parameters are provided, use paginated endpoint
+      if (limit !== undefined || offset !== undefined || search || minPrice || maxPrice || inStock !== undefined) {
+        const limitNum = limit ? parseInt(limit as string, 10) : 50;
+        const offsetNum = offset ? parseInt(offset as string, 10) : 0;
+        const minPriceNum = minPrice ? parseFloat(minPrice as string) : undefined;
+        const maxPriceNum = maxPrice ? parseFloat(maxPrice as string) : undefined;
+        const inStockBool = inStock !== undefined ? inStock === 'true' : undefined;
+        
+        const result = await storage.getProductsPaginated(
+          branchId as string | undefined,
+          limitNum,
+          offsetNum,
+          categoryId as string | undefined,
+          search as string | undefined,
+          minPriceNum,
+          maxPriceNum,
+          inStockBool
+        );
+        res.json(result);
+      } else {
+        // Legacy endpoint for backward compatibility
+        const products = categoryId
+          ? await storage.getProductsByCategory(categoryId as string, branchId as string | undefined)
+          : await storage.getProducts(branchId as string | undefined);
+        res.json(products);
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch products" });
     }
