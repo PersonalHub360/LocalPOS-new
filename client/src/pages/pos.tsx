@@ -478,7 +478,7 @@ export default function POS() {
     }
   };
 
-  const handleConfirmPayment = (paymentMethod: string, amountPaid: number, paymentSplits?: { method: string; amount: number }[], customerName?: string, customerPhone?: string) => {
+  const handleConfirmPayment = (paymentMethod: string, amountPaid: number, paymentSplits?: { method: string; amount: number; customerId?: string; customerName?: string; customerPhone?: string }[], customerName?: string, customerPhone?: string) => {
     const subtotal = orderItems.reduce(
       (sum, item) => sum + parseFloat(item.product.price) * item.quantity,
       0

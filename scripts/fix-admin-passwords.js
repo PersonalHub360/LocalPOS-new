@@ -52,6 +52,10 @@ async function fixAdminPasswords() {
       adminUsername = 'admin@bondcoffeepos.com';
       adminPassword = 'Admin@2024';
       console.log('📍 Detected Bond Coffee POS instance');
+    } else if (port === 9000 || databaseUrl.includes('adorapos_db')) {
+      adminUsername = 'admin@adorapos.com';
+      adminPassword = 'Admin@2024';
+      console.log('📍 Detected Adora POS instance');
     } else {
       console.error('❌ Could not detect POS instance. Please set PORT or DATABASE_URL.');
       process.exit(1);

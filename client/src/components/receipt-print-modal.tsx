@@ -87,9 +87,8 @@ export function ReceiptPrintModal({
       let paymentDetails = `<p><strong>Pay by:</strong> ${order.paymentSplits ? "Split Payment" : "Cash"}</p>`;
       if (order.paymentSplits) {
         try {
-          const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+          const splits: { method: string; amount: number; customerId?: string; customerName?: string; customerPhone?: string }[] = JSON.parse(order.paymentSplits);
           if (splits.length > 0) {
-            const splitsHtml = splits.map(split => {
               const methodLabels: Record<string, string> = {
                 cash: "Cash",
                 card: "Card",
@@ -99,23 +98,74 @@ export function ReceiptPrintModal({
                 cash_aba: "Cash And ABA",
                 cash_acleda: "Cash And Acleda",
               };
+            const hasCustomerSplits = splits.some(s => s.customerName || s.customerId);
+            const splitType = hasCustomerSplits ? "Split by Customer" : "Split by Payment Method";
+            
+            if (hasCustomerSplits) {
+              // Table format for customer splits
+              const splitsRows = splits.map(split => {
               const methodLabel = methodLabels[split.method] || split.method;
               const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
               return `
-                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
-                  <span>${methodLabel}:</span>
-                  <span><strong>$${split.amount.toFixed(2)}</strong> (៛${amountKHR})</span>
+                  <tr style="border-bottom: 1px dashed #d1d5db;">
+                    <td style="padding: 6px 4px; font-size: 11px; font-weight: 600; color: #111827; border-right: 1px solid #d1d5db; vertical-align: top;">
+                      ${split.customerName || "Unknown Customer"}
+                      ${split.customerPhone ? `<br><span style="font-size: 9px; font-weight: normal; color: #6b7280;">${split.customerPhone}</span>` : ''}
+                    </td>
+                    <td style="padding: 6px 4px; font-size: 11px; color: #374151; border-right: 1px solid #d1d5db; vertical-align: top;">${methodLabel}</td>
+                    <td style="padding: 6px 4px; font-size: 11px; text-align: right; font-weight: 600; color: #111827; border-right: 1px solid #d1d5db; vertical-align: top;">$${split.amount.toFixed(2)}</td>
+                    <td style="padding: 6px 4px; font-size: 10px; text-align: right; color: #6b7280; vertical-align: top;">៛${amountKHR}</td>
+                  </tr>
+                `;
+              }).join('');
+              
+              paymentDetails = `
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #d1d5db;">
+                  <div style="font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    ${splitType}
+                  </div>
+                  <table style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; margin-top: 8px;" cellpadding="0" cellspacing="0">
+                    <thead>
+                      <tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db;">
+                        <th style="padding: 6px 4px; text-align: left; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">Customer</th>
+                        <th style="padding: 6px 4px; text-align: left; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">Method</th>
+                        <th style="padding: 6px 4px; text-align: right; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">USD</th>
+                        <th style="padding: 6px 4px; text-align: right; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase;">KHR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${splitsRows}
+                    </tbody>
+                  </table>
+                </div>
+              `;
+            } else {
+              // Row format for payment method splits (keep existing format)
+              const splitsHtml = splits.map(split => {
+                const methodLabel = methodLabels[split.method] || split.method;
+                const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #d1d5db;">
+                    <span style="font-size: 13px; color: #374151;">${methodLabel}:</span>
+                    <div style="text-align: right;">
+                      <span style="font-weight: 700; font-size: 13px; color: #111827;">$${split.amount.toFixed(2)}</span>
+                      <span style="font-size: 11px; color: #6b7280; margin-left: 5px;">(៛${amountKHR})</span>
+                    </div>
                 </div>
               `;
             }).join('');
+              
             paymentDetails = `
-              <div style="margin-top: 10px;">
-                <p style="margin-bottom: 10px;"><strong>Payment Split:</strong></p>
-                <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; background-color: #f9fafb;">
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #d1d5db;">
+                  <div style="font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    ${splitType}
+                  </div>
+                  <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px;">
                   ${splitsHtml}
                 </div>
               </div>
             `;
+            }
           }
         } catch (error) {
           console.error("Failed to parse payment splits:", error);
@@ -410,7 +460,7 @@ export function ReceiptPrintModal({
 
             {order.paymentSplits && (() => {
               try {
-                const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+                const splits: { method: string; amount: number; customerId?: string; customerName?: string; customerPhone?: string }[] = JSON.parse(order.paymentSplits);
                 if (splits.length > 0) {
                   const paymentMethods: Record<string, string> = {
                     cash: "Cash",
@@ -421,21 +471,53 @@ export function ReceiptPrintModal({
                     cash_aba: "Cash And ABA",
                     cash_acleda: "Cash And Acleda",
                   };
+                  const hasCustomerSplits = splits.some(s => s.customerName || s.customerId);
+                  const splitType = hasCustomerSplits ? "Split by Customer" : "Split by Payment Method";
                   return (
                     <div className="border-t border-dashed border-border pt-3 mt-3">
-                      <h4 className="text-sm font-semibold mb-2 text-muted-foreground">Payment Split:</h4>
-                      <div className="space-y-2">
+                      <h4 className="text-sm font-semibold mb-2 text-muted-foreground">
+                        {splitType}:
+                      </h4>
+                      <div className="space-y-3">
                         {splits.map((split, index) => {
                           const formatted = formatDualCurrency(split.amount, settings);
                           return (
-                            <div key={index} className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">{paymentMethods[split.method] || split.method}:</span>
+                            <div key={index} className="border-b border-dashed border-border pb-2 last:border-0">
+                              {hasCustomerSplits ? (
+                                <div className="flex justify-between items-start">
+                                  <div className="flex flex-col">
+                                    <span className="font-semibold text-sm">
+                                      {split.customerName || "Unknown Customer"}
+                                    </span>
+                                    {split.customerPhone && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {split.customerPhone}
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-muted-foreground mt-1">
+                                      Payment: {paymentMethods[split.method] || split.method}
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-mono font-medium">{formatted.usd}</p>
+                                    {formatted.secondary && (
+                                      <p className="font-mono text-xs text-muted-foreground">{formatted.secondary}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-muted-foreground">
+                                    {paymentMethods[split.method] || split.method}:
+                                  </span>
                               <div className="text-right">
                                 <p className="font-mono font-medium">{formatted.usd}</p>
                                 {formatted.secondary && (
                                   <p className="font-mono text-xs text-muted-foreground">{formatted.secondary}</p>
                                 )}
                               </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

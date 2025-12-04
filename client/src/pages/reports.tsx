@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,6 +75,7 @@ export default function Reports() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   const { data: sales = [] } = useQuery<Order[]>({
     queryKey: ["/api/sales"],
@@ -599,7 +601,7 @@ export default function Reports() {
             <p className="text-sm md:text-base text-muted-foreground mt-1">Analyze performance, sales, and profitability</p>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            {selectedOrders.length > 0 && reportType === "sales" && (
+            {selectedOrders.length > 0 && reportType === "sales" && hasPermission("sales.delete") && (
               <Button 
                 variant="destructive" 
                 onClick={handleDeleteSelected}
@@ -614,14 +616,18 @@ export default function Reports() {
               <Printer className="w-4 h-4 mr-2" />
               Print
             </Button>
-            <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
-            <Button onClick={handleExportCSV} data-testid="button-export-csv">
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
+            {hasPermission("reports.export") && (
+              <>
+                <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export PDF
+                </Button>
+                <Button onClick={handleExportCSV} data-testid="button-export-csv">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -972,84 +978,92 @@ export default function Reports() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      onClick={() => handleViewOrder(sale)}
-                                      disabled={loadingOrderDetails}
-                                      data-testid={`button-view-${sale.id}`}
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View Details</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost"
-                                      onClick={() => handleEditOrder(sale.id)}
-                                      data-testid={`button-edit-${sale.id}`}
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Edit Order</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      onClick={() => handlePrintOrder(sale)}
-                                      data-testid={`button-print-${sale.id}`}
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Print Receipt</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost"
-                                      onClick={async () => {
-                                        if (confirm(`Are you sure you want to delete order #${sale.orderNumber}? This action cannot be undone.`)) {
-                                          try {
-                                            const response = await fetch(`/api/orders/${sale.id}`, {
-                                              method: "DELETE",
-                                              credentials: "include",
-                                            });
-                                            if (response.ok) {
-                                              queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
-                                              queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-                                              toast({
-                                                title: "Success",
-                                                description: `Order #${sale.orderNumber} deleted successfully`,
+                                {hasPermission("sales.view") && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost" 
+                                        onClick={() => handleViewOrder(sale)}
+                                        disabled={loadingOrderDetails}
+                                        data-testid={`button-view-${sale.id}`}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>View Details</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {hasPermission("sales.edit") && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost"
+                                        onClick={() => handleEditOrder(sale.id)}
+                                        data-testid={`button-edit-${sale.id}`}
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Edit Order</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {hasPermission("sales.print") && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost" 
+                                        onClick={() => handlePrintOrder(sale)}
+                                        data-testid={`button-print-${sale.id}`}
+                                      >
+                                        <FileText className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Print Receipt</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {hasPermission("sales.delete") && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost"
+                                        onClick={async () => {
+                                          if (confirm(`Are you sure you want to delete order #${sale.orderNumber}? This action cannot be undone.`)) {
+                                            try {
+                                              const response = await fetch(`/api/orders/${sale.id}`, {
+                                                method: "DELETE",
+                                                credentials: "include",
                                               });
-                                            } else {
-                                              throw new Error("Failed to delete order");
+                                              if (response.ok) {
+                                                queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+                                                queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                                                toast({
+                                                  title: "Success",
+                                                  description: `Order #${sale.orderNumber} deleted successfully`,
+                                                });
+                                              } else {
+                                                throw new Error("Failed to delete order");
+                                              }
+                                            } catch (error) {
+                                              toast({
+                                                title: "Error",
+                                                description: "Failed to delete order",
+                                                variant: "destructive",
+                                              });
                                             }
-                                          } catch (error) {
-                                            toast({
-                                              title: "Error",
-                                              description: "Failed to delete order",
-                                              variant: "destructive",
-                                            });
                                           }
-                                        }
-                                      }}
-                                      data-testid={`button-delete-${sale.id}`}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Delete Order</TooltipContent>
-                                </Tooltip>
+                                        }}
+                                        data-testid={`button-delete-${sale.id}`}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete Order</TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -1108,31 +1122,37 @@ export default function Reports() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              onClick={() => handleViewOrder(sale)}
-                              disabled={loadingOrderDetails}
-                              data-testid={`button-view-${sale.id}`}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              onClick={() => handleEditOrder(sale.id)}
-                              data-testid={`button-edit-${sale.id}`}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              onClick={() => handlePrintOrder(sale)}
-                              data-testid={`button-print-${sale.id}`}
-                            >
-                              <FileText className="w-4 h-4" />
-                            </Button>
+                            {hasPermission("sales.view") && (
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => handleViewOrder(sale)}
+                                disabled={loadingOrderDetails}
+                                data-testid={`button-view-${sale.id}`}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {hasPermission("sales.edit") && (
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleEditOrder(sale.id)}
+                                data-testid={`button-edit-${sale.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {hasPermission("sales.print") && (
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => handlePrintOrder(sale)}
+                                data-testid={`button-print-${sale.id}`}
+                              >
+                                <FileText className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1239,14 +1259,18 @@ export default function Reports() {
                     <X className="w-4 h-4 mr-2" />
                     Close
                   </Button>
-                  <Button variant="outline" onClick={() => handleEditOrder(selectedOrder.id)}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Order
-                  </Button>
-                  <Button onClick={() => handlePrintOrder(selectedOrder)}>
-                    <Printer className="w-4 h-4 mr-2" />
-                    Print Receipt
-                  </Button>
+                  {hasPermission("sales.edit") && (
+                    <Button variant="outline" onClick={() => handleEditOrder(selectedOrder.id)}>
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Order
+                    </Button>
+                  )}
+                  {hasPermission("sales.print") && (
+                    <Button onClick={() => handlePrintOrder(selectedOrder)}>
+                      <Printer className="w-4 h-4 mr-2" />
+                      Print Receipt
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

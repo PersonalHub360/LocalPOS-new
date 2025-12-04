@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { AddEditUserDialog } from "@/components/add-edit-user-dialog";
 import type { Settings, User, Role, Permission } from "@shared/schema";
@@ -43,11 +44,20 @@ import {
   Edit,
   Eye,
   Globe,
-  Image
+  Image,
+  Search,
+  Calendar as CalendarIcon,
+  Filter,
+  RefreshCw
 } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import type { AuditLog } from "@shared/schema";
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
   
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -84,6 +94,16 @@ export default function SettingsPage() {
   // Permissions management state
   const [selectedRoleForPermissions, setSelectedRoleForPermissions] = useState<string>("");
   const [rolePermissions, setRolePermissions] = useState<Set<string>>(new Set());
+  
+  // Activity Logs state
+  const [activityLogsFilters, setActivityLogsFilters] = useState({
+    userId: "all",
+    entityType: "all",
+    action: "all",
+    startDate: undefined as Date | undefined,
+    endDate: undefined as Date | undefined,
+  });
+  const activityLogsObserverTarget = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (settings) {
@@ -931,10 +951,12 @@ export default function SettingsPage() {
                     <CardTitle>User Management</CardTitle>
                     <CardDescription>Manage users and assign roles</CardDescription>
                   </div>
-                  <Button onClick={handleAddUser} data-testid="button-create-user">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create User
-                  </Button>
+                  {hasPermission("settings.users") && (
+                    <Button onClick={handleAddUser} data-testid="button-create-user">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create User
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -964,22 +986,26 @@ export default function SettingsPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEditUser(user)}
-                                  data-testid={`button-edit-user-${user.id}`}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  data-testid={`button-delete-user-${user.id}`}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                {hasPermission("settings.users") && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEditUser(user)}
+                                      data-testid={`button-edit-user-${user.id}`}
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteUser(user.id)}
+                                      data-testid={`button-delete-user-${user.id}`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -999,18 +1025,20 @@ export default function SettingsPage() {
                     <CardTitle>Roles Management</CardTitle>
                     <CardDescription>Create and manage user roles</CardDescription>
                   </div>
-                  <Button 
-                    onClick={() => {
-                      setSelectedRole(null);
-                      setNewRoleName("");
-                      setNewRoleDescription("");
-                      setRoleDialogOpen(true);
-                    }}
-                    data-testid="button-add-role"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Role
-                  </Button>
+                  {hasPermission("settings.roles") && (
+                    <Button 
+                      onClick={() => {
+                        setSelectedRole(null);
+                        setNewRoleName("");
+                        setNewRoleDescription("");
+                        setRoleDialogOpen(true);
+                      }}
+                      data-testid="button-add-role"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Role
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1150,30 +1178,34 @@ export default function SettingsPage() {
                           <TableCell>{role.description || "-"}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedRole(role);
-                                  setNewRoleName(role.name);
-                                  setNewRoleDescription(role.description || "");
-                                  setRoleDialogOpen(true);
-                                }}
-                                data-testid={`button-edit-role-${role.id}`}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setRoleToDelete(role.id);
-                                  setDeleteRoleDialogOpen(true);
-                                }}
-                                data-testid={`button-delete-role-${role.id}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              {hasPermission("settings.roles") && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedRole(role);
+                                      setNewRoleName(role.name);
+                                      setNewRoleDescription(role.description || "");
+                                      setRoleDialogOpen(true);
+                                    }}
+                                    data-testid={`button-edit-role-${role.id}`}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setRoleToDelete(role.id);
+                                      setDeleteRoleDialogOpen(true);
+                                    }}
+                                    data-testid={`button-delete-role-${role.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1711,10 +1743,104 @@ export default function SettingsPage() {
                 <CardTitle>Activity Logs</CardTitle>
                 <CardDescription>View system activity and user actions</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="text-center py-12 text-muted-foreground">
-                  Activity logs feature coming soon
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <Label>User</Label>
+                    <Select value={activityLogsFilters.userId} onValueChange={(value) => setActivityLogsFilters(prev => ({ ...prev, userId: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Users" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Users</SelectItem>
+                        {users.map(user => (
+                          <SelectItem key={user.id} value={user.id}>{user.fullName || user.username}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Entity Type</Label>
+                    <Select value={activityLogsFilters.entityType} onValueChange={(value) => setActivityLogsFilters(prev => ({ ...prev, entityType: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="order">Orders</SelectItem>
+                        <SelectItem value="product">Products</SelectItem>
+                        <SelectItem value="expense">Expenses</SelectItem>
+                        <SelectItem value="purchase">Purchases</SelectItem>
+                        <SelectItem value="user">Users</SelectItem>
+                        <SelectItem value="role">Roles</SelectItem>
+                        <SelectItem value="employee">Employees</SelectItem>
+                        <SelectItem value="table">Tables</SelectItem>
+                        <SelectItem value="branch">Branches</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Action</Label>
+                    <Select value={activityLogsFilters.action} onValueChange={(value) => setActivityLogsFilters(prev => ({ ...prev, action: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Actions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Actions</SelectItem>
+                        <SelectItem value="create">Create</SelectItem>
+                        <SelectItem value="update">Update</SelectItem>
+                        <SelectItem value="delete">Delete</SelectItem>
+                        <SelectItem value="view">View</SelectItem>
+                        <SelectItem value="login">Login</SelectItem>
+                        <SelectItem value="logout">Logout</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Label>Date Range</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {activityLogsFilters.startDate && activityLogsFilters.endDate
+                              ? `${format(activityLogsFilters.startDate, "MMM dd")} - ${format(activityLogsFilters.endDate, "MMM dd")}`
+                              : "Select date range"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="range"
+                            selected={{
+                              from: activityLogsFilters.startDate,
+                              to: activityLogsFilters.endDate,
+                            }}
+                            onSelect={(range) => {
+                              setActivityLogsFilters(prev => ({
+                                ...prev,
+                                startDate: range?.from,
+                                endDate: range?.to,
+                              }));
+                            }}
+                            numberOfMonths={2}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setActivityLogsFilters({ userId: "all", entityType: "all", action: "all", startDate: undefined, endDate: undefined })}
+                      className="mt-6"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Activity Logs List */}
+                <ActivityLogsList filters={activityLogsFilters} observerTarget={activityLogsObserverTarget} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1949,6 +2075,157 @@ export default function SettingsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// Activity Logs List Component
+function ActivityLogsList({ filters, observerTarget }: { filters: any; observerTarget: React.RefObject<HTMLDivElement> }) {
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    error,
+  } = useInfiniteQuery<{ logs: AuditLog[]; total: number }>({
+    queryKey: ["/api/audit-logs", filters],
+    queryFn: async ({ pageParam = 0 }) => {
+      try {
+        const params = new URLSearchParams();
+        if (filters.userId && filters.userId !== "all") params.append("userId", filters.userId);
+        if (filters.entityType && filters.entityType !== "all") params.append("entityType", filters.entityType);
+        if (filters.action && filters.action !== "all") params.append("action", filters.action);
+        if (filters.startDate) params.append("startDate", filters.startDate.toISOString());
+        if (filters.endDate) params.append("endDate", filters.endDate.toISOString());
+        params.append("limit", "50");
+        params.append("offset", String(pageParam));
+        const res = await fetch(`/api/audit-logs?${params.toString()}`, { credentials: "include" });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: "Failed to fetch audit logs" }));
+          throw new Error(errorData.error || "Failed to fetch audit logs");
+        }
+        const result = await res.json();
+        return {
+          logs: result.logs || [],
+          total: result.total || 0,
+        };
+      } catch (err) {
+        console.error("Error fetching audit logs:", err);
+        throw err;
+      }
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage || !lastPage.total) return undefined;
+      const loaded = allPages.reduce((sum, page) => sum + (page.logs?.length || 0), 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    retry: 1,
+  });
+
+  const allLogs = data?.pages.flatMap(page => page.logs) || [];
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const target = observerTarget.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNextPage, isFetchingNextPage]);
+
+  const getActionBadgeVariant = (action: string) => {
+    switch (action) {
+      case "create": return "default";
+      case "update": return "secondary";
+      case "delete": return "destructive";
+      case "view": return "outline";
+      default: return "outline";
+    }
+  };
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading activity logs...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 text-destructive">
+        <p>Error loading activity logs: {error instanceof Error ? error.message : "Unknown error"}</p>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => window.location.reload()} 
+          className="mt-4"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Timestamp</TableHead>
+              <TableHead>User</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead>Entity Type</TableHead>
+              <TableHead>Entity</TableHead>
+              <TableHead>Description</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {allLogs.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  No activity logs found
+                </TableCell>
+              </TableRow>
+            ) : (
+              allLogs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell className="text-sm">
+                    {log.createdAt ? format(new Date(log.createdAt), "PPpp") : "—"}
+                  </TableCell>
+                  <TableCell>{log.username || "System"}</TableCell>
+                  <TableCell>
+                    <Badge variant={getActionBadgeVariant(log.action || "")}>
+                      {log.action || "—"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{log.entityType || "—"}</TableCell>
+                  <TableCell>{log.entityName || log.entityId || "—"}</TableCell>
+                  <TableCell className="max-w-md truncate">{log.description || "—"}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      
+      {isFetchingNextPage && (
+        <div className="text-center py-4 text-muted-foreground">Loading more...</div>
+      )}
+      
+      <div ref={observerTarget} className="h-4" />
     </div>
   );
 }

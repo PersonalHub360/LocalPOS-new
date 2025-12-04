@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Plus, Eye, Edit, Trash2, Printer, Search, FolderOpen, Upload, X, Wallet, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -22,6 +23,7 @@ const UNIT_OPTIONS = ["Kg", "ml", "Litre", "Gram", "Box", "Unit", "Piece", "Doze
 
 export default function ExpenseManage() {
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
   const [searchTerm, setSearchTerm] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
@@ -418,10 +420,12 @@ export default function ExpenseManage() {
             <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-orange-600 to-pink-600 bg-clip-text text-transparent">Expense Management</h1>
             <p className="text-sm md:text-base text-muted-foreground mt-1 font-medium">Track and manage all business expenses</p>
           </div>
-          <Button onClick={() => setShowAddExpenseDialog(true)} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 w-full sm:w-auto" data-testid="button-add-expense">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Expense
-          </Button>
+          {hasPermission("expenses.create") && (
+            <Button onClick={() => setShowAddExpenseDialog(true)} className="bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 w-full sm:w-auto" data-testid="button-add-expense">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Expense
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -593,61 +597,69 @@ export default function ExpenseManage() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-1">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => setViewExpense(expense)}
-                                        data-testid={`button-view-${expense.id}`}
-                                      >
-                                        <Eye className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>View Details</TooltipContent>
-                                  </Tooltip>
+                                  {hasPermission("expenses.view") && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          onClick={() => setViewExpense(expense)}
+                                          data-testid={`button-view-${expense.id}`}
+                                        >
+                                          <Eye className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>View Details</TooltipContent>
+                                    </Tooltip>
+                                  )}
 
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => setEditExpense(expense)}
-                                        data-testid={`button-edit-${expense.id}`}
-                                      >
-                                        <Edit className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Edit Expense</TooltipContent>
-                                  </Tooltip>
+                                  {hasPermission("expenses.edit") && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          onClick={() => setEditExpense(expense)}
+                                          data-testid={`button-edit-${expense.id}`}
+                                        >
+                                          <Edit className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Edit Expense</TooltipContent>
+                                    </Tooltip>
+                                  )}
 
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => handlePrintExpense(expense)}
-                                        data-testid={`button-print-${expense.id}`}
-                                      >
-                                        <Printer className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Print Receipt</TooltipContent>
-                                  </Tooltip>
+                                  {hasPermission("expenses.view") && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          onClick={() => handlePrintExpense(expense)}
+                                          data-testid={`button-print-${expense.id}`}
+                                        >
+                                          <Printer className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Print Receipt</TooltipContent>
+                                    </Tooltip>
+                                  )}
 
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        onClick={() => setDeleteExpenseId(expense.id)}
-                                        data-testid={`button-delete-${expense.id}`}
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Delete Expense</TooltipContent>
-                                  </Tooltip>
+                                  {hasPermission("expenses.delete") && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          onClick={() => setDeleteExpenseId(expense.id)}
+                                          data-testid={`button-delete-${expense.id}`}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Delete Expense</TooltipContent>
+                                    </Tooltip>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -668,10 +680,12 @@ export default function ExpenseManage() {
                   <CardTitle className="text-xl">Expense Categories</CardTitle>
                   <CardDescription>Organize expenses by categories</CardDescription>
                 </div>
-                <Button onClick={() => setShowAddCategoryDialog(true)} className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600" data-testid="button-add-category">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Category
-                </Button>
+                {hasPermission("expenses.create") && (
+                  <Button onClick={() => setShowAddCategoryDialog(true)} className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600" data-testid="button-add-category">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Category
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {categoriesLoading ? (
@@ -699,33 +713,37 @@ export default function ExpenseManage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      onClick={() => setEditCategory(category)}
-                                      data-testid={`button-edit-category-${category.id}`}
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Edit Category</TooltipContent>
-                                </Tooltip>
+                                {hasPermission("expenses.edit") && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => setEditCategory(category)}
+                                        data-testid={`button-edit-category-${category.id}`}
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Edit Category</TooltipContent>
+                                  </Tooltip>
+                                )}
 
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      onClick={() => setDeleteCategoryId(category.id)}
-                                      data-testid={`button-delete-category-${category.id}`}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Delete Category</TooltipContent>
-                                </Tooltip>
+                                {hasPermission("expenses.delete") && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => setDeleteCategoryId(category.id)}
+                                        data-testid={`button-delete-category-${category.id}`}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete Category</TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>

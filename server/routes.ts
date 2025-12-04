@@ -59,6 +59,62 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Helper function to check if user has permission
+async function checkPermission(req: Request, requiredPermission: string): Promise<boolean> {
+  // Branches have all permissions
+  if (req.session.branchId) {
+    return true;
+  }
+
+  if (!req.session.userId) {
+    return false;
+  }
+
+  const user = await storage.getUser(req.session.userId);
+  if (!user) {
+    return false;
+  }
+
+  // Admin users have all permissions
+  if (user.role === "admin") {
+    return true;
+  }
+
+  // Get user's permissions
+  let roleId = user.roleId;
+  if (!roleId && user.role) {
+    let role = await storage.getRoleByName(user.role);
+    if (!role) {
+      const allRoles = await storage.getRoles();
+      role = allRoles.find(r => r.name.toLowerCase() === user.role?.toLowerCase());
+    }
+    if (role) {
+      roleId = role.id;
+    }
+  }
+
+  if (!roleId) {
+    return false;
+  }
+
+  const rolePermissions = await storage.getPermissionsForRole(roleId);
+  const permissions = rolePermissions.map(p => p.name);
+
+  // Check if user has the required permission
+  return permissions.includes(requiredPermission) || permissions.includes("*");
+}
+
+// Middleware to require specific permission
+function requirePermission(permission: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const hasPermission = await checkPermission(req, permission);
+    if (!hasPermission) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+    next();
+  };
+}
+
 function getDateRange(filter: string, customDate?: string): { startDate: Date; endDate: Date } {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -415,7 +471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/products", async (req, res) => {
+  app.post("/api/products", requirePermission("inventory.create"), async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       
@@ -485,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/products/:id", async (req, res) => {
+  app.patch("/api/products/:id", requirePermission("inventory.edit"), async (req, res) => {
     try {
       // Get current product
       const currentProduct = await storage.getProduct(req.params.id);
@@ -519,7 +575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/products/:id", async (req, res) => {
+  app.delete("/api/products/:id", requirePermission("inventory.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteProduct(req.params.id);
       if (!deleted) {
@@ -577,7 +633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/tables", async (req, res) => {
+  app.post("/api/tables", requirePermission("sales.create"), async (req, res) => {
     try {
       const validatedData = insertTableSchema.parse(req.body);
       const table = await storage.createTable(validatedData);
@@ -590,7 +646,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/tables/:id", async (req, res) => {
+  app.patch("/api/tables/:id", requirePermission("sales.edit"), async (req, res) => {
     try {
       const validatedData = insertTableSchema.partial().parse(req.body);
       const table = await storage.updateTable(req.params.id, validatedData);
@@ -622,7 +678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/tables/:id", async (req, res) => {
+  app.delete("/api/tables/:id", requirePermission("sales.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteTable(req.params.id);
       if (!deleted) {
@@ -720,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/orders", async (req, res) => {
+  app.post("/api/orders", requirePermission("sales.create"), async (req, res) => {
     try {
       const validatedData = createOrderWithItemsSchema.parse(req.body);
       const { items, ...orderData } = validatedData;
@@ -746,7 +802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/orders/:id", async (req, res) => {
+  app.patch("/api/orders/:id", requirePermission("sales.edit"), async (req, res) => {
     try {
       const updates: any = { ...req.body };
       
@@ -781,7 +837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/orders/:id", async (req, res) => {
+  app.delete("/api/orders/:id", requirePermission("sales.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteOrder(req.params.id);
       if (!deleted) {
@@ -1103,7 +1159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/expenses/:id", async (req, res) => {
+  app.patch("/api/expenses/:id", requirePermission("expenses.edit"), async (req, res) => {
     try {
       const expense = await storage.updateExpense(req.params.id, req.body);
       if (!expense) {
@@ -1115,7 +1171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", async (req, res) => {
+  app.delete("/api/expenses/:id", requirePermission("expenses.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteExpense(req.params.id);
       if (!deleted) {
@@ -1149,7 +1205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/purchases", async (req, res) => {
+  app.post("/api/purchases", requirePermission("purchases.create"), async (req, res) => {
     try {
       const validatedData = insertPurchaseSchema.parse(req.body);
       const purchase = await storage.createPurchase(validatedData);
@@ -1162,7 +1218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/purchases/:id", async (req, res) => {
+  app.patch("/api/purchases/:id", requirePermission("purchases.edit"), async (req, res) => {
     try {
       const purchase = await storage.updatePurchase(req.params.id, req.body);
       if (!purchase) {
@@ -1174,7 +1230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/purchases/:id", async (req, res) => {
+  app.delete("/api/purchases/:id", requirePermission("purchases.delete"), async (req, res) => {
     try {
       const deleted = await storage.deletePurchase(req.params.id);
       if (!deleted) {
@@ -1208,7 +1264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/inventory/adjustments", async (req, res) => {
+  app.post("/api/inventory/adjustments", requirePermission("inventory.adjust"), async (req, res) => {
     try {
       const validatedData = insertInventoryAdjustmentSchema.parse(req.body);
       const adjustment = await storage.createInventoryAdjustment(validatedData);
@@ -1243,7 +1299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/employees", async (req, res) => {
+  app.post("/api/employees", requirePermission("hrm.create"), async (req, res) => {
     try {
       const validatedData = insertEmployeeSchema.parse(req.body);
       const employee = await storage.createEmployee(validatedData);
@@ -1256,7 +1312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/employees/:id", async (req, res) => {
+  app.patch("/api/employees/:id", requirePermission("hrm.edit"), async (req, res) => {
     try {
       const employee = await storage.updateEmployee(req.params.id, req.body);
       if (!employee) {
@@ -1268,7 +1324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/employees/:id", async (req, res) => {
+  app.delete("/api/employees/:id", requirePermission("hrm.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteEmployee(req.params.id);
       if (!deleted) {
@@ -1550,7 +1606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/users", async (req, res) => {
+  app.post("/api/users", requirePermission("settings.users"), async (req, res) => {
     try {
       const validatedData = insertUserSchema.parse(req.body);
       const user = await storage.createUser(validatedData);
@@ -1564,7 +1620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/users/:id", async (req, res) => {
+  app.patch("/api/users/:id", requirePermission("settings.users"), async (req, res) => {
     try {
       const user = await storage.updateUser(req.params.id, req.body);
       if (!user) {
@@ -1577,7 +1633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id", async (req, res) => {
+  app.delete("/api/users/:id", requirePermission("settings.users"), async (req, res) => {
     try {
       const deleted = await storage.deleteUser(req.params.id);
       if (!deleted) {
@@ -1611,7 +1667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/roles", async (req, res) => {
+  app.post("/api/roles", requirePermission("settings.roles"), async (req, res) => {
     try {
       const { insertRoleSchema } = await import("@shared/schema");
       const validatedData = insertRoleSchema.parse(req.body);
@@ -1625,7 +1681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/roles/:id", async (req, res) => {
+  app.patch("/api/roles/:id", requirePermission("settings.roles"), async (req, res) => {
     try {
       const role = await storage.updateRole(req.params.id, req.body);
       if (!role) {
@@ -1637,7 +1693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/roles/:id", async (req, res) => {
+  app.delete("/api/roles/:id", requirePermission("settings.roles"), async (req, res) => {
     try {
       const deleted = await storage.deleteRole(req.params.id);
       if (!deleted) {
@@ -1728,7 +1784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/roles/:roleId/permissions", async (req, res) => {
+  app.post("/api/roles/:roleId/permissions", requirePermission("settings.permissions"), async (req, res) => {
     try {
       const { permissionIds } = req.body;
       if (!Array.isArray(permissionIds)) {
@@ -1765,7 +1821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/branches", async (req, res) => {
+  app.post("/api/branches", requirePermission("branches.create"), async (req, res) => {
     try {
       const validatedData = insertBranchSchema.parse(req.body);
       
@@ -1786,7 +1842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/branches/:id", async (req, res) => {
+  app.patch("/api/branches/:id", requirePermission("branches.edit"), async (req, res) => {
     try {
       let updateData = { ...req.body };
       
@@ -1806,7 +1862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/branches/:id", async (req, res) => {
+  app.delete("/api/branches/:id", requirePermission("branches.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteBranch(req.params.id);
       if (!deleted) {
@@ -1911,7 +1967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/due/payments", async (req, res) => {
+  app.post("/api/due/payments", requirePermission("due.create"), async (req, res) => {
     try {
       const { allocations, ...paymentData } = req.body;
       
@@ -2017,6 +2073,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid settings data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  // Audit Logs endpoints
+  app.get("/api/audit-logs", requirePermission("settings.view"), async (req, res) => {
+    try {
+      const { userId, entityType, action, startDate, endDate, limit, offset } = req.query;
+      
+      const filters: any = {};
+      if (userId) filters.userId = userId as string;
+      if (entityType) filters.entityType = entityType as string;
+      if (action) filters.action = action as string;
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      if (limit) filters.limit = parseInt(limit as string, 10);
+      if (offset) filters.offset = parseInt(offset as string, 10);
+
+      const result = await storage.getAuditLogs(filters);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch audit logs" });
     }
   });
 

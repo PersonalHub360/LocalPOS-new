@@ -27,6 +27,8 @@ import {
   type InsertStaffSalary,
   type Settings,
   type InsertSettings,
+  type AuditLog,
+  type InsertAuditLog,
   type User,
   type InsertUser,
   type InventoryAdjustment,
@@ -72,6 +74,7 @@ import {
   roles,
   permissions,
   rolePermissions,
+  auditLogs,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc, sql, isNull, or } from "drizzle-orm";
@@ -185,6 +188,10 @@ export interface IStorage {
   
   getSettings(): Promise<Settings | undefined>;
   updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
+  
+  // Audit Logs
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(filters?: { userId?: string; entityType?: string; action?: string; startDate?: Date; endDate?: Date; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }>;
   
   getInventoryAdjustments(): Promise<InventoryAdjustment[]>;
   getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined>;
@@ -545,12 +552,14 @@ export class DatabaseStorage implements IStorage {
       };
       
       // If payment status is "due", create or find customer
-      if (insertOrder.paymentStatus === 'due' && insertOrder.customerName) {
+      if (insertOrder.paymentStatus === 'due') {
+        const customerName = insertOrder.customerName || 'Walk-in Customer';
+        
         // Try to find existing customer by name
         const existingCustomer = await tx
           .select()
           .from(customers)
-          .where(eq(customers.name, insertOrder.customerName))
+          .where(eq(customers.name, customerName))
           .limit(1);
         
         let customerId: string;
@@ -562,7 +571,7 @@ export class DatabaseStorage implements IStorage {
           const newCustomerResult = await tx
             .insert(customers)
             .values({
-              name: insertOrder.customerName,
+              name: customerName,
               phone: insertOrder.customerPhone || null,
               email: null,
               branchId: insertOrder.branchId || null,
@@ -576,6 +585,7 @@ export class DatabaseStorage implements IStorage {
         orderData = {
           ...orderData,
           customerId,
+          customerName: customerName,
           dueAmount: insertOrder.total,
           paidAmount: '0',
         };
@@ -1663,6 +1673,53 @@ export class DatabaseStorage implements IStorage {
     }
     
     return summaries;
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const result = await db.insert(auditLogs).values(log).returning();
+    return result[0];
+  }
+
+  async getAuditLogs(filters?: { userId?: string; entityType?: string; action?: string; startDate?: Date; endDate?: Date; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }> {
+    const conditions: any[] = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+    if (filters?.entityType) {
+      conditions.push(eq(auditLogs.entityType, filters.entityType));
+    }
+    if (filters?.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(auditLogs.createdAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(auditLogs.createdAt, filters.endDate));
+    }
+
+    // Get total count
+    const countConditions = conditions.length > 0 ? and(...conditions) : undefined;
+    const countQuery = db.select({ count: sql<number>`count(*)` }).from(auditLogs);
+    const totalResult = await (countConditions ? countQuery.where(countConditions) : countQuery);
+    const total = Number(totalResult[0]?.count || 0);
+
+    // Build query with conditions, ordering, and pagination
+    let query = db.select().from(auditLogs);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    query = query.orderBy(desc(auditLogs.createdAt)) as any;
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+
+    const logs = await query;
+    return { logs, total };
   }
 }
 

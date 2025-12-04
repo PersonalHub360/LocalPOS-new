@@ -14,6 +14,7 @@ import { insertPurchaseSchema, insertCategorySchema, type Purchase, type Categor
 import type { z } from "zod";
 import { Plus, Search, Download, Upload, Edit, Trash2, FolderPlus, Calendar, ImagePlus, X, ShoppingCart, Eye, Printer, FileSpreadsheet, TrendingUp, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -56,6 +57,7 @@ export default function PurchaseManage() {
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [imagePreview, setImagePreview] = useState<string>("");
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -748,22 +750,26 @@ export default function PurchaseManage() {
                         <div key={category.id} className="flex items-center justify-between p-2 rounded-md hover-elevate">
                           <span className="text-sm">{category.name}</span>
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleEditCategory(category)}
-                              data-testid={`button-edit-category-${category.id}`}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => deleteCategoryMutation.mutate(category.id)}
-                              data-testid={`button-delete-category-${category.id}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {hasPermission("purchases.edit") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditCategory(category)}
+                                data-testid={`button-edit-category-${category.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {hasPermission("purchases.delete") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteCategoryMutation.mutate(category.id)}
+                                data-testid={`button-delete-category-${category.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -795,18 +801,21 @@ export default function PurchaseManage() {
               Download Sample Excel
             </Button>
 
-            <Button variant="outline" onClick={handleExport} data-testid="button-export">
-              <Download className="w-4 h-4 mr-2" />
-              Export Purchases
-            </Button>
+            {hasPermission("reports.export") && (
+              <Button variant="outline" onClick={handleExport} data-testid="button-export">
+                <Download className="w-4 h-4 mr-2" />
+                Export Purchases
+              </Button>
+            )}
 
-            <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={handleAddPurchaseClick} data-testid="button-add-purchase">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Purchase
-                </Button>
-              </DialogTrigger>
+            {hasPermission("purchases.create") && (
+              <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={handleAddPurchaseClick} data-testid="button-add-purchase">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Purchase
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-purchase">
                 <DialogHeader>
                   <DialogTitle>{editingPurchase ? "Edit Purchase" : "Add New Purchase"}</DialogTitle>
@@ -1058,6 +1067,7 @@ export default function PurchaseManage() {
                 </Form>
               </DialogContent>
             </Dialog>
+            )}
           </div>
 
           <Card>

@@ -10,11 +10,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertBranchSchema, type InsertBranch, type Branch } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { Plus, Pencil, Trash2, Building2, MapPin, Phone, User } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 export default function BranchesPage() {
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
@@ -68,14 +70,16 @@ export default function BranchesPage() {
             <h1 className="text-xl md:text-2xl font-bold text-white">Branch Management</h1>
             <p className="text-blue-100 text-xs md:text-sm">Manage multiple store locations</p>
           </div>
-          <Button
-            onClick={() => setIsAddDialogOpen(true)}
-            className="bg-white text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
-            data-testid="button-add-branch"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Branch
-          </Button>
+          {hasPermission("branches.create") && (
+            <Button
+              onClick={() => setIsAddDialogOpen(true)}
+              className="bg-white text-blue-600 hover:bg-blue-50 w-full sm:w-auto"
+              data-testid="button-add-branch"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Branch
+            </Button>
+          )}
         </div>
       </div>
 
@@ -98,25 +102,29 @@ export default function BranchesPage() {
                       <CardTitle className="text-lg">{branch.name}</CardTitle>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedBranch(branch);
-                          setIsEditDialogOpen(true);
-                        }}
-                        data-testid={`button-edit-${branch.id}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteMutation.mutate(branch.id)}
-                        data-testid={`button-delete-${branch.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {hasPermission("branches.edit") && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            setSelectedBranch(branch);
+                            setIsEditDialogOpen(true);
+                          }}
+                          data-testid={`button-edit-${branch.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {hasPermission("branches.delete") && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteMutation.mutate(branch.id)}
+                          data-testid={`button-delete-${branch.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardHeader>

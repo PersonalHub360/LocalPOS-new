@@ -51,6 +51,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { format, startOfDay, endOfDay, subDays, isWithinInterval } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import type { Order } from "@shared/schema";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -79,6 +80,9 @@ interface SalesSummaryItem {
 interface PaymentSplit {
   method: string;
   amount: number;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
 }
 
 export default function SalesManage() {
@@ -102,7 +106,8 @@ export default function SalesManage() {
   const [printSale, setPrintSale] = useState<Order | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ReceiptTemplate>("classic");
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const { toast} = useToast();
+  const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   const { data: sales = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
@@ -330,24 +335,74 @@ export default function SalesManage() {
         try {
           const splits: PaymentSplit[] = JSON.parse(sale.paymentSplits);
           if (splits.length > 0) {
-            const splitsHtml = splits.map(split => {
-              const methodLabel = getPaymentMethodLabel(split.method);
-              const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-              return `
-                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
-                  <span>${methodLabel}:</span>
-                  <span><strong>$${split.amount.toFixed(2)}</strong> (៛${amountKHR})</span>
+            const hasCustomerSplits = splits.some(s => s.customerName || s.customerId);
+            const splitType = hasCustomerSplits ? "Split by Customer" : "Split by Payment Method";
+            
+            if (hasCustomerSplits) {
+              // Table format for customer splits
+              const splitsRows = splits.map(split => {
+                const methodLabel = getPaymentMethodLabel(split.method);
+                const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                return `
+                  <tr style="border-bottom: 1px dashed #d1d5db;">
+                    <td style="padding: 6px 4px; font-size: 11px; font-weight: 600; color: #111827; border-right: 1px solid #d1d5db; vertical-align: top;">
+                      ${split.customerName || "Unknown Customer"}
+                      ${split.customerPhone ? `<br><span style="font-size: 9px; font-weight: normal; color: #6b7280;">${split.customerPhone}</span>` : ''}
+                    </td>
+                    <td style="padding: 6px 4px; font-size: 11px; color: #374151; border-right: 1px solid #d1d5db; vertical-align: top;">${methodLabel}</td>
+                    <td style="padding: 6px 4px; font-size: 11px; text-align: right; font-weight: 600; color: #111827; border-right: 1px solid #d1d5db; vertical-align: top;">$${split.amount.toFixed(2)}</td>
+                    <td style="padding: 6px 4px; font-size: 10px; text-align: right; color: #6b7280; vertical-align: top;">៛${amountKHR}</td>
+                  </tr>
+                `;
+              }).join('');
+              
+              paymentDetails = `
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #d1d5db;">
+                  <div style="font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    ${splitType}
+                  </div>
+                  <table style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; margin-top: 8px;" cellpadding="0" cellspacing="0">
+                    <thead>
+                      <tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db;">
+                        <th style="padding: 6px 4px; text-align: left; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">Customer</th>
+                        <th style="padding: 6px 4px; text-align: left; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">Method</th>
+                        <th style="padding: 6px 4px; text-align: right; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">USD</th>
+                        <th style="padding: 6px 4px; text-align: right; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase;">KHR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${splitsRows}
+                    </tbody>
+                  </table>
                 </div>
               `;
-            }).join('');
-            paymentDetails = `
-              <div style="margin-top: 10px;">
-                <p style="margin-bottom: 10px;"><strong>Payment Split:</strong></p>
-                <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; background-color: #f9fafb;">
-                  ${splitsHtml}
+            } else {
+              // Row format for payment method splits (keep existing format)
+              const splitsHtml = splits.map(split => {
+                const methodLabel = getPaymentMethodLabel(split.method);
+                const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #d1d5db;">
+                    <span style="font-size: 13px; color: #374151;">${methodLabel}:</span>
+                    <div style="text-align: right;">
+                      <span style="font-weight: 700; font-size: 13px; color: #111827;">$${split.amount.toFixed(2)}</span>
+                      <span style="font-size: 11px; color: #6b7280; margin-left: 5px;">(៛${amountKHR})</span>
+                    </div>
+                  </div>
+                `;
+              }).join('');
+              
+              paymentDetails = `
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #d1d5db;">
+                  <div style="font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                    ${splitType}
+                  </div>
+                  <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px;">
+                    ${splitsHtml}
+                  </div>
                 </div>
-              </div>
-            `;
+              `;
+            }
           }
         } catch (error) {
           console.error("Failed to parse payment splits:", error);
@@ -866,24 +921,26 @@ export default function SalesManage() {
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Download Sample
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button data-testid="button-export">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  Export to Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportToPDF} data-testid="button-export-pdf">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Export to PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {hasPermission("reports.export") && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button data-testid="button-export">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Export to Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPDF} data-testid="button-export-pdf">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Export to PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -912,7 +969,7 @@ export default function SalesManage() {
                 />
               </div>
               
-              {selectedSales.size > 0 && (
+              {selectedSales.size > 0 && hasPermission("sales.delete") && (
                 <Button
                   variant="destructive"
                   onClick={() => setShowBulkDeleteDialog(true)}
@@ -999,13 +1056,15 @@ export default function SalesManage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedSales.size === filteredSales.length && filteredSales.length > 0}
-                          onCheckedChange={toggleSelectAll}
-                          data-testid="checkbox-select-all"
-                        />
-                      </TableHead>
+                      {hasPermission("sales.delete") && (
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={selectedSales.size === filteredSales.length && filteredSales.length > 0}
+                            onCheckedChange={toggleSelectAll}
+                            data-testid="checkbox-select-all"
+                          />
+                        </TableHead>
+                      )}
                       <TableHead data-testid="header-sale-id" className="hidden lg:table-cell">Sale ID</TableHead>
                       <TableHead data-testid="header-invoice-no">Invoice No</TableHead>
                       <TableHead data-testid="header-date-time" className="hidden md:table-cell">Date & Time</TableHead>
@@ -1020,13 +1079,15 @@ export default function SalesManage() {
                   <TableBody>
                     {filteredSales.map((sale) => (
                       <TableRow key={sale.id} data-testid={`row-sale-${sale.id}`}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedSales.has(sale.id)}
-                            onCheckedChange={() => toggleSelectSale(sale.id)}
-                            data-testid={`checkbox-select-${sale.id}`}
-                          />
-                        </TableCell>
+                        {hasPermission("sales.delete") && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSales.has(sale.id)}
+                              onCheckedChange={() => toggleSelectSale(sale.id)}
+                              data-testid={`checkbox-select-${sale.id}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="hidden lg:table-cell" data-testid={`text-sale-id-${sale.id}`}>{sale.id}</TableCell>
                         <TableCell data-testid={`text-invoice-no-${sale.id}`}>INV-{sale.orderNumber}</TableCell>
                         <TableCell className="hidden md:table-cell" data-testid={`text-date-${sale.id}`}>
@@ -1079,61 +1140,69 @@ export default function SalesManage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => setViewSale(sale)}
-                                  data-testid={`button-view-${sale.id}`}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>View Details</TooltipContent>
-                            </Tooltip>
+                            {hasPermission("sales.view") && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setViewSale(sale)}
+                                    data-testid={`button-view-${sale.id}`}
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>View Details</TooltipContent>
+                              </Tooltip>
+                            )}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => setEditSale(sale)}
-                                  data-testid={`button-edit-${sale.id}`}
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Edit Sale</TooltipContent>
-                            </Tooltip>
+                            {hasPermission("sales.edit") && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setEditSale(sale)}
+                                    data-testid={`button-edit-${sale.id}`}
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit Sale</TooltipContent>
+                              </Tooltip>
+                            )}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => handlePrintClick(sale)}
-                                  data-testid={`button-print-${sale.id}`}
-                                >
-                                  <Printer className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Print Receipt</TooltipContent>
-                            </Tooltip>
+                            {hasPermission("sales.print") && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handlePrintClick(sale)}
+                                    data-testid={`button-print-${sale.id}`}
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Print Receipt</TooltipContent>
+                              </Tooltip>
+                            )}
 
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => setDeleteSaleId(sale.id)}
-                                  data-testid={`button-delete-${sale.id}`}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete Sale</TooltipContent>
-                            </Tooltip>
+                            {hasPermission("sales.delete") && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setDeleteSaleId(sale.id)}
+                                    data-testid={`button-delete-${sale.id}`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete Sale</TooltipContent>
+                              </Tooltip>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1533,11 +1602,19 @@ export default function SalesManage() {
                           className="flex items-center justify-between p-3 bg-muted/30"
                           data-testid={`payment-split-${index}`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium capitalize">
-                              {getPaymentMethodLabel(split.method)}
-                            </span>
-                            <span className="text-lg font-bold text-primary">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="flex flex-col">
+                              <span className="font-medium capitalize">
+                                {getPaymentMethodLabel(split.method)}
+                              </span>
+                              {split.customerName && (
+                                <span className="text-xs text-muted-foreground">
+                                  {split.customerName}
+                                  {split.customerPhone && ` (${split.customerPhone})`}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-lg font-bold text-primary ml-auto">
                               ${split.amount.toFixed(2)}
                             </span>
                           </div>

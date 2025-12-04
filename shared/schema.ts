@@ -559,3 +559,28 @@ export const insertBranchSchema = createInsertSchema(branches).omit({
 
 export type InsertBranch = z.infer<typeof insertBranchSchema>;
 export type Branch = typeof branches.$inferSelect;
+
+// Audit Logs / Activity Logs
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  username: text("username"),
+  action: text("action").notNull(), // e.g., "create", "update", "delete", "view", "login", "logout"
+  entityType: text("entity_type").notNull(), // e.g., "order", "product", "user", "expense"
+  entityId: varchar("entity_id"), // ID of the affected entity
+  entityName: text("entity_name"), // Human-readable name of the entity
+  description: text("description"), // Detailed description of the action
+  changes: text("changes"), // JSON string of changes made (for updates)
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  branchId: varchar("branch_id"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;

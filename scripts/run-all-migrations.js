@@ -347,6 +347,13 @@ async function createAdminUser(client) {
     adminEmail = process.env.ADMIN_EMAIL || 'admin@bondcoffeepos.com';
     adminFullName = process.env.ADMIN_FULL_NAME || 'Bond Coffee Administrator';
     console.log('📍 Detected Bond Coffee POS instance');
+  } else if (port === 9000 || databaseUrl.includes('adorapos_db')) {
+    // Adora POS instance
+    adminUsername = process.env.ADMIN_USERNAME || 'admin@adorapos.com';
+    adminPassword = process.env.ADMIN_PASSWORD || 'Admin@2024';
+    adminEmail = process.env.ADMIN_EMAIL || 'admin@adorapos.com';
+    adminFullName = process.env.ADMIN_FULL_NAME || 'Adora Administrator';
+    console.log('📍 Detected Adora POS instance');
   } else {
     // Fallback to environment variables or defaults
     adminUsername = process.env.ADMIN_USERNAME || 'admin';

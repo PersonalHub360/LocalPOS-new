@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { insertProductSchema, insertCategorySchema, type Product, type Category 
 import type { z } from "zod";
 import { Plus, Search, Download, Upload, Edit, Trash2, PackagePlus, FolderPlus, Utensils, Calendar, ImagePlus, X, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -55,14 +56,73 @@ export default function ItemManage() {
   const [imagePreview, setImagePreview] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
-  const { data: allProducts = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+  const observerTarget = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Use infinite query for products with pagination
+  const {
+    data: productsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: productsLoading,
+  } = useInfiniteQuery<{ products: Product[]; total: number }>({
+    queryKey: ["/api/products", { search: searchQuery, category: selectedCategory, dateFilter }],
+    queryFn: async ({ pageParam = 0 }) => {
+      const params = new URLSearchParams();
+      params.append("limit", "50");
+      params.append("offset", String(pageParam));
+      if (searchQuery) params.append("search", searchQuery);
+      if (selectedCategory !== "all") params.append("categoryId", selectedCategory);
+      
+      const res = await fetch(`/api/products?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch products");
+      const data = await res.json();
+      // Handle both paginated and non-paginated responses
+      if (Array.isArray(data)) {
+        return { products: data, total: data.length };
+      }
+      return data;
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.products.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
   });
+
+  const allProducts = productsData?.pages.flatMap(page => page.products) || [];
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Reset scroll when filters change
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [searchQuery, selectedCategory, dateFilter]);
 
   const filteredProducts = allProducts.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -698,7 +758,7 @@ export default function ItemManage() {
           <div className="w-full sm:w-auto">
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
             <p className="text-sm md:text-base text-muted-foreground mt-1">Manage inventory and menu items</p>
-            {filteredProducts.length > 0 && (
+            {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
               <div className="flex items-center gap-4 mt-3">
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -833,17 +893,21 @@ export default function ItemManage() {
               Download Sample Excel
             </Button>
 
-            <Button variant="outline" onClick={handleExport} data-testid="button-export">
-              <Download className="w-4 h-4 mr-2" />
-              Export Items
-            </Button>
+            {hasPermission("reports.export") && (
+              <Button variant="outline" onClick={handleExport} data-testid="button-export">
+                <Download className="w-4 h-4 mr-2" />
+                Export Items
+              </Button>
+            )}
 
             <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={handleAddItemClick} data-testid="button-add-item">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Item
-                </Button>
+                {hasPermission("inventory.create") && (
+                  <Button onClick={handleAddItemClick} data-testid="button-add-item">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Item
+                  </Button>
+                )}
               </DialogTrigger>
               <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-item">
                 <DialogHeader>
@@ -1160,7 +1224,7 @@ export default function ItemManage() {
             <h2 className="text-xl font-semibold">Items ({filteredProducts.length})</h2>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+          <div ref={scrollContainerRef} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
             {filteredProducts.map((product) => {
               const category = categories.find(c => c.id === product.categoryId);
               return (
@@ -1177,13 +1241,15 @@ export default function ItemManage() {
                         <Utensils className="w-10 h-10 text-muted-foreground" />
                       </div>
                     )}
-                    <div className="absolute top-2 right-2 bg-background rounded-md p-1 shadow-md">
-                      <Checkbox
-                        checked={selectedItems.includes(product.id)}
-                        onCheckedChange={(checked) => handleSelectItem(product.id, checked as boolean)}
-                        data-testid={`checkbox-item-${product.id}`}
-                      />
-                    </div>
+                    {hasPermission("inventory.delete") && (
+                      <div className="absolute top-2 right-2 bg-background rounded-md p-1 shadow-md">
+                        <Checkbox
+                          checked={selectedItems.includes(product.id)}
+                          onCheckedChange={(checked) => handleSelectItem(product.id, checked as boolean)}
+                          data-testid={`checkbox-item-${product.id}`}
+                        />
+                      </div>
+                    )}
                   </div>
                   <CardContent className="p-3 space-y-2">
                     <div>
@@ -1216,25 +1282,29 @@ export default function ItemManage() {
                     )}
 
                     <div className="flex gap-1 pt-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 text-xs"
-                        onClick={() => handleEditItem(product)}
-                        data-testid={`button-edit-item-${product.id}`}
-                      >
-                        <Edit className="w-3 h-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => deleteItemMutation.mutate(product.id)}
-                        disabled={deleteItemMutation.isPending}
-                        data-testid={`button-delete-item-${product.id}`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                      {hasPermission("inventory.edit") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={() => handleEditItem(product)}
+                          data-testid={`button-edit-item-${product.id}`}
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                      {hasPermission("inventory.delete") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => deleteItemMutation.mutate(product.id)}
+                          disabled={deleteItemMutation.isPending}
+                          data-testid={`button-delete-item-${product.id}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1242,7 +1312,13 @@ export default function ItemManage() {
             })}
           </div>
 
-          {filteredProducts.length === 0 && (
+          {isFetchingNextPage && (
+            <div className="text-center py-4 text-muted-foreground">Loading more items...</div>
+          )}
+
+          <div ref={observerTarget} className="h-4" />
+
+          {filteredProducts.length === 0 && !productsLoading && (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />

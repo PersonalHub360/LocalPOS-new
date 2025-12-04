@@ -70,6 +70,7 @@ import { insertPaymentAdjustmentSchema } from "@shared/schema";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 
 type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
 
@@ -84,6 +85,7 @@ export default function BankStatement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   const { data: sales = [] } = useQuery<Order[]>({
     queryKey: ["/api/sales"],
@@ -370,10 +372,12 @@ export default function BankStatement() {
         <div className="flex gap-2 w-full sm:w-auto">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="default" data-testid="button-add-adjustment">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Manual Amount
-              </Button>
+              {hasPermission("reports.create") && (
+                <Button variant="default" data-testid="button-add-adjustment">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Manual Amount
+                </Button>
+              )}
             </DialogTrigger>
             <DialogContent className="w-[95vw] sm:max-w-[500px]" data-testid="dialog-add-adjustment">
               <DialogHeader>
@@ -468,10 +472,12 @@ export default function BankStatement() {
               </Form>
             </DialogContent>
           </Dialog>
-          <Button variant="outline" data-testid="button-export-statement">
-            <Download className="w-4 h-4 mr-2" />
-            Export Statement
-          </Button>
+          {hasPermission("reports.export") && (
+            <Button variant="outline" data-testid="button-export-statement">
+              <Download className="w-4 h-4 mr-2" />
+              Export Statement
+            </Button>
+          )}
         </div>
       </div>
 
@@ -773,51 +779,55 @@ export default function BankStatement() {
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => {
-                                  // Navigate to sales page to edit this order
-                                  window.location.href = `/sales?orderId=${order.id}&edit=true`;
-                                }}
-                                data-testid={`button-edit-${order.id}`}
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={async () => {
-                                  if (confirm(`Are you sure you want to delete order #${order.orderNumber}? This action cannot be undone.`)) {
-                                    try {
-                                      const response = await fetch(`/api/orders/${order.id}`, {
-                                        method: "DELETE",
-                                        credentials: "include",
-                                      });
-                                      if (response.ok) {
-                                        queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
-                                        queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-                                        queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
-                                        toast({
-                                          title: "Success",
-                                          description: `Order #${order.orderNumber} deleted successfully`,
+                              {hasPermission("sales.edit") && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    // Navigate to sales page to edit this order
+                                    window.location.href = `/sales?orderId=${order.id}&edit=true`;
+                                  }}
+                                  data-testid={`button-edit-${order.id}`}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {hasPermission("sales.delete") && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={async () => {
+                                    if (confirm(`Are you sure you want to delete order #${order.orderNumber}? This action cannot be undone.`)) {
+                                      try {
+                                        const response = await fetch(`/api/orders/${order.id}`, {
+                                          method: "DELETE",
+                                          credentials: "include",
                                         });
-                                      } else {
-                                        throw new Error("Failed to delete order");
+                                        if (response.ok) {
+                                          queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+                                          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                                          queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
+                                          toast({
+                                            title: "Success",
+                                            description: `Order #${order.orderNumber} deleted successfully`,
+                                          });
+                                        } else {
+                                          throw new Error("Failed to delete order");
+                                        }
+                                      } catch (error) {
+                                        toast({
+                                          title: "Error",
+                                          description: "Failed to delete order",
+                                          variant: "destructive",
+                                        });
                                       }
-                                    } catch (error) {
-                                      toast({
-                                        title: "Error",
-                                        description: "Failed to delete order",
-                                        variant: "destructive",
-                                      });
                                     }
-                                  }
-                                }}
-                                data-testid={`button-delete-${order.id}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                                  }}
+                                  data-testid={`button-delete-${order.id}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

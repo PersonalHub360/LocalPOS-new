@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertTriangle, Plus, RefreshCw, TrendingUp, TrendingDown, Package, History, Eye, Edit, Trash2, Download, Upload, FileSpreadsheet, Search, Calendar as CalendarIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, InventoryAdjustment, Settings, Category } from "@shared/schema";
 import { format } from "date-fns";
@@ -38,6 +39,7 @@ export default function Inventory() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
 
   // Product form state
   const [productForm, setProductForm] = useState({
@@ -633,10 +635,12 @@ export default function Inventory() {
             <Download className="w-4 h-4" />
             Export CSV
           </Button>
-          <Button onClick={handleAdjustStock} className="gap-2" data-testid="button-adjust-stock">
-            <RefreshCw className="w-4 h-4" />
-            Adjust Stock
-          </Button>
+          {hasPermission("inventory.adjust") && (
+            <Button onClick={handleAdjustStock} className="gap-2" data-testid="button-adjust-stock">
+              <RefreshCw className="w-4 h-4" />
+              Adjust Stock
+            </Button>
+          )}
         </div>
       </div>
 
@@ -681,10 +685,12 @@ export default function Inventory() {
                       Delete Selected ({selectedProductIds.length})
                     </Button>
                   )}
-                  <Button onClick={handleAddProduct} className="gap-2" data-testid="button-add-product">
-                    <Plus className="w-4 h-4" />
-                    Add Product
-                  </Button>
+                  {hasPermission("inventory.create") && (
+                    <Button onClick={handleAddProduct} className="gap-2" data-testid="button-add-product">
+                      <Plus className="w-4 h-4" />
+                      Add Product
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="pt-4">
@@ -893,17 +899,19 @@ export default function Inventory() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedProduct(product);
-                                setAdjustmentDialogOpen(true);
-                              }}
-                              data-testid={`button-adjust-${product.id}`}
-                            >
-                              Adjust
-                            </Button>
+                            {hasPermission("inventory.adjust") && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedProduct(product);
+                                  setAdjustmentDialogOpen(true);
+                                }}
+                                data-testid={`button-adjust-${product.id}`}
+                              >
+                                Adjust
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       );

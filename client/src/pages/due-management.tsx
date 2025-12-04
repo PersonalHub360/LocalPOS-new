@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions } from "@/hooks/use-permissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useBranch } from "@/contexts/BranchContext";
 import type { Customer, Order } from "@shared/schema";
@@ -118,6 +119,7 @@ export default function DueManagement() {
   const [viewPaymentDetails, setViewPaymentDetails] = useState<DuePaymentWithDetails | null>(null);
   
   const { toast } = useToast();
+  const { hasPermission } = usePermissions();
   const { selectedBranchId } = useBranch();
 
   const { data: customerSummaries = [], isLoading } = useQuery<CustomerDueSummary[]>({
@@ -1185,15 +1187,17 @@ export default function DueManagement() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Filters & Actions</CardTitle>
-                  <Button 
-                    variant="default" 
-                    size="sm" 
-                    onClick={handleCreateDue}
-                    data-testid="button-create-due"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Create Due
-                  </Button>
+                  {hasPermission("due.create") && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={handleCreateDue}
+                      data-testid="button-create-due"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Create Due
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -1277,43 +1281,51 @@ export default function DueManagement() {
 
                   {/* Export and Import Buttons */}
                   <div className="flex flex-wrap gap-2">
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={() => setShowAddCustomerModal(true)} 
-                      data-testid="button-add-customer"
-                    >
-                      <UserPlus className="w-4 h-4 mr-1" />
-                      Add Customer
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
-                      <Download className="w-4 h-4 mr-1" />
-                      Export CSV
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
-                      <FileSpreadsheet className="w-4 h-4 mr-1" />
-                      Export Excel
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleExportPDF} data-testid="button-export-pdf">
-                      <Download className="w-4 h-4 mr-1" />
-                      Export PDF
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleDownloadSample} data-testid="button-download-sample">
-                      <Download className="w-4 h-4 mr-1" />
-                      Download Sample
-                    </Button>
-                    <Button variant="outline" size="sm" asChild data-testid="button-import">
-                      <label>
-                        <Upload className="w-4 h-4 mr-1" />
-                        Import File
-                        <input
-                          type="file"
-                          accept=".csv,.xlsx,.xls"
-                          onChange={handleImportFile}
-                          className="hidden"
-                        />
-                      </label>
-                    </Button>
+                    {hasPermission("due.create") && (
+                      <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={() => setShowAddCustomerModal(true)} 
+                        data-testid="button-add-customer"
+                      >
+                        <UserPlus className="w-4 h-4 mr-1" />
+                        Add Customer
+                      </Button>
+                    )}
+                    {hasPermission("reports.export") && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-csv">
+                          <Download className="w-4 h-4 mr-1" />
+                          Export CSV
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
+                          <FileSpreadsheet className="w-4 h-4 mr-1" />
+                          Export Excel
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={handleExportPDF} data-testid="button-export-pdf">
+                          <Download className="w-4 h-4 mr-1" />
+                          Export PDF
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={handleDownloadSample} data-testid="button-download-sample">
+                          <Download className="w-4 h-4 mr-1" />
+                          Download Sample
+                        </Button>
+                      </>
+                    )}
+                    {hasPermission("due.create") && (
+                      <Button variant="outline" size="sm" asChild data-testid="button-import">
+                        <label>
+                          <Upload className="w-4 h-4 mr-1" />
+                          Import File
+                          <input
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            onChange={handleImportFile}
+                            className="hidden"
+                          />
+                        </label>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

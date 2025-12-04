@@ -9,5 +9,5 @@ source /var/www/bondcoffeepos/.env.production
 set +a
 
 # Start PM2 in runtime mode (foreground)
-exec /home/nodejs/node_modules/.bin/pm2-runtime start /var/www/bondcoffeepos/ecosystem.config.cjs --env production
+exec /usr/bin/pm2-runtime start /var/www/bondcoffeepos/ecosystem.config.cjs --env production
 
