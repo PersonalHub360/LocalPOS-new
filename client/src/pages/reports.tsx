@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -40,7 +41,11 @@ import {
   Clock,
   Edit,
   X,
-  Trash2
+  Trash2,
+  Filter,
+  ChevronDown,
+  ChevronUp,
+  Package
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Order, Product, OrderItem } from "@shared/schema";
@@ -48,7 +53,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
-type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "aba" | "acleda" | "cash" | "due" | "card";
+type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "aba" | "acleda" | "cash" | "due" | "card" | "items";
 type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
 
 interface OrderItemWithProduct extends OrderItem {
@@ -68,6 +73,14 @@ export default function Reports() {
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
   const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("cash");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [productFilter, setProductFilter] = useState<string>("all");
+  const [customerFilter, setCustomerFilter] = useState<string>("");
+  const [minAmount, setMinAmount] = useState<string>("");
+  const [maxAmount, setMaxAmount] = useState<string>("");
+  const [diningOptionFilter, setDiningOptionFilter] = useState<string>("all");
+  const [tableFilter, setTableFilter] = useState<string>("all");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
@@ -87,6 +100,71 @@ export default function Reports() {
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
+  });
+
+  const { data: categories = [] } = useQuery<any[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: tables = [] } = useQuery<any[]>({
+    queryKey: ["/api/tables"],
+  });
+
+  // Get date range helper
+  const getDateRange = () => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    let startDate = new Date();
+    let endDate = new Date();
+    
+    switch (dateFilter) {
+      case "today":
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case "yesterday":
+        startDate.setDate(now.getDate() - 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case "thismonth":
+        startDate = new Date(currentYear, now.getMonth(), 1);
+        endDate = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case "lastmonth":
+        startDate = new Date(currentYear, now.getMonth() - 1, 1);
+        endDate = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+        break;
+      case "custom":
+        if (customStartDate) startDate = customStartDate;
+        if (customEndDate) endDate = customEndDate;
+        break;
+      default:
+        const monthMap: Record<string, number> = {
+          january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+          july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+        };
+        if (monthMap[dateFilter] !== undefined) {
+          startDate = new Date(currentYear, monthMap[dateFilter], 1);
+          endDate = new Date(currentYear, monthMap[dateFilter] + 1, 0, 23, 59, 59, 999);
+        }
+    }
+    return { startDate, endDate };
+  };
+
+  // Get item-level sales data
+  const { data: itemSales = [], isLoading: itemSalesLoading } = useQuery<Array<{ product: string; quantity: number; revenue: number }>>({
+    queryKey: ["/api/reports/items", dateFilter, customStartDate, customEndDate],
+    queryFn: async () => {
+      const { startDate, endDate } = getDateRange();
+      const response = await fetch(`/api/reports/items?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch item sales");
+      return response.json();
+    },
+    enabled: reportType === "items",
   });
 
   const getFilteredSales = () => {
@@ -173,6 +251,11 @@ export default function Reports() {
     }
 
     return sales.filter(sale => {
+      // Exclude orders created from due management page
+      if (sale.orderSource === "due-management") {
+        return false;
+      }
+      
       const saleDate = new Date(sale.createdAt);
       let dateMatch = false;
       
@@ -194,8 +277,33 @@ export default function Reports() {
       }
 
       // Apply payment gateway filter
-      if (sale.paymentMethod !== paymentGatewayFilter) {
+      if (paymentGatewayFilter !== "all" && sale.paymentMethod !== paymentGatewayFilter) {
         return false;
+      }
+
+      // Apply advanced filters
+      if (customerFilter && customerFilter.trim() !== "") {
+        const customerLower = customerFilter.toLowerCase();
+        const matchesCustomer = 
+          (sale.customerName && sale.customerName.toLowerCase().includes(customerLower)) ||
+          (sale.customerPhone && sale.customerPhone.includes(customerFilter));
+        if (!matchesCustomer) return false;
+      }
+
+      if (minAmount && parseFloat(minAmount) > 0) {
+        if (parseFloat(sale.total) < parseFloat(minAmount)) return false;
+      }
+
+      if (maxAmount && parseFloat(maxAmount) > 0) {
+        if (parseFloat(sale.total) > parseFloat(maxAmount)) return false;
+      }
+
+      if (diningOptionFilter !== "all") {
+        if (sale.diningOption !== diningOptionFilter) return false;
+      }
+
+      if (tableFilter !== "all") {
+        if (sale.tableId !== tableFilter) return false;
       }
 
       return true;
@@ -284,6 +392,7 @@ export default function Reports() {
     // Get report title based on type
     const reportTitles: Record<string, string> = {
       sales: "Sales Report",
+      items: "Per Item Sales Report",
       inventory: "Inventory Report",
       discounts: "Discounts Report",
       refunds: "Refunds Report",
@@ -300,39 +409,83 @@ export default function Reports() {
       ? `${format(customStartDate, "MMM dd, yyyy")} - ${format(customEndDate, "MMM dd, yyyy")}`
       : dateFilter.charAt(0).toUpperCase() + dateFilter.slice(1)}`, 14, 34);
     
-    // Add summary
-    doc.setFontSize(10);
-    doc.text(`Total Transactions: ${filteredSales.length}`, 14, 42);
-    doc.text(`Total Revenue: $${totalRevenue.toFixed(2)} USD (៛${(totalRevenue * 4100).toFixed(0)} KHR)`, 14, 48);
-    
-    // Prepare table data
-    const tableData = filteredSales.map(sale => [
-      sale.orderNumber,
-      format(new Date(sale.createdAt), "MMM dd, HH:mm"),
-      sale.paymentMethod || "N/A",
-      `$${parseFloat(sale.total).toFixed(2)}`,
-      `៛${(parseFloat(sale.total) * 4100).toFixed(0)}`,
-      sale.paymentStatus || "N/A",
-      sale.customerName || "Walk-in"
-    ]);
-    
-    // Add table
-    autoTable(doc, {
-      startY: 55,
-      head: [["Order #", "Date/Time", "Method", "USD", "KHR", "Payment Status", "Customer"]],
-      body: tableData,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [59, 130, 246] },
-      columnStyles: {
-        0: { fontStyle: "bold", cellWidth: 25 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 22, halign: "right" },
-        4: { cellWidth: 28, halign: "right" },
-        5: { cellWidth: 20 },
-        6: { cellWidth: 30 }
-      }
-    });
+    if (reportType === "items") {
+      // Add summary for items report
+      const totalRevenue = itemSales.reduce((sum, item) => sum + item.revenue, 0);
+      const totalQuantity = itemSales.reduce((sum, item) => sum + item.quantity, 0);
+      doc.setFontSize(10);
+      doc.text(`Total Items: ${itemSales.length}`, 14, 42);
+      doc.text(`Total Quantity Sold: ${totalQuantity}`, 14, 48);
+      doc.text(`Total Revenue: $${totalRevenue.toFixed(2)} USD (៛${(totalRevenue * 4100).toFixed(0)} KHR)`, 14, 54);
+      
+      // Prepare table data for items
+      const totalRevenueForPct = itemSales.reduce((sum, item) => sum + item.revenue, 0);
+      const tableData = itemSales
+        .sort((a, b) => b.revenue - a.revenue)
+        .map(item => {
+          const percentage = totalRevenueForPct > 0 ? (item.revenue / totalRevenueForPct) * 100 : 0;
+          const avgPrice = item.quantity > 0 ? item.revenue / item.quantity : 0;
+          return [
+            item.product,
+            item.quantity.toString(),
+            `$${item.revenue.toFixed(2)}`,
+            `៛${(item.revenue * 4100).toFixed(0)}`,
+            `$${avgPrice.toFixed(2)}`,
+            `${percentage.toFixed(1)}%`
+          ];
+        });
+      
+      // Add table
+      autoTable(doc, {
+        startY: 60,
+        head: [["Product Name", "Quantity", "Revenue (USD)", "Revenue (KHR)", "Avg Price", "% of Total"]],
+        body: tableData,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 50 },
+          1: { cellWidth: 20, halign: "right" },
+          2: { cellWidth: 25, halign: "right" },
+          3: { cellWidth: 30, halign: "right" },
+          4: { cellWidth: 25, halign: "right" },
+          5: { cellWidth: 20, halign: "right" }
+        }
+      });
+    } else {
+      // Add summary for sales report
+      doc.setFontSize(10);
+      doc.text(`Total Transactions: ${filteredSales.length}`, 14, 42);
+      doc.text(`Total Revenue: $${totalRevenue.toFixed(2)} USD (៛${(totalRevenue * 4100).toFixed(0)} KHR)`, 14, 48);
+      
+      // Prepare table data
+      const tableData = filteredSales.map(sale => [
+        sale.orderNumber,
+        format(new Date(sale.createdAt), "MMM dd, HH:mm"),
+        sale.paymentMethod || "N/A",
+        `$${parseFloat(sale.total).toFixed(2)}`,
+        `៛${(parseFloat(sale.total) * 4100).toFixed(0)}`,
+        sale.paymentStatus || "N/A",
+        sale.customerName || "Walk-in"
+      ]);
+      
+      // Add table
+      autoTable(doc, {
+        startY: 55,
+        head: [["Order #", "Date/Time", "Method", "USD", "KHR", "Payment Status", "Customer"]],
+        body: tableData,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 25 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 22, halign: "right" },
+          4: { cellWidth: 28, halign: "right" },
+          5: { cellWidth: 20 },
+          6: { cellWidth: 30 }
+        }
+      });
+    }
     
     doc.save(`${reportType}-report-${format(new Date(), "yyyy-MM-dd")}.pdf`);
   };
@@ -674,6 +827,7 @@ export default function Reports() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sales">Sales</SelectItem>
+                    <SelectItem value="items">Per Item Report</SelectItem>
                     <SelectItem value="inventory">Inventory</SelectItem>
                     <SelectItem value="discounts">Discounts</SelectItem>
                     <SelectItem value="refunds">Refunds</SelectItem>
@@ -705,6 +859,7 @@ export default function Reports() {
                     <SelectValue placeholder="Select gateway" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="card">Card</SelectItem>
                     <SelectItem value="aba">ABA</SelectItem>
@@ -757,6 +912,135 @@ export default function Reports() {
                 </>
               )}
             </div>
+
+            {/* Advanced Filters Toggle */}
+            <div className="flex items-center justify-between pt-4 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="gap-2"
+              >
+                <Filter className="w-4 h-4" />
+                {showAdvancedFilters ? "Hide" : "Show"} Advanced Filters
+                {showAdvancedFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </div>
+
+            {/* Advanced Filters */}
+            {showAdvancedFilters && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pt-4 border-t">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Category</label>
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Product</label>
+                  <Select value={productFilter} onValueChange={setProductFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Products" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Products</SelectItem>
+                      {products
+                        .filter(p => categoryFilter === "all" || p.categoryId === categoryFilter)
+                        .map((prod) => (
+                          <SelectItem key={prod.id} value={prod.id}>{prod.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Customer</label>
+                  <Input
+                    placeholder="Search by name or phone"
+                    value={customerFilter}
+                    onChange={(e) => setCustomerFilter(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Min Amount ($)</label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Max Amount ($)</label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={maxAmount}
+                    onChange={(e) => setMaxAmount(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Dining Option</label>
+                  <Select value={diningOptionFilter} onValueChange={setDiningOptionFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Options" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Options</SelectItem>
+                      <SelectItem value="dine-in">Dine In</SelectItem>
+                      <SelectItem value="takeaway">Takeaway</SelectItem>
+                      <SelectItem value="delivery">Delivery</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Table</label>
+                  <Select value={tableFilter} onValueChange={setTableFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Tables" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Tables</SelectItem>
+                      {tables.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>{table.tableNumber}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCategoryFilter("all");
+                      setProductFilter("all");
+                      setCustomerFilter("");
+                      setMinAmount("");
+                      setMaxAmount("");
+                      setDiningOptionFilter("all");
+                      setTableFilter("all");
+                    }}
+                    className="w-full"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -912,7 +1196,70 @@ export default function Reports() {
             </div>
           </CardHeader>
           <CardContent>
-            {reportType === "sales" ? (
+            {reportType === "items" ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Per Item Sales Report</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Detailed sales statistics for each product
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="gap-1">
+                    <Package className="w-3 h-3" />
+                    {itemSales.length} Items
+                  </Badge>
+                </div>
+                {itemSalesLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading item sales data...</div>
+                ) : itemSales.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No item sales found for the selected date range
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead className="text-right">Quantity Sold</TableHead>
+                        <TableHead className="text-right">Total Revenue (USD)</TableHead>
+                        <TableHead className="text-right">Total Revenue (KHR)</TableHead>
+                        <TableHead className="text-right">Avg Price (USD)</TableHead>
+                        <TableHead className="text-right">% of Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {itemSales
+                        .sort((a, b) => b.revenue - a.revenue)
+                        .map((item, index) => {
+                          const totalRevenue = itemSales.reduce((sum, i) => sum + i.revenue, 0);
+                          const percentage = totalRevenue > 0 ? (item.revenue / totalRevenue) * 100 : 0;
+                          const avgPrice = item.quantity > 0 ? item.revenue / item.quantity : 0;
+                          
+                          return (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{item.product}</TableCell>
+                              <TableCell className="text-right font-mono">{item.quantity}</TableCell>
+                              <TableCell className="text-right font-mono font-medium">
+                                ${item.revenue.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-muted-foreground">
+                                ៛{(item.revenue * 4100).toFixed(0)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                ${avgPrice.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Badge variant="outline">{percentage.toFixed(1)}%</Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            ) : reportType === "sales" ? (
               <div className="space-y-4">
                 <Table>
                   <TableHeader>

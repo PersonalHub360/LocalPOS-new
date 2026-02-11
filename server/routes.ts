@@ -1,7 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import type { WebSocketServer } from "ws";
 import { storage } from "./storage";
-import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema, insertCustomerSchema, insertDuePaymentSchema, insertDuePaymentAllocationSchema } from "@shared/schema";
+import { createWebSocketServer, emitWebOrderCreated } from "./websocket";
+import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertPositionSchema, insertDepartmentSchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema, insertCustomerSchema, insertDuePaymentSchema, insertDuePaymentAllocationSchema, insertMainProductSchema, insertMainProductItemSchema, insertUnitSchema, InsertInventoryAdjustment } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import multer from "multer";
@@ -36,7 +38,24 @@ const storageConfig = multer.diskStorage({
 const upload = multer({
   storage: storageConfig,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 5 * 1024 * 1024, // 5MB limit per file
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow images only
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
+
+// Multiple file upload for payment slips
+const uploadMultiple = multer({
+  storage: storageConfig,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit per file
+    files: 10, // Allow up to 10 files
   },
   fileFilter: (req, file, cb) => {
     // Allow images only
@@ -52,11 +71,68 @@ const createOrderWithItemsSchema = insertOrderSchema.extend({
   items: z.array(insertOrderItemSchema.omit({ orderId: true })),
 });
 
+const publicOrderItemSchema = z.object({
+  productId: z.string(),
+  quantity: z.number().int().min(1),
+  selectedSize: z.string().optional(),
+});
+const publicOrderSchema = z.object({
+  branchId: z.string().optional(), // no longer required; single store
+  customerName: z.string().min(1, "Name is required"),
+  customerPhone: z.string().min(1, "Phone is required"),
+  customerContactType: z.enum(["phone", "whatsapp", "telegram", "facebook", "other"]).optional(),
+  paymentMethod: z.enum(["cash_on_delivery", "due"]).optional(), // public web: pay on delivery or pay later (due)
+  items: z.array(publicOrderItemSchema).min(1, "At least one item is required"),
+});
+
+let webSocketServer: WebSocketServer | null = null;
+
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId && !req.session.branchId) {
     return res.status(401).json({ error: "Authentication required" });
   }
   next();
+}
+
+// API Key authentication for Central Dashboard
+function requireApiKey(req: Request, res: Response, next: NextFunction) {
+  const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+  const expectedApiKey = process.env.CENTRAL_DASHBOARD_API_KEY || 'central-dashboard-2024-secure-key';
+  
+  if (!apiKey || apiKey !== expectedApiKey) {
+    return res.status(401).json({ error: "Invalid API key" });
+  }
+  next();
+}
+
+// Audit log helper: only saves when the action is attributable to a logged-in user or branch; fire-and-forget so it never blocks the response
+function auditLog(
+  req: Request,
+  opts: { action: string; entityType: string; entityId?: string; entityName?: string; description?: string; changes?: string }
+) {
+  const hasUser = !!req.session?.userId;
+  const hasBranch = !!req.session?.branchId;
+  if (!hasUser && !hasBranch) return;
+
+  const userId = hasUser ? req.session!.userId! : undefined;
+  const username = req.session!.username ?? (hasUser ? "user" : "branch");
+  const ipAddress = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket?.remoteAddress || null;
+  const userAgent = (req.headers["user-agent"] as string) || null;
+  storage
+    .createAuditLog({
+      userId,
+      username,
+      action: opts.action,
+      entityType: opts.entityType,
+      entityId: opts.entityId,
+      entityName: opts.entityName,
+      description: opts.description,
+      changes: opts.changes,
+      ipAddress: ipAddress || undefined,
+      userAgent: userAgent || undefined,
+      branchId: req.session?.branchId || undefined,
+    })
+    .catch(() => {});
 }
 
 // Helper function to check if user has permission
@@ -115,7 +191,13 @@ function requirePermission(permission: string) {
   };
 }
 
-function getDateRange(filter: string, customDate?: string): { startDate: Date; endDate: Date } {
+function getDateRange(filter: string, customDate?: string, clientStart?: string, clientEnd?: string): { startDate: Date; endDate: Date } {
+  // Use client-provided range when given (ensures "today" etc. use user's timezone, not server's)
+  if (clientStart && clientEnd) {
+    const start = new Date(clientStart);
+    const end = new Date(clientEnd);
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) return { startDate: start, endDate: end };
+  }
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
@@ -184,6 +266,231 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // Public API for customer web ordering (no auth)
+  app.get("/api/public/branches", async (_req, res) => {
+    try {
+      const branches = await storage.getBranches();
+      const active = branches.filter((b) => b.isActive === "true");
+      res.json(active.map(({ id, name, location, contactPerson, phone, email }) => ({ id, name, location, contactPerson, phone, email })));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch branches" });
+    }
+  });
+
+  app.get("/api/public/categories", async (_req, res) => {
+    try {
+      const categories = await storage.getCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  app.get("/api/public/products", async (req, res) => {
+    try {
+      const branchId = (req.query.branchId as string) || undefined;
+      const products = await storage.getProducts(branchId);
+      res.json(products);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
+  });
+
+  app.post("/api/public/orders", async (req, res) => {
+    try {
+      const parsed = publicOrderSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+      }
+      const { branchId: branchIdPayload, customerName, customerPhone, customerContactType, paymentMethod: webPaymentMethod, items: rawItems } = parsed.data;
+      const branchId = branchIdPayload || null;
+
+      const orderItems: Array<{ productId: string; quantity: number; price: string; total: string; selectedSize?: string }> = [];
+      let subtotal = 0;
+
+      for (const item of rawItems) {
+        const product = await storage.getProduct(item.productId);
+        if (!product) {
+          return res.status(400).json({ error: `Product not found: ${item.productId}` });
+        }
+        let price: number;
+        if (item.selectedSize && product.sizePrices && typeof product.sizePrices === "object" && (product.sizePrices as Record<string, string>)[item.selectedSize] != null) {
+          price = parseFloat((product.sizePrices as Record<string, string>)[item.selectedSize]);
+        } else {
+          price = parseFloat(String(product.price));
+        }
+        if (isNaN(price) || price < 0) price = 0;
+        const total = price * item.quantity;
+        subtotal += total;
+        orderItems.push({
+          productId: product.id,
+          quantity: item.quantity,
+          price: price.toFixed(2),
+          total: total.toFixed(2),
+          ...(item.selectedSize && { selectedSize: item.selectedSize }),
+        });
+      }
+
+      const discount = 0;
+      const total = subtotal;
+      const isDue = webPaymentMethod === "due";
+      const orderData = {
+        branchId,
+        tableId: undefined,
+        customerId: undefined,
+        diningOption: "takeaway" as const,
+        customerName,
+        customerPhone,
+        customerContactType: customerContactType || null,
+        orderSource: "web" as const,
+        subtotal: subtotal.toFixed(2),
+        discount: discount.toFixed(2),
+        discountType: "amount" as const,
+        total: total.toFixed(2),
+        dueAmount: isDue ? total.toFixed(2) : undefined,
+        paidAmount: "0",
+        status: "web-pending" as const,
+        paymentStatus: isDue ? ("due" as const) : ("pending" as const),
+        paymentMethod: webPaymentMethod === "cash_on_delivery" ? "cash" : (isDue ? "due" : null),
+        paymentSplits: null,
+      };
+
+      const order = await storage.createOrderWithItems(orderData, orderItems);
+      const orderWithItems = { ...order, items: await storage.getOrderItemsWithProducts(order.id) };
+
+      if (webSocketServer) {
+        emitWebOrderCreated(webSocketServer, branchId ?? "", orderWithItems);
+      }
+
+      res.status(201).json(orderWithItems);
+    } catch (error) {
+      console.error("Error creating web order:", error);
+      res.status(500).json({ error: "Failed to create order", message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Public API endpoints for Central Dashboard (API key authentication)
+  app.get("/api/central/stats", requireApiKey, async (req, res) => {
+    try {
+      const { branchId } = req.query;
+      const settings = await storage.getSettings();
+      const stats = await storage.getSalesStats(branchId as string | undefined);
+      
+      // Get products count using paginated method (more efficient)
+      const productsResult = await storage.getProductsPaginated(
+        branchId as string | undefined,
+        1, // limit
+        0, // offset
+        undefined, // search
+        undefined, // categoryId
+        undefined, // minPrice
+        undefined, // maxPrice
+        undefined, // inStock
+        undefined, // dateFrom
+        undefined, // dateTo
+        undefined, // hasShortage
+        undefined, // status
+        undefined  // threshold
+      );
+      const totalProducts = productsResult.total;
+      
+      // Get active orders (draft orders) count
+      const draftOrdersResult = await storage.getOrdersPaginated(
+        branchId as string | undefined,
+        1, // limit
+        0, // offset
+        undefined, // search
+        undefined, // paymentMethod
+        undefined, // paymentStatus
+        undefined, // minAmount
+        undefined, // maxAmount
+        undefined, // dateFrom
+        undefined, // dateTo
+        undefined  // productSearch
+      );
+      // We need to count draft orders specifically, so get all and filter
+      const allOrders = await storage.getOrders(branchId as string | undefined);
+      const activeOrders = allOrders.filter(o => o.status === 'draft').length;
+      const totalOrders = allOrders.filter(o => o.status === 'completed').length;
+      
+      res.json({
+        totalSales: stats.totalRevenue,
+        totalOrders,
+        totalProducts,
+        activeOrders,
+        totalRevenue: stats.totalRevenue,
+        averageOrderValue: stats.averageOrderValue,
+        appName: settings?.appName || undefined,
+      });
+    } catch (error) {
+      console.error("Error fetching central stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/central/orders", requireApiKey, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const status = req.query.status as string | undefined;
+      const search = (req.query.search as string)?.trim() || undefined;
+      const branchId = req.query.branchId as string | undefined;
+      
+      const result = await storage.getOrdersPaginated(
+        branchId,
+        limit,
+        offset,
+        search, // order number / search
+        undefined, // paymentMethod
+        status === 'all' ? undefined : status, // paymentStatus
+        undefined, // minAmount
+        undefined, // maxAmount
+        undefined, // dateFrom
+        undefined, // dateTo
+        undefined  // productSearch
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching central orders:", error);
+      res.status(500).json({ error: "Failed to fetch orders" });
+    }
+  });
+
+  app.get("/api/central/products", requireApiKey, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const search = req.query.search as string | undefined;
+      const categoryId = req.query.categoryId as string | undefined;
+      
+      const result = await storage.getProductsPaginated(
+        undefined, // branchId
+        limit,
+        offset,
+        search,
+        categoryId
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching central products:", error);
+      res.status(500).json({ error: "Failed to fetch products" });
+    }
+  });
+
+  app.get("/api/central/sales-summary", requireApiKey, async (req, res) => {
+    try {
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(0);
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+      const items = await storage.getSalesSummary(startDate, endDate);
+      res.json({ items: items || [], total: (items || []).length });
+    } catch (error) {
+      console.error("Error fetching central sales summary:", error);
+      res.status(500).json({ error: "Failed to fetch sales summary" });
+    }
+  });
+
   // Authentication routes
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -200,6 +507,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.session.username = user.username;
         req.session.role = user.role;
         req.session.userType = "user";
+
+        // Explicitly save the session before responding
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        auditLog(req, { action: "login", entityType: "user", entityId: user.id, entityName: user.username, description: "User logged in" });
 
         return res.json({
           id: user.id,
@@ -219,6 +539,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req.session.role = "branch";
         req.session.userType = "branch";
 
+        // Explicitly save the session before responding
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        });
+
+        auditLog(req, { action: "login", entityType: "branch", entityId: branch.id, entityName: branch.username, description: "Branch logged in" });
+
         return res.json({
           id: branch.id,
           username: branch.username,
@@ -236,6 +569,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/auth/logout", async (req, res) => {
+    const entityType = req.session?.userType === "branch" ? "branch" : "user";
+    const entityId = req.session?.userId ?? req.session?.branchId ?? undefined;
+    const entityName = req.session?.username ?? undefined;
+    auditLog(req, { action: "logout", entityType, entityId, entityName, description: "Logged out" });
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ error: "Logout failed" });
@@ -363,8 +700,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Apply authentication middleware to all routes below this point
-  app.use("/api", requireAuth);
+  // Apply authentication middleware to all /api routes except /api/central/* (those use API key)
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    // req.path is relative to mount point, so /api/central/orders becomes /central/orders
+    if (req.path.startsWith("/central")) {
+      return next();
+    }
+    return requireAuth(req, res, next);
+  });
 
   app.get("/api/categories", async (req, res) => {
     try {
@@ -387,7 +730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/categories", requirePermission("inventory.create"), async (req, res) => {
     try {
       const validatedData = insertCategorySchema.parse(req.body);
       const category = await storage.createCategory(validatedData);
@@ -426,15 +769,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/products", async (req, res) => {
     try {
-      const { categoryId, branchId, limit, offset, search, minPrice, maxPrice, inStock } = req.query;
+      const { categoryId, branchId, limit, offset, search, minPrice, maxPrice, inStock, dateFrom, dateTo, hasShortage, status, threshold } = req.query;
       
       // If pagination parameters are provided, use paginated endpoint
-      if (limit !== undefined || offset !== undefined || search || minPrice || maxPrice || inStock !== undefined) {
+      if (limit !== undefined || offset !== undefined || search || minPrice || maxPrice || inStock !== undefined || dateFrom || dateTo || hasShortage !== undefined || status) {
         const limitNum = limit ? parseInt(limit as string, 10) : 50;
         const offsetNum = offset ? parseInt(offset as string, 10) : 0;
         const minPriceNum = minPrice ? parseFloat(minPrice as string) : undefined;
         const maxPriceNum = maxPrice ? parseFloat(maxPrice as string) : undefined;
         const inStockBool = inStock !== undefined ? inStock === 'true' : undefined;
+        const dateFromDate = dateFrom ? new Date(dateFrom as string) : undefined;
+        const dateToDate = dateTo ? new Date(dateTo as string) : undefined;
+        const hasShortageBool = hasShortage !== undefined ? hasShortage === 'true' : undefined;
+        const statusValue = status as "in_stock" | "low_stock" | "out_of_stock" | undefined;
+        const thresholdNum = threshold ? parseInt(threshold as string, 10) : 10;
         
         const result = await storage.getProductsPaginated(
           branchId as string | undefined,
@@ -444,7 +792,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           search as string | undefined,
           minPriceNum,
           maxPriceNum,
-          inStockBool
+          inStockBool,
+          dateFromDate,
+          dateToDate,
+          hasShortageBool,
+          statusValue,
+          thresholdNum
         );
         res.json(result);
       } else {
@@ -455,6 +808,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(products);
       }
     } catch (error) {
+      console.error("GET /api/products error:", error);
       res.status(500).json({ error: "Failed to fetch products" });
     }
   });
@@ -471,6 +825,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/products/barcode/:barcode", async (req, res) => {
+    try {
+      const product = await storage.getProductByBarcode(req.params.barcode);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      res.json(product);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch product by barcode" });
+    }
+  });
+
   app.post("/api/products", requirePermission("inventory.create"), async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
@@ -481,8 +847,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ error: "Already uploaded" });
       }
       
-      const product = await storage.createProduct(validatedData);
-      res.status(201).json(product);
+      // Auto-generate barcode if not provided (use product ID after creation)
+      const productData = { ...validatedData };
+      if (!productData.barcode) {
+        // Will be set to product ID after creation
+        productData.barcode = undefined;
+      }
+      
+      const product = await storage.createProduct(productData);
+      
+      // If barcode was not provided, set it to product ID
+      if (!product.barcode) {
+        const updatedProduct = await storage.updateProduct(product.id, { barcode: product.id });
+        res.status(201).json(updatedProduct || product);
+      } else {
+        res.status(201).json(product);
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid product data", details: error.errors });
@@ -491,7 +871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/products/bulk", async (req, res) => {
+  app.post("/api/products/bulk", requirePermission("inventory.edit"), async (req, res) => {
     try {
       const items = req.body.items;
       if (!Array.isArray(items)) {
@@ -500,33 +880,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const results = {
         imported: 0,
+        updated: 0,
         failed: 0,
         errors: [] as Array<{ row: number; name: string; error: string }>
       };
 
+      // Normalize numeric string for PostgreSQL decimal (comma→dot, strip non-numeric; output valid decimal string)
+      const toDecimalString = (v: unknown): string | undefined => {
+        if (v == null || v === "") return undefined;
+        const s = String(v).trim().replace(/,/g, ".").replace(/\s/g, "");
+        const cleaned = s.replace(/[^\d.-]/g, "");
+        const n = parseFloat(cleaned);
+        if (Number.isNaN(n)) return undefined;
+        return String(n);
+      };
+
       for (let i = 0; i < items.length; i++) {
         try {
-          const validatedData = insertProductSchema.parse(items[i]);
-          
-          // Check for duplicate name
+          const raw = items[i];
+          // Coerce and normalize Excel/CSV values for decimal columns (PostgreSQL accepts numeric strings)
+          const priceStr = toDecimalString(raw.price);
+          const qtyStr = toDecimalString(raw.quantity);
+          const costStr = toDecimalString(raw.purchaseCost);
+          const item: Record<string, unknown> = {
+            ...raw,
+            price: priceStr ?? (raw.price != null ? String(raw.price).trim() : undefined),
+            quantity: qtyStr ?? "0",
+            purchaseCost: costStr,
+          };
+          // Normalize size-based pricing from Excel (ensure values are strings)
+          if (item.sizePrices && typeof item.sizePrices === "object" && !Array.isArray(item.sizePrices)) {
+            item.sizePrices = Object.fromEntries(
+              Object.entries(item.sizePrices).map(([k, v]) => [k, v != null ? String(v) : ""])
+            );
+          }
+          if (item.sizePurchasePrices && typeof item.sizePurchasePrices === "object" && !Array.isArray(item.sizePurchasePrices)) {
+            item.sizePurchasePrices = Object.fromEntries(
+              Object.entries(item.sizePurchasePrices).map(([k, v]) => [k, v != null ? String(v) : ""])
+            );
+          }
+          // Allow empty/undefined price only when size-based pricing is provided
+          const hasSizePrices = item.sizePrices && typeof item.sizePrices === "object" && Object.keys(item.sizePrices as object).length > 0;
+          if ((item.price === undefined || item.price === "") && !hasSizePrices) {
+            throw new Error("Price is required and must be a valid number (or use size-based pricing with Sale S/M/L)");
+          }
+          if (hasSizePrices && (item.price === undefined || item.price === "")) {
+            item.price = "0";
+          }
+          const validatedData = insertProductSchema.parse(item);
+
           const existingProduct = await storage.getProductByName(validatedData.name);
           if (existingProduct) {
-            results.failed++;
-            results.errors.push({
-              row: i + 2,
-              name: validatedData.name,
-              error: "Duplicate name - product already exists"
-            });
+            await storage.updateProduct(existingProduct.id, validatedData);
+            results.updated++;
             continue;
           }
-          
+
           await storage.createProduct(validatedData);
           results.imported++;
         } catch (error) {
           results.failed++;
-          const errorMsg = error instanceof z.ZodError 
+          const errorMsg = error instanceof z.ZodError
             ? error.errors.map(e => e.message).join(", ")
-            : "Unknown error";
+            : error instanceof Error
+              ? error.message
+              : String(error);
           results.errors.push({
             row: i + 2, // +2 because row 1 is header and array is 0-indexed
             name: items[i]?.name || "Unknown",
@@ -548,7 +966,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!currentProduct) {
         return res.status(404).json({ error: "Product not found" });
       }
-      
+
       // If name is being updated, check for duplicates
       if (req.body.name && req.body.name !== currentProduct.name) {
         const existingProduct = await storage.getProductByName(req.body.name, req.params.id);
@@ -556,21 +974,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(409).json({ error: "Duplicate name" });
         }
       }
-      
-      // Check if the data is actually being changed
-      if (req.body.name && req.body.name === currentProduct.name) {
-        const hasOtherChanges = Object.keys(req.body).some(key => {
-          if (key === 'name') return false;
-          return req.body[key] !== (currentProduct as any)[key];
+
+      // Normalize body: empty string -> undefined for optional decimals (Zod .optional() accepts undefined); ensure size price values are strings (JSON may send numbers)
+      const body = { ...req.body } as Record<string, unknown>;
+      if (body.purchaseCost === "") body.purchaseCost = undefined;
+      if (body.price === "") body.price = undefined;
+      if (body.quantity === "") body.quantity = undefined;
+      if (body.sizePrices && typeof body.sizePrices === "object" && !Array.isArray(body.sizePrices)) {
+        body.sizePrices = Object.fromEntries(
+          Object.entries(body.sizePrices).map(([k, v]) => [k, v != null ? String(v) : ""])
+        );
+      }
+      if (body.sizePurchasePrices && typeof body.sizePurchasePrices === "object" && !Array.isArray(body.sizePurchasePrices)) {
+        body.sizePurchasePrices = Object.fromEntries(
+          Object.entries(body.sizePurchasePrices).map(([k, v]) => [k, v != null ? String(v) : ""])
+        );
+      }
+
+      // Validate and allow only schema fields; strip unknown keys
+      const updateSchema = insertProductSchema.partial().strip();
+      const updates = updateSchema.parse(body);
+
+      // Check if the data is actually being changed (skip for jsonb - compare by JSON stringify)
+      if (updates.name && updates.name === currentProduct.name) {
+        const hasOtherChanges = Object.keys(updates).some(key => {
+          if (key === "name") return false;
+          const a = updates[key];
+          const b = (currentProduct as any)[key];
+          if (typeof a === "object" && a !== null && typeof b === "object" && b !== null) {
+            return JSON.stringify(a) !== JSON.stringify(b);
+          }
+          return a !== b;
         });
         if (!hasOtherChanges) {
           return res.status(409).json({ error: "Already updated" });
         }
       }
-      
-      const product = await storage.updateProduct(req.params.id, req.body);
+
+      const product = await storage.updateProduct(req.params.id, updates);
       res.json(product);
     } catch (error) {
+      console.error("PATCH /api/products/:id error:", error);
       res.status(500).json({ error: "Failed to update product" });
     }
   });
@@ -700,6 +1144,206 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/orders/paginated", async (req, res) => {
+    try {
+      const { 
+        branchId, 
+        page = "1", 
+        limit = "10", 
+        search, 
+        paymentMethod, 
+        paymentStatus, 
+        minAmount, 
+        maxAmount, 
+        dateFrom, 
+        dateTo,
+        productSearch,
+        months: monthsParam
+      } = req.query;
+      
+      const pageNum = parseInt(page as string, 10);
+      const limitNum = parseInt(limit as string, 10);
+      const offset = (pageNum - 1) * limitNum;
+      
+      // Parse months (comma-separated YYYY-MM)
+      let months: string[] | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
+      }
+      
+      // Parse and validate minAmount
+      let parsedMinAmount: number | undefined;
+      if (minAmount && typeof minAmount === "string" && minAmount.trim()) {
+        const parsed = parseFloat(minAmount);
+        if (!isNaN(parsed) && parsed >= 0) {
+          parsedMinAmount = parsed;
+        }
+      }
+      
+      // Parse and validate maxAmount
+      let parsedMaxAmount: number | undefined;
+      if (maxAmount && typeof maxAmount === "string" && maxAmount.trim()) {
+        const parsed = parseFloat(maxAmount);
+        if (!isNaN(parsed) && parsed >= 0) {
+          parsedMaxAmount = parsed;
+        }
+      }
+      
+      // Validate amount range
+      if (parsedMinAmount !== undefined && parsedMaxAmount !== undefined && parsedMinAmount > parsedMaxAmount) {
+        return res.status(400).json({ error: "Min amount cannot be greater than max amount" });
+      }
+      
+      // Parse dates
+      let parsedDateFrom: Date | undefined;
+      if (dateFrom && typeof dateFrom === "string" && dateFrom.trim()) {
+        const date = new Date(dateFrom);
+        if (!isNaN(date.getTime())) {
+          parsedDateFrom = date;
+        }
+      }
+      
+      let parsedDateTo: Date | undefined;
+      if (dateTo && typeof dateTo === "string" && dateTo.trim()) {
+        const date = new Date(dateTo);
+        if (!isNaN(date.getTime())) {
+          parsedDateTo = date;
+        }
+      }
+      
+      const result = await storage.getOrdersPaginated(
+        branchId as string | undefined,
+        limitNum,
+        offset,
+        search && typeof search === "string" && search.trim() ? search.trim() : undefined,
+        paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all" ? paymentMethod : undefined,
+        paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all" ? paymentStatus : undefined,
+        parsedMinAmount,
+        parsedMaxAmount,
+        parsedDateFrom,
+        parsedDateTo,
+        productSearch && typeof productSearch === "string" && productSearch.trim() ? productSearch.trim() : undefined,
+        months
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching paginated orders:", error);
+      res.status(500).json({ error: "Failed to fetch orders" });
+    }
+  });
+
+  // Export all sales (orders) matching current filters - no pagination limit
+  app.get("/api/orders/export", async (req, res) => {
+    try {
+      const { 
+        branchId, 
+        search, 
+        paymentMethod, 
+        paymentStatus, 
+        minAmount, 
+        maxAmount, 
+        dateFrom, 
+        dateTo,
+        productSearch,
+        months: monthsParam
+      } = req.query;
+      
+      let months: string[] | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
+      }
+      
+      let parsedMinAmount: number | undefined;
+      if (minAmount && typeof minAmount === "string" && minAmount.trim()) {
+        const parsed = parseFloat(minAmount);
+        if (!isNaN(parsed) && parsed >= 0) parsedMinAmount = parsed;
+      }
+      let parsedMaxAmount: number | undefined;
+      if (maxAmount && typeof maxAmount === "string" && maxAmount.trim()) {
+        const parsed = parseFloat(maxAmount);
+        if (!isNaN(parsed) && parsed >= 0) parsedMaxAmount = parsed;
+      }
+      let parsedDateFrom: Date | undefined;
+      if (dateFrom && typeof dateFrom === "string" && dateFrom.trim()) {
+        const d = new Date(dateFrom);
+        if (!isNaN(d.getTime())) parsedDateFrom = d;
+      }
+      let parsedDateTo: Date | undefined;
+      if (dateTo && typeof dateTo === "string" && dateTo.trim()) {
+        const d = new Date(dateTo);
+        if (!isNaN(d.getTime())) parsedDateTo = d;
+      }
+      
+      const result = await storage.getOrdersPaginated(
+        branchId as string | undefined,
+        50000,
+        0,
+        search && typeof search === "string" && search.trim() ? search.trim() : undefined,
+        paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all" ? paymentMethod : undefined,
+        paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all" ? paymentStatus : undefined,
+        parsedMinAmount,
+        parsedMaxAmount,
+        parsedDateFrom,
+        parsedDateTo,
+        productSearch && typeof productSearch === "string" && productSearch.trim() ? productSearch.trim() : undefined,
+        months
+      );
+      
+      res.json({ orders: result.orders });
+    } catch (error) {
+      console.error("Error exporting orders:", error);
+      res.status(500).json({ error: "Failed to export orders" });
+    }
+  });
+
+  app.get("/api/sales/stats", async (req, res) => {
+    try {
+      const { branchId, dateFrom, dateTo, months: monthsParam, paymentMethod, paymentStatus, minAmount, maxAmount, search } = req.query;
+      let months: string[] | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
+      }
+      let parsedDateFrom: Date | undefined;
+      if (dateFrom && typeof dateFrom === "string") {
+        const d = new Date(dateFrom);
+        if (!isNaN(d.getTime())) parsedDateFrom = d;
+      }
+      let parsedDateTo: Date | undefined;
+      if (dateTo && typeof dateTo === "string") {
+        const d = new Date(dateTo);
+        if (!isNaN(d.getTime())) parsedDateTo = d;
+      }
+      let parsedMin: number | undefined;
+      if (minAmount && typeof minAmount === "string") {
+        const n = parseFloat(minAmount);
+        if (!isNaN(n) && n >= 0) parsedMin = n;
+      }
+      let parsedMax: number | undefined;
+      if (maxAmount && typeof maxAmount === "string") {
+        const n = parseFloat(maxAmount);
+        if (!isNaN(n) && n >= 0) parsedMax = n;
+      }
+      const filters = (parsedDateFrom != null || parsedDateTo != null || (months && months.length > 0) || (paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all") || (paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all") || parsedMin != null || parsedMax != null || (search && typeof search === "string" && search.trim()))
+        ? {
+            dateFrom: parsedDateFrom,
+            dateTo: parsedDateTo,
+            months,
+            paymentMethod: paymentMethod as string | undefined,
+            paymentStatus: paymentStatus as string | undefined,
+            minAmount: parsedMin,
+            maxAmount: parsedMax,
+            search: typeof search === "string" && search.trim() ? search.trim() : undefined,
+          }
+        : undefined;
+      const stats = await storage.getSalesStats(branchId as string | undefined, filters);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching sales stats:", error);
+      res.status(500).json({ error: "Failed to fetch sales stats" });
+    }
+  });
+
   app.get("/api/orders/:id", async (req, res) => {
     try {
       const order = await storage.getOrder(req.params.id);
@@ -722,7 +1366,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const items = await storage.getOrderItemsWithProducts(order.id);
-      const itemsWithProductName = items
+      // Return items with full product objects, not just productName
+      const itemsWithProducts = items
         .filter(item => item.product) // Filter out items with null products
         .map(item => ({
           id: item.id,
@@ -731,9 +1376,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           quantity: item.quantity,
           price: item.price,
           total: item.total,
-          productName: item.product.name,
+          itemDiscount: item.itemDiscount || "0",
+          itemDiscountType: item.itemDiscountType || "amount",
+          selectedSize: item.selectedSize || undefined, // Include selected size
+          product: item.product, // Include full product object
+          productName: item.product.name, // Keep for backward compatibility
         }));
-      res.json(itemsWithProductName);
+      res.json(itemsWithProducts);
     } catch (error) {
       console.error("Error fetching order items:", error);
       res.status(500).json({ error: "Failed to fetch order items" });
@@ -747,7 +1396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Order not found" });
       }
 
-      const { productId, quantity, price, total } = req.body;
+      const { productId, quantity, price, total, itemDiscount, itemDiscountType, selectedSize } = req.body;
       if (!productId || !quantity || !price || !total) {
         return res.status(400).json({ error: "Missing required fields" });
       }
@@ -758,6 +1407,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         quantity: quantity.toString(),
         price,
         total,
+        itemDiscount: itemDiscount || "0",
+        itemDiscountType: itemDiscountType || "amount",
+        selectedSize: selectedSize || undefined,
       });
 
       const allItems = await storage.getOrderItems(req.params.id);
@@ -792,13 +1444,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...order,
         items: await storage.getOrderItemsWithProducts(order.id),
       };
-      
+
+      auditLog(req, { action: "create", entityType: "order", entityId: order.id, description: `Order ${order.id} created` });
+
       res.status(201).json(orderWithItems);
     } catch (error) {
+      console.error("Error creating order:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid order data", details: error.errors });
       }
-      res.status(500).json({ error: "Failed to create order" });
+      res.status(500).json({ 
+        error: "Failed to create order",
+        message: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
@@ -806,18 +1464,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const updates: any = { ...req.body };
       
-      // Convert createdAt from ISO string to Date if provided
-      if (updates.createdAt && typeof updates.createdAt === 'string') {
-        updates.createdAt = new Date(updates.createdAt);
+      // Check if items are provided - if so, use updateOrderWithItems
+      if (updates.items && Array.isArray(updates.items)) {
+        const { items, ...orderData } = updates;
+        
+        // Convert createdAt from ISO string to Date if provided
+        if (orderData.createdAt && typeof orderData.createdAt === 'string') {
+          orderData.createdAt = new Date(orderData.createdAt);
+        }
+        
+        const order = await storage.updateOrderWithItems(req.params.id, orderData, items);
+        if (!order) {
+          return res.status(404).json({ error: "Order not found" });
+        }
+        
+        const orderWithItems = {
+          ...order,
+          items: await storage.getOrderItemsWithProducts(order.id),
+        };
+
+        auditLog(req, { action: "update", entityType: "order", entityId: order.id, description: `Order ${order.id} updated` });
+
+        res.json(orderWithItems);
+      } else {
+        // Regular order update without items
+        // Convert createdAt from ISO string to Date if provided
+        if (updates.createdAt && typeof updates.createdAt === 'string') {
+          updates.createdAt = new Date(updates.createdAt);
+        }
+        
+        const order = await storage.updateOrder(req.params.id, updates);
+        if (!order) {
+          return res.status(404).json({ error: "Order not found" });
+        }
+        auditLog(req, { action: "update", entityType: "order", entityId: order.id, description: `Order ${order.id} updated` });
+        res.json(order);
       }
-      
-      const order = await storage.updateOrder(req.params.id, updates);
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-      res.json(order);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update order" });
+      console.error("Error updating order:", error);
+      res.status(500).json({ 
+        error: "Failed to update order",
+        message: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
@@ -843,6 +1531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ error: "Order not found" });
       }
+      auditLog(req, { action: "delete", entityType: "order", entityId: req.params.id, description: `Order ${req.params.id} deleted` });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete order" });
@@ -879,24 +1568,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/orders/:id/accept", async (req, res) => {
+  app.get("/api/orders/web", requireAuth, async (req, res) => {
     try {
-      const order = await storage.updateOrderStatus(req.params.id, "pending");
-      if (!order) {
+      const branchId = (req.query.branchId as string) || req.session?.branchId || undefined;
+      const webOrders = await storage.getWebOrders(branchId);
+      const webOrdersWithItems = await Promise.all(
+        webOrders.map(async (order) => {
+          const items = await storage.getOrderItemsWithProducts(order.id);
+          return { ...order, items };
+        })
+      );
+      res.json(webOrdersWithItems);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch web orders" });
+    }
+  });
+
+  app.patch("/api/orders/:id/accept", requireAuth, async (req, res) => {
+    try {
+      const existing = await storage.getOrder(req.params.id);
+      if (!existing) {
         return res.status(404).json({ error: "Order not found" });
       }
+      if (existing.orderSource !== "web" || existing.status !== "web-pending") {
+        return res.status(400).json({ error: "Only web-pending web orders can be accepted" });
+      }
+      const order = await storage.updateOrderStatus(req.params.id, "pending");
       res.json(order);
     } catch (error) {
       res.status(500).json({ error: "Failed to accept order" });
     }
   });
 
-  app.patch("/api/orders/:id/reject", async (req, res) => {
+  app.patch("/api/orders/:id/reject", requireAuth, async (req, res) => {
     try {
-      const order = await storage.updateOrderStatus(req.params.id, "cancelled");
-      if (!order) {
+      const existing = await storage.getOrder(req.params.id);
+      if (!existing) {
         return res.status(404).json({ error: "Order not found" });
       }
+      if (existing.orderSource !== "web" || existing.status !== "web-pending") {
+        return res.status(400).json({ error: "Only web-pending web orders can be rejected" });
+      }
+      const order = await storage.updateOrderStatus(req.params.id, "cancelled");
       res.json(order);
     } catch (error) {
       res.status(500).json({ error: "Failed to reject order" });
@@ -909,6 +1622,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(sales);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch sales" });
+    }
+  });
+
+  app.get("/api/reports/items", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "Start date and end date are required" });
+      }
+
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+      end.setHours(23, 59, 59, 999);
+
+      const itemSales = await storage.getSalesSummary(start, end);
+      res.json(itemSales);
+    } catch (error) {
+      console.error("Error fetching item sales:", error);
+      res.status(500).json({ error: "Failed to fetch item sales" });
     }
   });
 
@@ -999,7 +1732,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filter = (req.query.filter as string) || "today";
       const customDate = req.query.date as string | undefined;
-      const { startDate, endDate } = getDateRange(filter, customDate);
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
+      const { startDate, endDate } = getDateRange(filter, customDate, startDateParam, endDateParam);
       const stats = await storage.getDashboardStats(startDate, endDate);
       res.json(stats);
     } catch (error) {
@@ -1011,7 +1746,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filter = (req.query.filter as string) || "today";
       const customDate = req.query.date as string | undefined;
-      const { startDate, endDate } = getDateRange(filter, customDate);
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
+      const { startDate, endDate } = getDateRange(filter, customDate, startDateParam, endDateParam);
       const sales = await storage.getSalesByCategory(startDate, endDate);
       res.json(sales);
     } catch (error) {
@@ -1023,7 +1760,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filter = (req.query.filter as string) || "today";
       const customDate = req.query.date as string | undefined;
-      const { startDate, endDate } = getDateRange(filter, customDate);
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
+      const { startDate, endDate } = getDateRange(filter, customDate, startDateParam, endDateParam);
       const sales = await storage.getSalesByPaymentMethod(startDate, endDate);
       res.json(sales);
     } catch (error) {
@@ -1035,7 +1774,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filter = (req.query.filter as string) || "today";
       const customDate = req.query.date as string | undefined;
-      const { startDate, endDate } = getDateRange(filter, customDate);
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
+      const { startDate, endDate } = getDateRange(filter, customDate, startDateParam, endDateParam);
       const products = await storage.getPopularProducts(startDate, endDate);
       res.json(products);
     } catch (error) {
@@ -1054,15 +1795,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/sales/summary/paginated", async (req, res) => {
+    try {
+      const { 
+        startDate: startDateStr, 
+        endDate: endDateStr,
+        branchId,
+        page = "1",
+        limit = "10",
+        search
+      } = req.query;
+      
+      const startDate = startDateStr ? new Date(startDateStr as string) : new Date(0);
+      const endDate = endDateStr ? new Date(endDateStr as string) : new Date();
+      const pageNum = parseInt(page as string, 10);
+      const limitNum = parseInt(limit as string, 10);
+      const offset = (pageNum - 1) * limitNum;
+      
+      const result = await storage.getSalesSummaryPaginated(
+        startDate,
+        endDate,
+        branchId as string | undefined,
+        limitNum,
+        offset,
+        search as string | undefined
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching paginated sales summary:", error);
+      res.status(500).json({ error: "Failed to fetch sales summary" });
+    }
+  });
+
   app.get("/api/dashboard/recent-orders", async (req, res) => {
     try {
       const filter = (req.query.filter as string) || "today";
       const customDate = req.query.date as string | undefined;
-      const { startDate, endDate } = getDateRange(filter, customDate);
+      const startDateParam = req.query.startDate as string | undefined;
+      const endDateParam = req.query.endDate as string | undefined;
+      const { startDate, endDate } = getDateRange(filter, customDate, startDateParam, endDateParam);
       const orders = await storage.getRecentOrders(startDate, endDate);
       res.json(orders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch recent orders" });
+    }
+  });
+
+  // Units API endpoints
+  app.get("/api/units", async (req, res) => {
+    try {
+      const unitsList = await storage.getUnits();
+      res.json(unitsList);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch units" });
+    }
+  });
+
+  app.get("/api/units/:id", async (req, res) => {
+    try {
+      const unit = await storage.getUnit(req.params.id);
+      if (!unit) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+      res.json(unit);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unit" });
+    }
+  });
+
+  app.post("/api/units", requirePermission("settings.edit"), async (req, res) => {
+    try {
+      const validatedData = insertUnitSchema.parse(req.body);
+      const unit = await storage.createUnit(validatedData);
+      res.status(201).json(unit);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid unit data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create unit" });
+    }
+  });
+
+  app.patch("/api/units/:id", requirePermission("settings.edit"), async (req, res) => {
+    try {
+      const updates = req.body;
+      const unit = await storage.updateUnit(req.params.id, updates);
+      if (!unit) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+      res.json(unit);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update unit" });
+    }
+  });
+
+  app.delete("/api/units/:id", requirePermission("settings.edit"), async (req, res) => {
+    try {
+      const deleted = await storage.deleteUnit(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Unit not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete unit" });
     }
   });
 
@@ -1126,11 +1962,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses", async (req, res) => {
     try {
-      const { branchId } = req.query;
-      const expenses = await storage.getExpenses(branchId as string | undefined);
+      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam } = req.query;
+      let dateFrom: Date | undefined;
+      if (dateFromStr && typeof dateFromStr === "string") {
+        const d = new Date(dateFromStr);
+        if (!isNaN(d.getTime())) dateFrom = d;
+      }
+      let dateTo: Date | undefined;
+      if (dateToStr && typeof dateToStr === "string") {
+        const d = new Date(dateToStr);
+        if (!isNaN(d.getTime())) dateTo = d;
+      }
+      let months: string[] | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
+      }
+      const expenses = await storage.getExpenses(branchId as string | undefined, dateFrom, dateTo, months);
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  });
+
+  app.get("/api/expenses/export", async (req, res) => {
+    try {
+      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam } = req.query;
+      let dateFrom: Date | undefined;
+      if (dateFromStr && typeof dateFromStr === "string") {
+        const d = new Date(dateFromStr);
+        if (!isNaN(d.getTime())) dateFrom = d;
+      }
+      let dateTo: Date | undefined;
+      if (dateToStr && typeof dateToStr === "string") {
+        const d = new Date(dateToStr);
+        if (!isNaN(d.getTime())) dateTo = d;
+      }
+      let months: string[] | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
+      }
+      const expenses = await storage.getExpenses(branchId as string | undefined, dateFrom, dateTo, months);
+      res.json({ expenses });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to export expenses" });
+    }
+  });
+
+  app.get("/api/expenses/stats", async (req, res) => {
+    try {
+      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam } = req.query;
+      let dateFrom: Date | undefined;
+      if (dateFromStr && typeof dateFromStr === "string") {
+        const d = new Date(dateFromStr);
+        if (!isNaN(d.getTime())) dateFrom = d;
+      }
+      let dateTo: Date | undefined;
+      if (dateToStr && typeof dateToStr === "string") {
+        const d = new Date(dateToStr);
+        if (!isNaN(d.getTime())) dateTo = d;
+      }
+      let months: string[] | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
+      }
+      const stats = await storage.getExpenseStats(branchId as string | undefined, dateFrom, dateTo, months);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching expense stats:", error);
+      res.status(500).json({ error: "Failed to fetch expense stats" });
     }
   });
 
@@ -1161,13 +2060,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/expenses/:id", requirePermission("expenses.edit"), async (req, res) => {
     try {
-      const expense = await storage.updateExpense(req.params.id, req.body);
+      // Get the existing expense to preserve fields that aren't being updated
+      const existingExpense = await storage.getExpense(req.params.id);
+      if (!existingExpense) {
+        return res.status(404).json({ error: "Expense not found" });
+      }
+
+      // Prepare update data - only include fields that are provided
+      const updateData: any = {};
+      
+      if (req.body.expenseDate !== undefined) {
+        updateData.expenseDate = new Date(req.body.expenseDate);
+      }
+      if (req.body.categoryId !== undefined) {
+        updateData.categoryId = req.body.categoryId;
+      }
+      if (req.body.description !== undefined) {
+        updateData.description = req.body.description;
+      }
+      if (req.body.amount !== undefined) {
+        updateData.amount = req.body.amount;
+      }
+      if (req.body.unit !== undefined) {
+        updateData.unit = req.body.unit;
+      }
+      if (req.body.quantity !== undefined) {
+        updateData.quantity = req.body.quantity;
+      }
+      if (req.body.total !== undefined) {
+        updateData.total = req.body.total;
+      }
+      
+      // Handle slipImage: if it's provided and is a base64 string, use it
+      // If it's empty string, set to null to remove the image
+      // If it's not provided, preserve the existing image
+      if (req.body.slipImage !== undefined) {
+        if (req.body.slipImage === "" || req.body.slipImage === null) {
+          updateData.slipImage = null;
+        } else if (typeof req.body.slipImage === "string") {
+          // If it's a base64 data URL, use it as-is
+          // If it's a URL (starts with http), preserve it
+          updateData.slipImage = req.body.slipImage;
+        }
+      }
+
+      const expense = await storage.updateExpense(req.params.id, updateData);
       if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
       }
       res.json(expense);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update expense" });
+    } catch (error: any) {
+      console.error("Error updating expense:", error);
+      res.status(500).json({ error: "Failed to update expense", details: error.message });
     }
   });
 
@@ -1244,11 +2188,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/inventory/adjustments", async (req, res) => {
     try {
-      const { productId } = req.query;
-      const adjustments = productId
-        ? await storage.getInventoryAdjustmentsByProduct(productId as string)
-        : await storage.getInventoryAdjustments();
-      res.json(adjustments);
+      const { branchId, productId, limit, offset, search, adjustmentType } = req.query;
+      
+      // If pagination parameters are provided, use paginated endpoint
+      if (limit !== undefined || offset !== undefined || search || adjustmentType) {
+        const limitNum = limit ? parseInt(limit as string, 10) : 50;
+        const offsetNum = offset ? parseInt(offset as string, 10) : 0;
+        
+        const result = await storage.getInventoryAdjustmentsPaginated(
+          branchId as string | undefined,
+          limitNum,
+          offsetNum,
+          search as string | undefined,
+          productId as string | undefined,
+          adjustmentType as string | undefined
+        );
+        res.json(result);
+      } else {
+        // Legacy endpoint for backward compatibility
+        const adjustments = productId
+          ? await storage.getInventoryAdjustmentsByProduct(productId as string)
+          : await storage.getInventoryAdjustments();
+        res.json(adjustments);
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch inventory adjustments" });
     }
@@ -1256,11 +2218,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/inventory/low-stock", async (req, res) => {
     try {
-      const threshold = parseInt(req.query.threshold as string) || 10;
-      const lowStockProducts = await storage.getLowStockProducts(threshold);
-      res.json(lowStockProducts);
+      const { branchId, threshold, limit, offset, search, categoryId } = req.query;
+      const thresholdNum = threshold ? parseInt(threshold as string, 10) : 10;
+      
+      // If pagination parameters are provided, use paginated endpoint
+      if (limit !== undefined || offset !== undefined || search || categoryId) {
+        const limitNum = limit ? parseInt(limit as string, 10) : 50;
+        const offsetNum = offset ? parseInt(offset as string, 10) : 0;
+        
+        const result = await storage.getLowStockProductsPaginated(
+          branchId as string | undefined,
+          thresholdNum,
+          limitNum,
+          offsetNum,
+          search as string | undefined,
+          categoryId as string | undefined
+        );
+        res.json(result);
+      } else {
+        // Legacy endpoint for backward compatibility
+        const lowStockProducts = await storage.getLowStockProducts(thresholdNum);
+        res.json(lowStockProducts);
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch low stock products" });
+    }
+  });
+
+  app.get("/api/inventory/sold-quantities", async (req, res) => {
+    try {
+      const soldQuantities = await storage.getSoldQuantitiesByProduct();
+      res.json(soldQuantities);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch sold quantities" });
+    }
+  });
+
+  app.get("/api/inventory/stats", async (req, res) => {
+    try {
+      const { branchId, threshold } = req.query;
+      const thresholdNum = threshold ? parseInt(threshold as string) : 10;
+      const stats = await storage.getInventoryStats(branchId as string | undefined, thresholdNum);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch inventory stats" });
+    }
+  });
+
+  // Main Products endpoints
+  app.get("/api/main-products", async (req, res) => {
+    try {
+      const mainProducts = await storage.getMainProducts();
+      res.json(mainProducts);
+    } catch (error: any) {
+      console.error("Error fetching main products:", error);
+      // Check if it's a missing table error
+      if (error?.code === '42P01' || error?.message?.includes('does not exist') || error?.message?.includes('relation') && error?.message?.includes('does not exist')) {
+        res.status(500).json({ 
+          error: "Main products tables not found. Please run database migration 0007_add_main_products.sql",
+          details: error.message 
+        });
+      } else {
+        res.status(500).json({ error: "Failed to fetch main products", details: error?.message || String(error) });
+      }
+    }
+  });
+
+  app.get("/api/main-products/:id", async (req, res) => {
+    try {
+      const mainProduct = await storage.getMainProduct(req.params.id);
+      if (!mainProduct) {
+        return res.status(404).json({ error: "Main product not found" });
+      }
+      res.json(mainProduct);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch main product" });
+    }
+  });
+
+  app.post("/api/main-products", requirePermission("inventory.manage"), async (req, res) => {
+    try {
+      const validatedData = insertMainProductSchema.parse(req.body);
+      const mainProduct = await storage.createMainProduct(validatedData);
+      res.status(201).json(mainProduct);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid main product data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create main product" });
+    }
+  });
+
+  app.put("/api/main-products/:id", requirePermission("inventory.manage"), async (req, res) => {
+    try {
+      const validatedData = insertMainProductSchema.partial().parse(req.body);
+      const mainProduct = await storage.updateMainProduct(req.params.id, validatedData);
+      if (!mainProduct) {
+        return res.status(404).json({ error: "Main product not found" });
+      }
+      res.json(mainProduct);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid main product data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update main product" });
+    }
+  });
+
+  app.delete("/api/main-products/:id", requirePermission("inventory.manage"), async (req, res) => {
+    try {
+      const deleted = await storage.deleteMainProduct(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Main product not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete main product" });
+    }
+  });
+
+  app.get("/api/main-products/:id/items", async (req, res) => {
+    try {
+      const items = await storage.getMainProductItems(req.params.id);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch main product items" });
+    }
+  });
+
+  app.post("/api/main-products/:id/items", requirePermission("inventory.manage"), async (req, res) => {
+    try {
+      const validatedData = insertMainProductItemSchema.parse({
+        ...req.body,
+        mainProductId: req.params.id,
+      });
+      const item = await storage.addMainProductItem(validatedData);
+      res.status(201).json(item);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid item data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to add item to main product" });
+    }
+  });
+
+  app.delete("/api/main-products/:id/items/:itemId", requirePermission("inventory.manage"), async (req, res) => {
+    try {
+      const deleted = await storage.removeMainProductItem(req.params.itemId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove item from main product" });
+    }
+  });
+
+  app.get("/api/main-products/:id/stats", async (req, res) => {
+    try {
+      const stats = await storage.getMainProductStats(req.params.id);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch main product stats" });
     }
   });
 
@@ -1277,7 +2396,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/employees", async (req, res) => {
+  app.put("/api/inventory/adjustments/:id", requirePermission("inventory.adjust"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      // Allow partial updates (quantity, adjustmentType, reason, notes)
+      const updateData: Partial<InsertInventoryAdjustment> = {};
+      if (req.body.quantity !== undefined) updateData.quantity = req.body.quantity;
+      if (req.body.adjustmentType !== undefined) updateData.adjustmentType = req.body.adjustmentType;
+      if (req.body.reason !== undefined) updateData.reason = req.body.reason;
+      if (req.body.notes !== undefined) updateData.notes = req.body.notes;
+      
+      const adjustment = await storage.updateInventoryAdjustment(id, updateData);
+      res.json(adjustment);
+    } catch (error: any) {
+      if (error.message === "Adjustment not found") {
+        return res.status(404).json({ error: "Adjustment not found" });
+      }
+      res.status(500).json({ error: "Failed to update inventory adjustment" });
+    }
+  });
+
+  app.delete("/api/inventory/adjustments/:id", requirePermission("inventory.adjust"), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteInventoryAdjustment(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      if (error.message === "Adjustment not found") {
+        return res.status(404).json({ error: "Adjustment not found" });
+      }
+      res.status(500).json({ error: "Failed to delete inventory adjustment" });
+    }
+  });
+
+  // Employee/Staff routes
+  app.get("/api/employees", requirePermission("hrm.view"), async (req, res) => {
     try {
       const { branchId } = req.query;
       const employees = await storage.getEmployees(branchId as string | undefined);
@@ -1287,7 +2440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/employees/:id", async (req, res) => {
+  app.get("/api/employees/:id", requirePermission("hrm.view"), async (req, res) => {
     try {
       const employee = await storage.getEmployee(req.params.id);
       if (!employee) {
@@ -1303,6 +2456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertEmployeeSchema.parse(req.body);
       const employee = await storage.createEmployee(validatedData);
+      auditLog(req, { action: "create", entityType: "employee", entityId: employee.id, entityName: employee.name, description: `Employee ${employee.name} created` });
       res.status(201).json(employee);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1318,6 +2472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!employee) {
         return res.status(404).json({ error: "Employee not found" });
       }
+      auditLog(req, { action: "update", entityType: "employee", entityId: employee.id, entityName: employee.name, description: `Employee ${employee.name} updated` });
       res.json(employee);
     } catch (error) {
       res.status(500).json({ error: "Failed to update employee" });
@@ -1330,12 +2485,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ error: "Employee not found" });
       }
+      auditLog(req, { action: "delete", entityType: "employee", entityId: req.params.id, description: `Employee deleted` });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete employee" });
     }
   });
 
+  // Bulk import employees
+  app.post("/api/employees/import", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const { employees: employeesData } = req.body;
+      if (!Array.isArray(employeesData) || employeesData.length === 0) {
+        return res.status(400).json({ error: "No employees data provided" });
+      }
+      
+      const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] };
+      
+      for (const empData of employeesData) {
+        try {
+          const validatedData = insertEmployeeSchema.parse(empData);
+          await storage.createEmployee(validatedData);
+          results.success++;
+        } catch (err) {
+          results.failed++;
+          results.errors.push(`Row ${results.success + results.failed}: ${err instanceof Error ? err.message : "Invalid data"}`);
+        }
+      }
+      
+      auditLog(req, { action: "import", entityType: "employee", description: `Imported ${results.success} employees` });
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to import employees" });
+    }
+  });
+
+  // Export employees
+  app.get("/api/employees/export", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const employees = await storage.getEmployees();
+      // Return employees for CSV/JSON export on frontend
+      res.json(employees);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to export employees" });
+    }
+  });
+
+  // Positions (for staff dropdown)
+  app.get("/api/positions", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const list = await storage.getPositions();
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch positions" });
+    }
+  });
+
+  app.post("/api/positions", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const validatedData = insertPositionSchema.parse(req.body);
+      const position = await storage.createPosition(validatedData);
+      res.status(201).json(position);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid position data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create position" });
+    }
+  });
+
+  app.patch("/api/positions/:id", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const position = await storage.updatePosition(req.params.id, req.body);
+      if (!position) return res.status(404).json({ error: "Position not found" });
+      res.json(position);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update position" });
+    }
+  });
+
+  app.delete("/api/positions/:id", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const deleted = await storage.deletePosition(req.params.id);
+      if (!deleted) return res.status(404).json({ error: "Position not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete position" });
+    }
+  });
+
+  // Departments (for staff dropdown)
+  app.get("/api/departments", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const list = await storage.getDepartments();
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch departments" });
+    }
+  });
+
+  app.post("/api/departments", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const validatedData = insertDepartmentSchema.parse(req.body);
+      const department = await storage.createDepartment(validatedData);
+      res.status(201).json(department);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid department data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create department" });
+    }
+  });
+
+  app.patch("/api/departments/:id", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const department = await storage.updateDepartment(req.params.id, req.body);
+      if (!department) return res.status(404).json({ error: "Department not found" });
+      res.json(department);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update department" });
+    }
+  });
+
+  app.delete("/api/departments/:id", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const deleted = await storage.deleteDepartment(req.params.id);
+      if (!deleted) return res.status(404).json({ error: "Department not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete department" });
+    }
+  });
+
+  // HRM attendance/leaves/payroll routes - commented out
+  /*
   app.get("/api/attendance", async (req, res) => {
     try {
       const { date, employeeId } = req.query;
@@ -1352,6 +2635,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(attendance);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch attendance" });
+    }
+  });
+
+  app.get("/api/attendance/stats", async (req, res) => {
+    try {
+      const stats = await storage.getAttendanceStats();
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch attendance statistics" });
     }
   });
 
@@ -1391,7 +2683,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete attendance" });
     }
   });
+  */
 
+  // Leaves routes also part of HRM - commented out
+  /*
   app.get("/api/leaves", async (req, res) => {
     try {
       const { employeeId } = req.query;
@@ -1457,7 +2752,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete leave" });
     }
   });
+  */
 
+  // Payroll routes also part of HRM - commented out
+  /*
   app.get("/api/payroll", async (req, res) => {
     try {
       const { employeeId } = req.query;
@@ -1523,8 +2821,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete payroll" });
     }
   });
+  */
 
-  app.get("/api/staff-salaries", async (req, res) => {
+  app.get("/api/staff-salaries", requireAuth, async (req, res) => {
     try {
       const salaries = await storage.getStaffSalaries();
       res.json(salaries);
@@ -1533,7 +2832,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/staff-salaries/:id", async (req, res) => {
+  // Specific paths must be defined before /:id to avoid "with-employees", "summary", "export" being matched as id
+  app.get("/api/staff-salaries/with-employees", requireAuth, async (req, res) => {
+    try {
+      const { startDate, endDate, months: monthsParam } = req.query;
+      let startDateVal: Date | undefined;
+      let endDateVal: Date | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        const months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean).sort();
+        if (months.length > 0) {
+          const first = months[0].split("-").map(Number);
+          const last = months[months.length - 1].split("-").map(Number);
+          startDateVal = new Date(first[0], first[1] - 1, 1);
+          endDateVal = new Date(last[0], last[1], 0, 23, 59, 59, 999);
+        }
+      }
+      if (!startDateVal && startDate && typeof startDate === "string") {
+        const d = new Date(startDate);
+        if (!isNaN(d.getTime())) startDateVal = d;
+      }
+      if (!endDateVal && endDate && typeof endDate === "string") {
+        const d = new Date(endDate);
+        if (!isNaN(d.getTime())) endDateVal = d;
+      }
+      const salaries = await storage.getStaffSalariesWithEmployees(startDateVal, endDateVal);
+      res.json(salaries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch staff salaries with employees" });
+    }
+  });
+
+  app.get("/api/staff-salaries/export", requireAuth, async (req, res) => {
+    try {
+      const { startDate, endDate, months: monthsParam } = req.query;
+      let startDateVal: Date | undefined;
+      let endDateVal: Date | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        const months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean).sort();
+        if (months.length > 0) {
+          const first = months[0].split("-").map(Number);
+          const last = months[months.length - 1].split("-").map(Number);
+          startDateVal = new Date(first[0], first[1] - 1, 1);
+          endDateVal = new Date(last[0], last[1], 0, 23, 59, 59, 999);
+        }
+      }
+      if (!startDateVal && startDate && typeof startDate === "string") {
+        const d = new Date(startDate);
+        if (!isNaN(d.getTime())) startDateVal = d;
+      }
+      if (!endDateVal && endDate && typeof endDate === "string") {
+        const d = new Date(endDate);
+        if (!isNaN(d.getTime())) endDateVal = d;
+      }
+      const salaries = await storage.getStaffSalariesWithEmployees(startDateVal, endDateVal);
+      res.json({ salaries });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to export staff salaries" });
+    }
+  });
+
+  app.get("/api/staff-salaries/summary", requireAuth, async (req, res) => {
+    try {
+      const { startDate, endDate, months: monthsParam } = req.query;
+      let startDateVal: Date | undefined;
+      let endDateVal: Date | undefined;
+      if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
+        const months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean).sort();
+        if (months.length > 0) {
+          const first = months[0].split("-").map(Number);
+          const last = months[months.length - 1].split("-").map(Number);
+          startDateVal = new Date(first[0], first[1] - 1, 1);
+          endDateVal = new Date(last[0], last[1], 0, 23, 59, 59, 999);
+        }
+      }
+      if (!startDateVal && startDate && typeof startDate === "string") {
+        const d = new Date(startDate);
+        if (!isNaN(d.getTime())) startDateVal = d;
+      }
+      if (!endDateVal && endDate && typeof endDate === "string") {
+        const d = new Date(endDate);
+        if (!isNaN(d.getTime())) endDateVal = d;
+      }
+      const summary = await storage.getStaffSalarySummary(startDateVal, endDateVal);
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch salary summary" });
+    }
+  });
+
+  app.get("/api/staff-salaries/:id", requireAuth, async (req, res) => {
     try {
       const salary = await storage.getStaffSalary(req.params.id);
       if (!salary) {
@@ -1545,10 +2932,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/staff-salaries", async (req, res) => {
+  app.post("/api/staff-salaries", requirePermission("hrm.create"), async (req, res) => {
     try {
       const validatedData = insertStaffSalarySchema.parse(req.body);
       const salary = await storage.createStaffSalary(validatedData);
+      auditLog(req, { action: "create", entityType: "staff-salary", entityId: salary.id, description: `Staff salary released` });
       res.status(201).json(salary);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1558,24 +2946,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/staff-salaries/:id", async (req, res) => {
+  // Bulk release salaries for multiple employees
+  app.post("/api/staff-salaries/bulk-release", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const { salaries } = req.body;
+      if (!Array.isArray(salaries) || salaries.length === 0) {
+        return res.status(400).json({ error: "No salary data provided" });
+      }
+      
+      const results: { success: number; failed: number; errors: string[]; created: any[] } = { success: 0, failed: 0, errors: [], created: [] };
+      
+      for (const salaryData of salaries) {
+        try {
+          const validatedData = insertStaffSalarySchema.parse(salaryData);
+          const salary = await storage.createStaffSalary(validatedData);
+          results.success++;
+          results.created.push(salary);
+        } catch (err) {
+          results.failed++;
+          results.errors.push(`Employee ${salaryData.employeeId}: ${err instanceof Error ? err.message : "Invalid data"}`);
+        }
+      }
+      
+      auditLog(req, { action: "bulk-release", entityType: "staff-salary", description: `Bulk released ${results.success} salaries` });
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to bulk release salaries" });
+    }
+  });
+
+  app.patch("/api/staff-salaries/:id", requirePermission("hrm.edit"), async (req, res) => {
     try {
       const salary = await storage.updateStaffSalary(req.params.id, req.body);
       if (!salary) {
         return res.status(404).json({ error: "Staff salary not found" });
       }
+      auditLog(req, { action: "update", entityType: "staff-salary", entityId: salary.id, description: `Staff salary updated` });
       res.json(salary);
     } catch (error) {
       res.status(500).json({ error: "Failed to update staff salary" });
     }
   });
 
-  app.delete("/api/staff-salaries/:id", async (req, res) => {
+  app.delete("/api/staff-salaries/:id", requirePermission("hrm.delete"), async (req, res) => {
     try {
       const deleted = await storage.deleteStaffSalary(req.params.id);
       if (!deleted) {
         return res.status(404).json({ error: "Staff salary not found" });
       }
+      auditLog(req, { action: "delete", entityType: "staff-salary", entityId: req.params.id, description: `Staff salary deleted` });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete staff salary" });
@@ -1611,6 +3030,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertUserSchema.parse(req.body);
       const user = await storage.createUser(validatedData);
       const { password, ...userWithoutPassword } = user;
+      auditLog(req, { action: "create", entityType: "user", entityId: user.id, entityName: user.username, description: `User ${user.username} created` });
       res.status(201).json(userWithoutPassword);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1627,6 +3047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       const { password, ...userWithoutPassword } = user;
+      auditLog(req, { action: "update", entityType: "user", entityId: user.id, entityName: user.username, description: `User ${user.username} updated` });
       res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
@@ -1639,6 +3060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ error: "User not found" });
       }
+      auditLog(req, { action: "delete", entityType: "user", entityId: req.params.id, description: `User ${req.params.id} deleted` });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete user" });
@@ -1956,26 +3378,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/customers/bulk-delete", requirePermission("customers.delete"), async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "Invalid request. 'ids' must be a non-empty array." });
+      }
+
+      let deletedCount = 0;
+      const errors: string[] = [];
+      
+      for (const id of ids) {
+        try {
+          const deleted = await storage.deleteCustomer(id);
+          if (deleted) {
+            deletedCount++;
+          } else {
+            errors.push(`Customer ${id} not found or could not be deleted`);
+          }
+        } catch (error: any) {
+          console.error(`Error deleting customer ${id}:`, error);
+          errors.push(`Failed to delete customer ${id}: ${error.message}`);
+        }
+      }
+
+      if (deletedCount === 0 && errors.length > 0) {
+        return res.status(400).json({ 
+          success: false, 
+          deletedCount: 0, 
+          errors 
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        deletedCount,
+        ...(errors.length > 0 && { warnings: errors })
+      });
+    } catch (error: any) {
+      console.error("Error bulk deleting customers:", error);
+      res.status(500).json({ error: "Failed to delete customers", message: error.message });
+    }
+  });
+
   app.get("/api/due/payments", async (req, res) => {
     try {
       const customerId = req.query.customerId as string | undefined;
       const branchId = req.query.branchId as string | undefined;
-      const payments = await storage.getDuePayments(customerId, branchId);
-      res.json(payments);
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const offset = page && limit ? (page - 1) * limit : undefined;
+      
+      const result = await storage.getDuePayments(customerId, branchId, limit, offset);
+      res.json(result);
     } catch (error) {
+      console.error("GET /api/due/payments error:", error);
       res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  // Payment slip upload endpoint
+  app.post("/api/due/payments/upload-slips", requirePermission("due.create"), uploadMultiple.array("slips", 10), async (req, res) => {
+    try {
+      if (!req.files || (Array.isArray(req.files) && req.files.length === 0)) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
+
+      const files = Array.isArray(req.files) ? req.files : [];
+      const fileUrls = files.map((file: any) => `/uploads/${file.filename}`);
+      
+      res.json({ urls: fileUrls });
+    } catch (error: any) {
+      if (error.message === "Only image files are allowed") {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Failed to upload payment slips" });
     }
   });
 
   app.post("/api/due/payments", requirePermission("due.create"), async (req, res) => {
     try {
-      const { allocations, ...paymentData } = req.body;
+      const { allocations, paymentSlips, ...paymentData } = req.body;
       
       if (!allocations || !Array.isArray(allocations)) {
         return res.status(400).json({ error: "Allocations array is required" });
       }
       
-      const validatedPayment = insertDuePaymentSchema.parse(paymentData);
+      // Convert paymentSlips array to JSON string if provided
+      const paymentDataWithSlips = {
+        ...paymentData,
+        ...(paymentSlips && Array.isArray(paymentSlips) && paymentSlips.length > 0 
+          ? { paymentSlips: JSON.stringify(paymentSlips) } 
+          : {}),
+      };
+      
+      const validatedPayment = insertDuePaymentSchema.parse(paymentDataWithSlips);
       
       const payment = await storage.recordPaymentWithAllocations(
         validatedPayment,
@@ -2000,13 +3497,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/due/payments/:id", requirePermission("due.edit"), async (req, res) => {
+    try {
+      const updates = req.body;
+      const payment = await storage.updateDuePayment(req.params.id, updates);
+      if (!payment) {
+        return res.status(404).json({ error: "Due payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid payment data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update due payment" });
+    }
+  });
+
+  app.delete("/api/due/payments/:id", requirePermission("due.delete"), async (req, res) => {
+    try {
+      const deleted = await storage.deleteDuePayment(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Due payment not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete due payment" });
+    }
+  });
+
+  app.post("/api/due/payments/bulk-delete", requirePermission("due.delete"), async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "IDs array is required" });
+      }
+      
+      let deletedCount = 0;
+      const errors: string[] = [];
+      
+      for (const id of ids) {
+        try {
+          const deleted = await storage.deleteDuePayment(id);
+          if (deleted) {
+            deletedCount++;
+          } else {
+            errors.push(`Due payment ${id} not found or could not be deleted`);
+          }
+        } catch (error: any) {
+          console.error(`Error deleting due payment ${id}:`, error);
+          errors.push(`Failed to delete due payment ${id}: ${error.message}`);
+        }
+      }
+
+      if (deletedCount === 0 && errors.length > 0) {
+        return res.status(400).json({ 
+          success: false, 
+          deletedCount: 0, 
+          errors 
+        });
+      }
+      
+      res.json({ 
+        success: true, 
+        deletedCount,
+        ...(errors.length > 0 && { warnings: errors })
+      });
+    } catch (error: any) {
+      console.error("Error bulk deleting due payments:", error);
+      res.status(500).json({ error: "Failed to delete due payments", message: error.message });
+    }
+  });
+
   app.get("/api/due/customers-summary", async (req, res) => {
     try {
       const branchId = req.query.branchId as string | undefined;
-      const summary = await storage.getAllCustomersDueSummary(branchId);
-      res.json(summary);
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      const offset = page && limit ? (page - 1) * limit : undefined;
+      const search = req.query.search as string | undefined;
+      const statusFilter = req.query.statusFilter as string | undefined;
+      const minAmount = req.query.minAmount ? parseFloat(req.query.minAmount as string) : undefined;
+      const maxAmount = req.query.maxAmount ? parseFloat(req.query.maxAmount as string) : undefined;
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+      
+      const result = await storage.getAllCustomersDueSummary(
+        branchId, 
+        limit, 
+        offset,
+        search,
+        statusFilter,
+        minAmount,
+        maxAmount,
+        dateFrom,
+        dateTo
+      );
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch customers summary" });
+    }
+  });
+
+  app.get("/api/due/customers-summary/stats", async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+      const search = (req.query.search as string)?.trim() || undefined;
+      const statusFilter = (req.query.statusFilter as string) && req.query.statusFilter !== "all" ? req.query.statusFilter as string : undefined;
+      const minNum = req.query.minAmount != null && req.query.minAmount !== "" ? parseFloat(req.query.minAmount as string) : NaN;
+      const maxNum = req.query.maxAmount != null && req.query.maxAmount !== "" ? parseFloat(req.query.maxAmount as string) : NaN;
+      const minAmount = !isNaN(minNum) ? minNum : undefined;
+      const maxAmount = !isNaN(maxNum) ? maxNum : undefined;
+      const stats = await storage.getCustomersDueSummaryStats(branchId, dateFrom, dateTo, search, statusFilter, minAmount, maxAmount);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch customers summary stats" });
+    }
+  });
+
+  // Export: all customers + all due records (no pagination), for Excel/CSV/PDF export
+  app.get("/api/due/export", async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const search = req.query.search as string | undefined;
+      const statusFilter = req.query.statusFilter as string | undefined;
+      const minAmount = req.query.minAmount ? parseFloat(req.query.minAmount as string) : undefined;
+      const maxAmount = req.query.maxAmount ? parseFloat(req.query.maxAmount as string) : undefined;
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+
+      // Get ALL customers matching filters (no limit/offset)
+      const { summaries } = await storage.getAllCustomersDueSummary(
+        branchId,
+        undefined,
+        undefined,
+        search,
+        statusFilter,
+        minAmount,
+        maxAmount,
+        dateFrom,
+        dateTo
+      );
+
+      // For each customer, get ALL their due/payment transactions (limit=0 means all)
+      const transactionsByCustomer: Record<string, Array<{ id: string; type: "due" | "payment"; date: Date; amount: number; description: string; paymentMethod?: string; order?: any; payment?: any }>> = {};
+      for (const s of summaries) {
+        const { transactions } = await storage.getCustomerTransactionsPaginated(
+          s.customer.id,
+          branchId,
+          0, // limit 0 = return all
+          0,
+          undefined,
+          dateFrom,
+          dateTo
+        );
+        transactionsByCustomer[s.customer.id] = transactions;
+      }
+
+      res.json({ summaries, transactionsByCustomer });
+    } catch (error) {
+      console.error("Error exporting due data:", error);
+      res.status(500).json({ error: "Failed to export due data" });
     }
   });
 
@@ -2016,6 +3668,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(summary);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch customer summary" });
+    }
+  });
+
+  app.get("/api/customers/:id/orders/paginated", async (req, res) => {
+    try {
+      const { 
+        branchId,
+        page = "1",
+        limit = "10",
+        search,
+        paymentStatus,
+        dateFrom,
+        dateTo
+      } = req.query;
+      
+      const pageNum = parseInt(page as string, 10);
+      const limitNum = parseInt(limit as string, 10);
+      const offset = (pageNum - 1) * limitNum;
+      
+      const result = await storage.getCustomerOrdersPaginated(
+        req.params.id,
+        branchId as string | undefined,
+        limitNum,
+        offset,
+        search as string | undefined,
+        paymentStatus as string | undefined,
+        dateFrom ? new Date(dateFrom as string) : undefined,
+        dateTo ? new Date(dateTo as string) : undefined
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching customer orders:", error);
+      res.status(500).json({ error: "Failed to fetch customer orders" });
+    }
+  });
+
+  app.get("/api/customers/:id/transactions/paginated", async (req, res) => {
+    try {
+      const { 
+        branchId,
+        page = "1",
+        limit = "10",
+        search,
+        dateFrom,
+        dateTo
+      } = req.query;
+      
+      const pageNum = parseInt(page as string, 10);
+      const limitNum = parseInt(limit as string, 10);
+      const offset = (pageNum - 1) * limitNum;
+      
+      const result = await storage.getCustomerTransactionsPaginated(
+        req.params.id,
+        branchId as string | undefined,
+        limitNum,
+        offset,
+        search as string | undefined,
+        dateFrom ? new Date(dateFrom as string) : undefined,
+        dateTo ? new Date(dateTo as string) : undefined
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching customer transactions:", error);
+      res.status(500).json({ error: "Failed to fetch customer transactions" });
     }
   });
 
@@ -2063,10 +3781,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/settings", async (req, res) => {
+  app.put("/api/settings", requireAuth, async (req, res) => {
     try {
       const validatedData = insertSettingsSchema.partial().parse(req.body);
       const settings = await storage.updateSettings(validatedData);
+      auditLog(req, { action: "update", entityType: "settings", entityName: "Application settings", description: "Settings updated" });
       res.json(settings);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2087,8 +3806,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (action) filters.action = action as string;
       if (startDate) filters.startDate = new Date(startDate as string);
       if (endDate) filters.endDate = new Date(endDate as string);
-      if (limit) filters.limit = parseInt(limit as string, 10);
-      if (offset) filters.offset = parseInt(offset as string, 10);
+      filters.limit = limit != null ? parseInt(String(limit), 10) : 50;
+      filters.offset = offset != null ? parseInt(String(offset), 10) : 0;
 
       const result = await storage.getAuditLogs(filters);
       res.json(result);
@@ -2098,6 +3817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  webSocketServer = createWebSocketServer(httpServer);
 
   return httpServer;
 }

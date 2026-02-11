@@ -1,18 +1,20 @@
 import { useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient, apiRequest } from "./lib/queryClient";
+import notificationSound from "@/assets/sound/notification.wav";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthWrapper } from "@/components/auth-wrapper";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { BranchProvider } from "@/contexts/BranchContext";
-import { BranchSelector } from "@/components/branch-selector";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Grid3x3, LogOut, User, Key, ChevronDown } from "lucide-react";
+import { Plus, Grid3x3, LogOut, User, Key, ChevronDown, Globe, QrCode } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +33,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QRMenuOrdersModal } from "@/components/qr-menu-orders-modal";
+import { WebOrdersModal } from "@/components/web-orders-modal";
+import { NewWebOrderAlert } from "@/components/new-web-order-alert";
 import { DraftListModal } from "@/components/draft-list-modal";
+import { useWebOrderSocket } from "@/hooks/use-web-order-socket";
 import { ReceiptPrintModal } from "@/components/receipt-print-modal";
 import { useToast } from "@/hooks/use-toast";
 import type { Order, Settings } from "@shared/schema";
@@ -40,53 +45,53 @@ import Dashboard from "@/pages/dashboard";
 import Tables from "@/pages/tables";
 import SalesManage from "@/pages/sales";
 import ExpenseManage from "@/pages/expenses";
+import StaffSalary from "@/pages/staff-salary";
 import ItemManage from "@/pages/items";
 import PurchaseManage from "@/pages/purchases";
 import Inventory from "@/pages/inventory";
-import HRM from "@/pages/hrm";
 import Reports from "@/pages/reports";
 import BankStatement from "@/pages/bank-statement";
 import DueManagement from "@/pages/due-management";
+import CustomerProfile from "@/pages/customer-profile";
 import Settings from "@/pages/settings";
-import Branches from "@/pages/branches";
+import Hardware from "@/pages/hardware";
 import Login from "@/pages/login";
 import NotFound from "@/pages/not-found";
+import OrderPage from "@/pages/order";
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/order" component={OrderPage} />
+      <Route path="/menu" component={OrderPage} />
       <Route path="/" component={POS} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/tables" component={Tables} />
       <Route path="/sales" component={SalesManage} />
+      <Route path="/orders" component={SalesManage} />
       <Route path="/expenses" component={ExpenseManage} />
+      <Route path="/staff-salary" component={StaffSalary} />
       <Route path="/items" component={ItemManage} />
       <Route path="/purchases" component={PurchaseManage} />
       <Route path="/inventory" component={Inventory} />
-      <Route path="/hrm" component={HRM} />
       <Route path="/reports" component={Reports} />
       <Route path="/bank-statement" component={BankStatement} />
       <Route path="/due-management" component={DueManagement} />
-      <Route path="/branches" component={Branches} />
+      <Route path="/customer-profile/:id" component={CustomerProfile} />
+      <Route path="/hardware" component={Hardware} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-interface AuthUser {
-  id: string;
-  username: string;
-  fullName: string;
-  email: string | null;
-  role: string;
-}
-
 function AppHeader() {
   const [location, setLocation] = useLocation();
   const isPOSPage = location === "/";
   const [qrOrdersOpen, setQrOrdersOpen] = useState(false);
+  const [webOrdersOpen, setWebOrdersOpen] = useState(false);
+  const [newWebOrder, setNewWebOrder] = useState<any>(null);
   const [draftListModalOpen, setDraftListModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
@@ -96,15 +101,38 @@ function AppHeader() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const { toast } = useToast();
 
-  const { data: user } = useQuery<AuthUser>({
-    queryKey: ["/api/auth/session"],
+  // Notification sound for new web orders
+  const playNotificationSound = () => {
+    try {
+      const audio = new Audio(notificationSound);
+      audio.volume = 0.6;
+      audio.play().catch((error) => {
+        console.error("Failed to play notification sound:", error);
+      });
+    } catch (error) {
+      console.error("Failed to initialize notification sound:", error);
+    }
+  };
+
+  // WebSocket listener for new web orders (single store; no branch filter)
+  useWebOrderSocket((order) => {
+    playNotificationSound();
+    setNewWebOrder(order);
+    toast({
+      title: "New Web Order!",
+      description: `Order #${order.orderNumber} from ${order.customerName || "a customer"}`,
+    });
   });
+
+  const { user } = useAuth();
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest("POST", "/api/auth/logout", {});
     },
     onSuccess: () => {
+      // Clear the session query cache
+      queryClient.setQueryData(["/api/auth/session"], null);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
       setLocation("/login");
       toast({
@@ -116,6 +144,10 @@ function AppHeader() {
 
   const { data: orders = [] } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+  });
+
+  const { data: webOrders = [] } = useQuery<Order[]>({
+    queryKey: ["/api/orders/web"],
   });
 
   const draftOrders = orders.filter((order) => order.status === "draft");
@@ -229,9 +261,6 @@ function AppHeader() {
     <>
       <header className="min-h-16 border-b border-border bg-gradient-to-r from-primary via-secondary to-accent px-2 sm:px-4 md:px-6 py-2 md:py-0 flex flex-wrap items-center gap-2 sm:gap-4">
         <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white hover:bg-white/20 shrink-0" />
-        <div className="min-w-0 shrink-0">
-          <BranchSelector />
-        </div>
         <div className="flex-1 min-w-0" />
         {isPOSPage && (
           <div className="flex gap-1 sm:gap-2 flex-wrap shrink-0">
@@ -254,6 +283,46 @@ function AppHeader() {
               <Grid3x3 className="w-4 h-4 shrink-0" />
               <span className="hidden md:inline">QR Menu Orders</span>
               <span className="md:hidden">QR Orders</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-1 sm:gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30 shrink-0 relative"
+              onClick={() => setWebOrdersOpen(true)}
+              data-testid="button-web-orders"
+            >
+              <Globe className="w-4 h-4 shrink-0" />
+              <span className="hidden md:inline">Web Orders</span>
+              <span className="md:hidden">Web</span>
+              {webOrders.length > 0 && (
+                <Badge variant="secondary" className="ml-1 bg-white text-primary shrink-0" data-testid="badge-web-orders-count">
+                  {webOrders.length}
+                </Badge>
+              )}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-1 sm:gap-2 bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30 shrink-0"
+              onClick={async () => {
+                try {
+                  const { default: QRCode } = await import("qrcode");
+                  const orderUrl = `${window.location.origin}/menu`;
+                  const dataUrl = await QRCode.toDataURL(orderUrl, { width: 256, margin: 2 });
+                  const a = document.createElement("a");
+                  a.href = dataUrl;
+                  a.download = "web-order-qr.png";
+                  a.click();
+                  toast({ title: "QR downloaded", description: "Customer can scan to open the order page" });
+                } catch (e) {
+                  toast({ title: "Error", description: "Failed to generate QR code", variant: "destructive" });
+                }
+              }}
+              data-testid="button-download-web-qr"
+              title="Download QR for customer web ordering"
+            >
+              <QrCode className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">QR</span>
             </Button>
             <Button 
               variant="outline" 
@@ -311,6 +380,8 @@ function AppHeader() {
         </div>
       </header>
       <QRMenuOrdersModal open={qrOrdersOpen} onOpenChange={setQrOrdersOpen} />
+      <WebOrdersModal open={webOrdersOpen} onOpenChange={setWebOrdersOpen} />
+      <NewWebOrderAlert order={newWebOrder} open={!!newWebOrder} onClose={() => setNewWebOrder(null)} />
       <DraftListModal
         open={draftListModalOpen}
         onClose={() => setDraftListModalOpen(false)}
@@ -441,10 +512,23 @@ function AuthenticatedApp() {
     "--sidebar-width-icon": "3rem",
   };
 
+  // Login page: no sidebar/header
   if (location === "/login") {
     return <Router />;
   }
 
+  // Customer portal (public menu/order): full-screen, no sidebar or branch header
+  const isCustomerPortal = location === "/order" || location.startsWith("/order?") || location === "/menu" || location.startsWith("/menu?");
+  if (isCustomerPortal) {
+    return (
+      <>
+        <DocumentMetadata />
+        <Router />
+      </>
+    );
+  }
+
+  // Staff POS: sidebar + header
   return (
     <SidebarProvider defaultOpen={true} style={style as React.CSSProperties}>
       <DocumentMetadata />
@@ -465,11 +549,15 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <BranchProvider>
-          <AuthWrapper>
-            <AuthenticatedApp />
-          </AuthWrapper>
-        </BranchProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <BranchProvider>
+              <AuthWrapper>
+                <AuthenticatedApp />
+              </AuthWrapper>
+            </BranchProvider>
+          </AuthProvider>
+        </ThemeProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

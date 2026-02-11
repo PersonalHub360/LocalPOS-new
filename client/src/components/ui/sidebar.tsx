@@ -76,25 +76,10 @@ function SidebarProvider({
   const [openTablet, setOpenTablet] = React.useState(false)
 
   // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
-  // Initialize: on desktop, default to open unless cookie says otherwise
+  // On reload we always default to open on desktop (do not persist closed state).
   const [_open, _setOpen] = React.useState(() => {
-    // Check if we're on desktop (window width check)
     const isDesktopInitial = typeof window !== 'undefined' && window.innerWidth >= 1280
-    const cookieValue = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
-    
-    if (isDesktopInitial) {
-      // On desktop: if cookie exists, use it; otherwise use defaultOpen (true)
-      if (cookieValue) {
-        return cookieValue.split("=")[1] === "true"
-      }
-      return defaultOpen
-    } else {
-      // On smaller screens: always start closed
-      return false
-    }
+    return isDesktopInitial ? defaultOpen : false
   })
   const open = openProp ?? _open
   const setOpen = React.useCallback(
@@ -105,37 +90,21 @@ function SidebarProvider({
       } else {
         _setOpen(openState)
       }
-
-      // This sets the cookie to keep the sidebar state.
+      // Optional: persist to cookie so resize respects last toggle (sidebar still defaults open on full reload)
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
   )
 
-  // Update open state when desktop breakpoint changes
+  // On desktop breakpoint change: default to open so sidebar is open after reload/resize to desktop.
   React.useEffect(() => {
     if (isDesktop) {
-      // On desktop: if defaultOpen is true, always open it
-      // This ensures sidebar opens by default on desktop
-      if (defaultOpen) {
-        setOpen(true)
-      } else {
-        // defaultOpen is false, respect cookie
-        const cookieValue = document.cookie
-          .split("; ")
-          .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
-        if (cookieValue) {
-          setOpen(cookieValue.split("=")[1] === "true")
-        } else {
-          setOpen(false)
-        }
-      }
+      setOpen(defaultOpen)
     } else {
-      // On smaller screens, close by default
       setOpen(false)
       setOpenTablet(false)
     }
-  }, [isDesktop, defaultOpen, setOpen])
+  }, [isDesktop, defaultOpen])
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {

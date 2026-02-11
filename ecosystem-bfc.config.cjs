@@ -13,7 +13,7 @@ module.exports = {
     // See bfcpos.service for environment configuration
     env_production: {
       NODE_ENV: 'production',
-      PORT: 7000,
+      PORT: 7050,
     },
     
     // Restart policy

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, ReactNode } from "react";
 
 interface BranchContextType {
   selectedBranchId: string | null;
@@ -7,21 +7,10 @@ interface BranchContextType {
 
 const BranchContext = createContext<BranchContextType | undefined>(undefined);
 
+// Branches feature removed: single store only; selectedBranchId always null.
 export function BranchProvider({ children }: { children: ReactNode }) {
-  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(() => {
-    return localStorage.getItem("selectedBranchId") || null;
-  });
-
-  useEffect(() => {
-    if (selectedBranchId) {
-      localStorage.setItem("selectedBranchId", selectedBranchId);
-    } else {
-      localStorage.removeItem("selectedBranchId");
-    }
-  }, [selectedBranchId]);
-
   return (
-    <BranchContext.Provider value={{ selectedBranchId, setSelectedBranchId }}>
+    <BranchContext.Provider value={{ selectedBranchId: null, setSelectedBranchId: () => {} }}>
       {children}
     </BranchContext.Provider>
   );

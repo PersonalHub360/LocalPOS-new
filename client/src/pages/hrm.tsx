@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Eye, Edit2, Trash2, Users, Calendar, FileText, DollarSign, BarChart3, Upload, Download, FileSpreadsheet, Search, Calendar as CalendarIcon } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
-import { usePermissions } from "@/hooks/use-permissions";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -33,7 +32,6 @@ export default function HRM() {
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const { toast } = useToast();
-  const { hasPermission } = usePermissions();
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -564,12 +562,10 @@ export default function HRM() {
                         />
                       </label>
                     </Button>
-                    {hasPermission("hrm.create") && (
-                      <Button onClick={() => setIsAddDialogOpen(true)} data-testid="button-add-employee">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Employee
-                      </Button>
-                    )}
+                    <Button onClick={() => setIsAddDialogOpen(true)} data-testid="button-add-employee">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Employee
+                    </Button>
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">

@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/use-permissions";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { AddEditUserDialog } from "@/components/add-edit-user-dialog";
 import type { Settings, User, Role, Permission } from "@shared/schema";
 import {
@@ -54,6 +55,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import type { AuditLog } from "@shared/schema";
+import { buildThemeFromSettings, applyThemeToDocument, COLOR_THEMES } from "@/contexts/ThemeContext";
+
+// Stable empty array so disabled role-permissions query doesn't cause new reference every render (infinite loop)
+const EMPTY_PERMISSIONS: Permission[] = [];
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -78,6 +83,7 @@ export default function SettingsPage() {
   });
 
   const [formData, setFormData] = useState<Partial<Settings>>({});
+  const [settingsTab, setSettingsTab] = useState("metadata");
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -111,15 +117,25 @@ export default function SettingsPage() {
     }
   }, [settings]);
 
-  // Load role permissions when role is selected
-  const { data: selectedRolePermissions = [] } = useQuery<Permission[]>({
+  // Live theme preview: when on Theme tab apply formData; when on other tab apply saved settings
+  useEffect(() => {
+    if (settingsTab === "theme") {
+      applyThemeToDocument(buildThemeFromSettings(formData));
+    } else if (settings) {
+      applyThemeToDocument(buildThemeFromSettings(settings));
+    }
+  }, [settingsTab, formData, settings]);
+
+  // Load role permissions when role is selected (use stable default to avoid infinite effect loop when query is disabled)
+  const { data: rolePermissionsData } = useQuery<Permission[]>({
     queryKey: [`/api/roles/${selectedRoleForPermissions}/permissions`],
     enabled: !!selectedRoleForPermissions,
     retry: 1,
   });
+  const selectedRolePermissions = selectedRoleForPermissions ? (rolePermissionsData ?? EMPTY_PERMISSIONS) : EMPTY_PERMISSIONS;
 
   useEffect(() => {
-    if (selectedRolePermissions && selectedRolePermissions.length > 0) {
+    if (selectedRolePermissions.length > 0) {
       setRolePermissions(new Set(selectedRolePermissions.filter(p => p && p.id).map(p => p.id)));
     } else {
       setRolePermissions(new Set());
@@ -271,8 +287,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="metadata" className="space-y-4 md:space-y-6">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 h-auto p-1">
+        <Tabs value={settingsTab} onValueChange={setSettingsTab} className="space-y-4 md:space-y-6">
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 h-auto p-1">
             <TabsTrigger value="metadata" className="flex items-center gap-2" data-testid="tab-metadata">
               <Globe className="w-4 h-4" />
               <span>Metadata</span>
@@ -296,6 +312,10 @@ export default function SettingsPage() {
             <TabsTrigger value="theme" className="flex items-center gap-2" data-testid="tab-theme">
               <Palette className="w-4 h-4" />
               <span>Theme</span>
+            </TabsTrigger>
+            <TabsTrigger value="receipt" className="flex items-center gap-2" data-testid="tab-receipt">
+              <Receipt className="w-4 h-4" />
+              <span>Receipt</span>
             </TabsTrigger>
             <TabsTrigger value="activity-logs" className="flex items-center gap-2" data-testid="tab-activity-logs">
               <Bell className="w-4 h-4" />
@@ -849,11 +869,108 @@ export default function SettingsPage() {
           <TabsContent value="receipt" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Receipt & Invoice Settings</CardTitle>
-                <CardDescription>Customize receipt appearance and settings</CardDescription>
+                <CardTitle>Company Details for Receipts</CardTitle>
+                <CardDescription>Configure company information to display on receipts. These fields are required for printing receipts.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="business-name-receipt">Company Name <span className="text-red-500">*</span></Label>
+                    <Input 
+                      id="business-name-receipt" 
+                      value={formData.businessName || ""} 
+                      onChange={(e) => updateField("businessName", e.target.value)}
+                      placeholder="Enter company name"
+                      data-testid="input-business-name-receipt" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This will appear at the top of all receipts
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="company-address-receipt">Company Address <span className="text-red-500">*</span></Label>
+                    <Textarea 
+                      id="company-address-receipt" 
+                      value={formData.address || ""} 
+                      onChange={(e) => updateField("address", e.target.value)}
+                      rows={3}
+                      placeholder="Enter company address"
+                      data-testid="input-company-address-receipt" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Company address to display on receipts
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="receipt-logo-upload">Company Logo</Label>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input 
+                          id="receipt-logo-upload" 
+                          type="file" 
+                          accept="image/*"
+                          data-testid="input-receipt-logo-upload" 
+                          className="cursor-pointer"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const formData = new FormData();
+                              formData.append("file", file);
+                              try {
+                                const response = await fetch("/api/upload", {
+                                  method: "POST",
+                                  body: formData,
+                                });
+                                if (response.ok) {
+                                  const data = await response.json();
+                                  updateField("receiptLogo", data.url);
+                                  toast({
+                                    title: "Success",
+                                    description: "Logo uploaded successfully",
+                                  });
+                                } else {
+                                  throw new Error("Upload failed");
+                                }
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to upload logo",
+                                  variant: "destructive",
+                                });
+                              }
+                            }
+                            e.target.value = "";
+                          }}
+                        />
+                      </div>
+                      {formData.receiptLogo && (
+                        <div className="mt-2">
+                          <img 
+                            src={formData.receiptLogo} 
+                            alt="Receipt Logo" 
+                            className="max-w-[200px] max-h-[100px] object-contain border rounded"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => updateField("receiptLogo", "")}
+                            className="mt-2"
+                          >
+                            Remove Logo
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload your company logo for receipts (PNG, JPG, or SVG). Recommended size: 200x100px
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   <div>
                     <Label htmlFor="invoice-prefix">Invoice Number Prefix</Label>
                     <Input 
@@ -884,20 +1001,6 @@ export default function SettingsPage() {
                       rows={3} 
                       data-testid="input-receipt-footer" 
                     />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="receipt-logo">Receipt Logo</Label>
-                    <Input 
-                      id="receipt-logo" 
-                      type="file" 
-                      accept="image/*"
-                      data-testid="input-receipt-logo" 
-                      className="cursor-pointer"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Upload your business logo for receipts (PNG, JPG, or SVG)
-                    </p>
                   </div>
 
                   <Separator />
@@ -937,6 +1040,19 @@ export default function SettingsPage() {
                       data-testid="switch-tax-breakdown" 
                     />
                   </div>
+                </div>
+
+                <Separator />
+
+                <div className="flex justify-end">
+                  <Button 
+                    onClick={handleSave} 
+                    disabled={updateMutation.isPending}
+                    data-testid="button-save-receipt"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {updateMutation.isPending ? "Saving..." : "Save Receipt Settings"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1213,102 +1329,6 @@ export default function SettingsPage() {
                     </TableBody>
                   </Table>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="printer" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Printer & Hardware Setup</CardTitle>
-                <CardDescription>Configure POS hardware devices</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="receipt-printer">Receipt Printer</Label>
-                    <Select 
-                      value={formData.receiptPrinter || "default"} 
-                      onValueChange={(value) => updateField("receiptPrinter", value)}
-                    >
-                      <SelectTrigger id="receipt-printer" data-testid="select-receipt-printer">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Default Printer</SelectItem>
-                        <SelectItem value="epson-tm">Epson TM-T88</SelectItem>
-                        <SelectItem value="star-tsp">Star TSP143</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="kitchen-printer">Kitchen Printer (KOT)</Label>
-                    <Select 
-                      value={formData.kitchenPrinter || "none"} 
-                      onValueChange={(value) => updateField("kitchenPrinter", value)}
-                    >
-                      <SelectTrigger id="kitchen-printer" data-testid="select-kitchen-printer">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="epson-tm">Epson TM-T88</SelectItem>
-                        <SelectItem value="star-tsp">Star TSP143</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="paper-size">Paper Size</Label>
-                    <Select 
-                      value={formData.paperSize || "80mm"} 
-                      onValueChange={(value) => updateField("paperSize", value)}
-                    >
-                      <SelectTrigger id="paper-size" data-testid="select-paper-size">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="58mm">58mm</SelectItem>
-                        <SelectItem value="80mm">80mm</SelectItem>
-                        <SelectItem value="a4">A4</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Enable Barcode Scanner</Label>
-                      <p className="text-sm text-muted-foreground">Connect barcode scanner device</p>
-                    </div>
-                    <Switch 
-                      checked={formData.enableBarcodeScanner === "true"}
-                      onCheckedChange={(checked) => updateField("enableBarcodeScanner", checked ? "true" : "false")}
-                      data-testid="switch-barcode-scanner" 
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Enable Cash Drawer</Label>
-                      <p className="text-sm text-muted-foreground">Auto-open cash drawer on payment</p>
-                    </div>
-                    <Switch 
-                      checked={formData.enableCashDrawer === "true"}
-                      onCheckedChange={(checked) => updateField("enableCashDrawer", checked ? "true" : "false")}
-                      data-testid="switch-cash-drawer" 
-                    />
-                  </div>
-
-                  <div>
-                    <Button variant="outline" className="w-full" data-testid="button-test-printer">
-                      <Printer className="w-4 h-4 mr-2" />
-                      Test Print
-                    </Button>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1935,26 +1955,87 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Customization & Themes</CardTitle>
-                <CardDescription>Customize the appearance of your POS system</CardDescription>
+                <CardDescription>Customize the appearance of your POS system. Changes preview immediately; click Save theme to keep.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="color-theme">Color Theme</Label>
+                    <Label className="block mb-3">Color Theme</Label>
+                    <p className="text-sm text-muted-foreground mb-3">Click a theme to preview. Changes apply immediately on this page; save to keep.</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" data-testid="theme-preview-grid">
+                      {Object.entries(COLOR_THEMES).map(([key, theme]) => {
+                        const isSelected = (formData.colorTheme || "orange") === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              updateField("colorTheme", key);
+                              updateField("primaryColor", ""); // use preset
+                            }}
+                            className={cn(
+                              "flex flex-col items-center gap-2 rounded-lg border-2 p-3 transition-all hover:bg-muted/50",
+                              isSelected
+                                ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                                : "border-border"
+                            )}
+                            data-testid={`theme-${key}`}
+                          >
+                            <span
+                              className="h-10 w-10 rounded-full shrink-0 ring-2 ring-offset-2 ring-offset-background"
+                              style={{
+                                backgroundColor: `hsl(${theme.primary})`,
+                                ringColor: isSelected ? "hsl(var(--primary))" : "transparent",
+                              }}
+                              aria-hidden
+                            />
+                            <span className="text-sm font-medium capitalize">{theme.name}</span>
+                            {key === "orange" && (
+                              <span className="text-xs text-muted-foreground">Default</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="primary-color">Custom Primary Color</Label>
+                    <p className="text-sm text-muted-foreground mb-2">Override with a custom color (leave empty to use theme preset)</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        id="primary-color"
+                        value={formData.primaryColor && /^#[0-9A-Fa-f]{6}$/.test(formData.primaryColor) ? formData.primaryColor : "#ea580c"}
+                        onChange={(e) => updateField("primaryColor", e.target.value)}
+                        className="h-10 w-14 cursor-pointer rounded border border-input bg-transparent p-1"
+                        data-testid="input-primary-color"
+                      />
+                      <Input
+                        value={formData.primaryColor || ""}
+                        onChange={(e) => updateField("primaryColor", e.target.value)}
+                        placeholder="#ea580c"
+                        className="font-mono max-w-[140px]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="component-size">Component / Element Size</Label>
                     <Select 
-                      value={formData.colorTheme || "orange"} 
-                      onValueChange={(value) => updateField("colorTheme", value)}
+                      value={formData.componentSize || "medium"} 
+                      onValueChange={(value) => updateField("componentSize", value)}
                     >
-                      <SelectTrigger id="color-theme" data-testid="select-color-theme">
+                      <SelectTrigger id="component-size" data-testid="select-component-size">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="orange">Orange (Default)</SelectItem>
-                        <SelectItem value="blue">Blue</SelectItem>
-                        <SelectItem value="green">Green</SelectItem>
-                        <SelectItem value="purple">Purple</SelectItem>
+                        <SelectItem value="small">Small</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="large">Large</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-sm text-muted-foreground mt-1">Affects buttons, inputs, and card spacing app-wide</p>
                   </div>
 
                   <div>
@@ -2015,6 +2096,17 @@ export default function SettingsPage() {
                       data-testid="switch-animations" 
                     />
                   </div>
+
+                  <Separator />
+
+                  <Button
+                    onClick={handleSave}
+                    disabled={updateMutation.isPending}
+                    data-testid="button-save-theme"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {updateMutation.isPending ? "Saving…" : "Save theme"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

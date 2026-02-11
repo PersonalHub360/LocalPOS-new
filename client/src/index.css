@@ -205,9 +205,34 @@
 
 }
 
+/* Theme: compact mode and reduce motion (from Settings) — applied on html */
+[data-compact-mode="true"] .p-4,
+[data-compact-mode="true"] .px-4,
+[data-compact-mode="true"] .py-4 { padding: 0.5rem !important; }
+[data-compact-mode="true"] .p-6,
+[data-compact-mode="true"] .px-6,
+[data-compact-mode="true"] .py-6 { padding: 0.5rem !important; }
+[data-compact-mode="true"] .gap-2 { gap: 0.25rem !important; }
+[data-compact-mode="true"] .gap-4 { gap: 0.5rem !important; }
+[data-compact-mode="true"] .gap-6 { gap: 0.5rem !important; }
+[data-compact-mode="true"] .space-y-2 > * + * { margin-top: 0.25rem !important; }
+[data-compact-mode="true"] .space-y-4 > * + * { margin-top: 0.5rem !important; }
+[data-compact-mode="true"] .space-y-6 > * + * { margin-top: 0.5rem !important; }
+[data-compact-mode="true"] .space-x-2 > * + * { margin-left: 0.25rem !important; }
+[data-compact-mode="true"] .space-x-4 > * + * { margin-left: 0.5rem !important; }
+
+/* Disable animations when "Show animations" is off */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   body {

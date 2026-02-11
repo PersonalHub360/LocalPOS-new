@@ -1,6 +1,6 @@
 import * as React from "react"
 
-const DESKTOP_BREAKPOINT = 1280 // xl breakpoint
+const DESKTOP_BREAKPOINT = 1480 // POS order panel breakpoint (use 1480px not 1280px)
 
 export function useIsDesktop() {
   const [isDesktop, setIsDesktop] = React.useState<boolean | undefined>(undefined)

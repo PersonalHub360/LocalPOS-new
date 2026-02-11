@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -13,15 +14,64 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertProductSchema, insertCategorySchema, type Product, type Category } from "@shared/schema";
 import type { z } from "zod";
-import { Plus, Search, Download, Upload, Edit, Trash2, PackagePlus, FolderPlus, Utensils, Calendar, ImagePlus, X, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, Download, Upload, Edit, Trash2, PackagePlus, FolderPlus, Utensils, Calendar, ImagePlus, X, FileSpreadsheet, QrCode, Printer } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { QRCodeSVG } from "qrcode.react";
+import QRCode from "qrcode";
+import JsBarcode from "jsbarcode";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useDebounce } from "@/hooks/use-debounce";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import * as XLSX from 'xlsx';
 
 const UNIT_OPTIONS = ["piece", "kg", "gram", "ml", "litre", "plate", "serving", "bowl", "cup", "glass", "box"];
+
+// Barcode Display Component
+function BarcodeDisplay({ barcode, productName, price, settings }: { barcode: string; productName: string; price: string; settings?: any }) {
+  const barcodeSvgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (barcodeSvgRef.current) {
+      try {
+        JsBarcode(barcodeSvgRef.current, barcode, {
+          format: "CODE128",
+          width: 2,
+          height: 80,
+          displayValue: true,
+          fontSize: 14,
+        });
+      } catch (error) {
+        console.error("Failed to generate barcode:", error);
+      }
+    }
+  }, [barcode]);
+
+  return (
+    <>
+      <svg ref={barcodeSvgRef} className="max-w-full h-auto"></svg>
+      <p className="mt-4 text-sm font-mono text-muted-foreground">
+        {barcode}
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground text-center">
+        {productName}
+      </p>
+      <div className="mt-3 text-center">
+        <p className="text-sm font-semibold text-primary">
+          ${parseFloat(price).toFixed(2)} USD
+        </p>
+        {settings?.exchangeRate && (
+          <p className="text-xs text-muted-foreground">
+            {(parseFloat(price) * parseFloat(settings.exchangeRate)).toLocaleString('en-US', { maximumFractionDigits: 0 })} {settings?.secondaryCurrencySymbol || "៛"}
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
 
 const DATE_FILTER_OPTIONS = [
   { label: "All Time", value: "all" },
@@ -50,22 +100,84 @@ export default function ItemManage() {
   const [editingItem, setEditingItem] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  /** Multiple category filter: empty = all categories; otherwise show items in any of the selected categories. */
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [exporting, setExporting] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [qrCodeDialogOpen, setQrCodeDialogOpen] = useState(false);
+  const [selectedProductForQR, setSelectedProductForQR] = useState<Product | null>(null);
+  const [codeType, setCodeType] = useState<"qr" | "barcode">("qr");
+  const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
+  const [sizePrices, setSizePrices] = useState<Record<string, string>>({}); // Store size prices: { "S": "100", "M": "150", "L": "200" }
+  const [sizePurchasePrices, setSizePurchasePrices] = useState<Record<string, string>>({}); // Purchase cost per size when size pricing
+  const [sizeInputs, setSizeInputs] = useState<string[]>([]); // Available sizes: ["S", "M", "L"]
+  const [addSizeDialogOpen, setAddSizeDialogOpen] = useState(false);
+  const [newSizeInput, setNewSizeInput] = useState("");
+  const [enableSizePricing, setEnableSizePricing] = useState(false); // Toggle for size-based pricing
+  const [createMissingCategoriesOnImport, setCreateMissingCategoriesOnImport] = useState(true); // Create categories from Excel if not found
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
+  const { data: settings } = useQuery<any>({
+    queryKey: ["/api/settings"],
+  });
+
   const observerTarget = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Use infinite query for products with pagination
+  const getItemsDateRange = useCallback((): { dateFrom?: Date; dateTo?: Date } => {
+    if (selectedMonths.length > 0) {
+      const sorted = [...selectedMonths].sort();
+      const [y1, m1] = sorted[0].split("-").map(Number);
+      const [y2, m2] = sorted[sorted.length - 1].split("-").map(Number);
+      return {
+        dateFrom: new Date(y1, m1 - 1, 1),
+        dateTo: new Date(y2, m2, 0, 23, 59, 59, 999),
+      };
+    }
+    const now = new Date();
+    const y = now.getFullYear();
+    if (dateFilter === "today") {
+      const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return { dateFrom: t, dateTo: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59, 999) };
+    }
+    if (dateFilter === "yesterday") {
+      const t = new Date(now); t.setDate(t.getDate() - 1);
+      return { dateFrom: t, dateTo: new Date(t.getFullYear(), t.getMonth(), t.getDate(), 23, 59, 59, 999) };
+    }
+    if (dateFilter === "thisMonth") return { dateFrom: new Date(y, now.getMonth(), 1), dateTo: new Date(y, now.getMonth() + 1, 0, 23, 59, 59, 999) };
+    if (dateFilter === "lastMonth") return { dateFrom: new Date(y, now.getMonth() - 1, 1), dateTo: new Date(y, now.getMonth(), 0, 23, 59, 59, 999) };
+    if (dateFilter === "custom" && customDate) {
+      const d = new Date(customDate.getFullYear(), customDate.getMonth(), customDate.getDate());
+      return { dateFrom: d, dateTo: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999) };
+    }
+    if (["january","february","march","april","may","june","july","august","september","october","november","december"].includes(dateFilter)) {
+      const m = ["january","february","march","april","may","june","july","august","september","october","november","december"].indexOf(dateFilter);
+      return { dateFrom: new Date(y, m, 1), dateTo: new Date(y, m + 1, 0, 23, 59, 59, 999) };
+    }
+    return {};
+  }, [dateFilter, customDate, selectedMonths]);
+
+  const itemsListParamsString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearchQuery) params.append("search", debouncedSearchQuery);
+    if (selectedCategoryIds.length === 1) params.append("categoryId", selectedCategoryIds[0]);
+    const dateRange = getItemsDateRange();
+    if (dateRange.dateFrom) params.append("dateFrom", dateRange.dateFrom.toISOString());
+    if (dateRange.dateTo) params.append("dateTo", dateRange.dateTo.toISOString());
+    return params.toString();
+  }, [debouncedSearchQuery, selectedCategoryIds, getItemsDateRange]);
+
+  // Use infinite query for products with pagination (key includes params so month/date filter triggers refetch)
   const {
     data: productsData,
     fetchNextPage,
@@ -73,14 +185,11 @@ export default function ItemManage() {
     isFetchingNextPage,
     isLoading: productsLoading,
   } = useInfiniteQuery<{ products: Product[]; total: number }>({
-    queryKey: ["/api/products", { search: searchQuery, category: selectedCategory, dateFilter }],
+    queryKey: ["/api/products", itemsListParamsString],
     queryFn: async ({ pageParam = 0 }) => {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams(itemsListParamsString);
       params.append("limit", "50");
       params.append("offset", String(pageParam));
-      if (searchQuery) params.append("search", searchQuery);
-      if (selectedCategory !== "all") params.append("categoryId", selectedCategory);
-      
       const res = await fetch(`/api/products?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
@@ -122,13 +231,13 @@ export default function ItemManage() {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
-  }, [searchQuery, selectedCategory, dateFilter]);
+  }, [searchQuery, selectedCategoryIds, dateFilter]);
 
   const filteredProducts = allProducts.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesCategory = selectedCategory === "all" || product.categoryId === selectedCategory;
+    const matchesCategory = selectedCategoryIds.length === 0 || selectedCategoryIds.includes(product.categoryId);
     
     let matchesDate = true;
     const productDate = new Date(product.createdAt);
@@ -207,6 +316,11 @@ export default function ItemManage() {
       selectedDate.setHours(0, 0, 0, 0);
       productDate.setHours(0, 0, 0, 0);
       matchesDate = productDate.getTime() === selectedDate.getTime();
+    } else if (selectedMonths.length > 0) {
+      matchesDate = selectedMonths.some((m) => {
+        const [y, mo] = m.split("-").map(Number);
+        return productDate.getFullYear() === y && productDate.getMonth() + 1 === mo;
+      });
     }
 
     return matchesSearch && matchesCategory && matchesDate;
@@ -223,8 +337,12 @@ export default function ItemManage() {
       unit: "piece",
       description: "",
       quantity: "0",
+      sizePrices: undefined,
     },
   });
+
+  // Watch unit field
+  const selectedUnit = itemForm.watch("unit");
 
   const categoryForm = useForm<z.infer<typeof insertCategorySchema>>({
     resolver: zodResolver(insertCategorySchema),
@@ -382,12 +500,77 @@ export default function ItemManage() {
   });
 
   const handleItemSubmit = (data: z.infer<typeof insertProductSchema>) => {
+    const submitData = {
+      ...data,
+      // When size pricing is on, ignore single price/cost and use per-size values
+      ...(enableSizePricing && Object.keys(sizePrices).length > 0
+        ? { price: "0", purchaseCost: "", sizePrices, sizePurchasePrices: Object.keys(sizePurchasePrices).length > 0 ? sizePurchasePrices : null }
+        : { sizePrices: null, sizePurchasePrices: null }),
+    };
+    if (!submitData.sizePrices) (submitData as any).sizePurchasePrices = null;
     if (editingItem) {
-      updateItemMutation.mutate({ id: editingItem.id, data });
+      updateItemMutation.mutate({ id: editingItem.id, data: submitData });
     } else {
-      createItemMutation.mutate(data);
+      createItemMutation.mutate(submitData);
     }
   };
+
+  // Handle opening add size dialog
+  const handleAddSize = () => {
+    setNewSizeInput("");
+    setAddSizeDialogOpen(true);
+  };
+
+  // Handle confirming size addition
+  const handleConfirmAddSize = () => {
+    if (newSizeInput && newSizeInput.trim()) {
+      const trimmedSize = newSizeInput.trim().toUpperCase();
+      if (!sizeInputs.includes(trimmedSize)) {
+        setSizeInputs([...sizeInputs, trimmedSize]);
+        setSizePrices({ ...sizePrices, [trimmedSize]: "" });
+        setSizePurchasePrices({ ...sizePurchasePrices, [trimmedSize]: "" });
+        setAddSizeDialogOpen(false);
+        setNewSizeInput("");
+      } else {
+        toast({
+          title: "Size already exists",
+          description: `Size "${trimmedSize}" is already added`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Handle removing a size
+  const handleRemoveSize = (size: string) => {
+    const newSizes = sizeInputs.filter(s => s !== size);
+    const newPrices = { ...sizePrices };
+    const newPurchasePrices = { ...sizePurchasePrices };
+    delete newPrices[size];
+    delete newPurchasePrices[size];
+    setSizeInputs(newSizes);
+    setSizePrices(newPrices);
+    setSizePurchasePrices(newPurchasePrices);
+  };
+
+  // Handle size price change
+  const handleSizePriceChange = (size: string, price: string) => {
+    setSizePrices({ ...sizePrices, [size]: price });
+  };
+
+  const handleSizePurchasePriceChange = (size: string, cost: string) => {
+    setSizePurchasePrices({ ...sizePurchasePrices, [size]: cost });
+  };
+
+  // Reset size prices when size pricing is disabled
+  useEffect(() => {
+    if (!enableSizePricing) {
+      setSizePrices({});
+      setSizePurchasePrices({});
+      setSizeInputs([]);
+      itemForm.setValue("sizePrices", undefined);
+    }
+  }, [enableSizePricing, itemForm]);
 
   const handleCategorySubmit = (data: z.infer<typeof insertCategorySchema>) => {
     const categoryData = {
@@ -404,6 +587,14 @@ export default function ItemManage() {
   const handleEditItem = (item: Product) => {
     setEditingItem(item);
     setImagePreview(item.imageUrl || "");
+    const sizePricesData = item.sizePrices as Record<string, string> | null | undefined;
+    const sizePurchasePricesData = item.sizePurchasePrices as Record<string, string> | null | undefined;
+    const sizes = sizePricesData ? Object.keys(sizePricesData) : [];
+    const hasSizePricing = sizePricesData && Object.keys(sizePricesData).length > 0;
+    setSizeInputs(sizes);
+    setSizePrices(sizePricesData || {});
+    setSizePurchasePrices(sizePurchasePricesData || {});
+    setEnableSizePricing(hasSizePricing);
     itemForm.reset({
       name: item.name,
       price: item.price,
@@ -413,6 +604,7 @@ export default function ItemManage() {
       unit: item.unit,
       description: item.description || "",
       quantity: item.quantity,
+      sizePrices: sizePricesData || undefined,
     });
     setItemDialogOpen(true);
   };
@@ -429,6 +621,10 @@ export default function ItemManage() {
   const handleAddItemClick = () => {
     setEditingItem(null);
     setImagePreview("");
+    setSizePrices({});
+    setSizePurchasePrices({});
+    setSizeInputs([]);
+    setEnableSizePricing(false);
     itemForm.reset({
       name: "",
       price: "",
@@ -438,14 +634,13 @@ export default function ItemManage() {
       unit: "piece",
       description: "",
       quantity: "0",
+      sizePrices: undefined,
     });
     setItemDialogOpen(true);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processImageFile = (file: File | undefined) => {
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
       toast({
         title: "Invalid file",
@@ -454,7 +649,6 @@ export default function ItemManage() {
       });
       return;
     }
-
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
@@ -462,6 +656,29 @@ export default function ItemManage() {
       itemForm.setValue('imageUrl', base64String);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    processImageFile(e.target.files?.[0]);
+    e.target.value = "";
+  };
+
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingImage(false);
+    const file = e.dataTransfer.files?.[0];
+    processImageFile(file);
+  };
+  const handleImageDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingImage(true);
+  };
+  const handleImageDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingImage(false);
   };
 
   const handleRemoveImage = () => {
@@ -527,28 +744,55 @@ export default function ItemManage() {
     }
   };
 
-  const handleExport = () => {
-    const csvHeaders = "Name,Category,Purchase Cost,Sales Price,Unit,Quantity,Description,Created At\n";
-    const csvRows = filteredProducts.map(product => {
-      const category = categories.find(c => c.id === product.categoryId)?.name || "";
-      return `"${product.name}","${category}","${product.purchaseCost || ""}","${product.price}","${product.unit}","${product.quantity}","${product.description || ""}","${format(new Date(product.createdAt), "yyyy-MM-dd")}"`;
-    }).join("\n");
-    
-    const csv = csvHeaders + csvRows;
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `items-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-    
-    toast({
-      title: "Success",
-      description: "Items exported successfully",
-    });
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("limit", "50000");
+      params.append("offset", "0");
+      if (debouncedSearchQuery) params.append("search", debouncedSearchQuery);
+      if (selectedCategoryIds.length === 1) params.append("categoryId", selectedCategoryIds[0]);
+      const dateRange = getItemsDateRange();
+      if (dateRange.dateFrom) params.append("dateFrom", dateRange.dateFrom.toISOString());
+      if (dateRange.dateTo) params.append("dateTo", dateRange.dateTo.toISOString());
+      const res = await fetch(`/api/products?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch products");
+      const data = await res.json();
+      const productsToExport = Array.isArray(data) ? data : (data.products || []);
+      const csvHeaders = "Name,Category,Purchase Cost,Sales Price,Unit,Quantity,Description,Enable Size Pricing,Sizes,Sale S,Sale M,Sale L,Purchase S,Purchase M,Purchase L,Created At\n";
+      const csvRows = productsToExport.map((product: Product) => {
+        const category = categories.find(c => c.id === product.categoryId)?.name || "";
+        const sizePrices = product.sizePrices as Record<string, string> | null | undefined;
+        const sizePurchasePrices = product.sizePurchasePrices as Record<string, string> | null | undefined;
+        const hasSizePrices = sizePrices && Object.keys(sizePrices).length > 0;
+        const sizesStr = hasSizePrices ? Object.keys(sizePrices).join(",") : "";
+        const saleS = hasSizePrices ? (sizePrices!.S ?? "") : "";
+        const saleM = hasSizePrices ? (sizePrices!.M ?? "") : "";
+        const saleL = hasSizePrices ? (sizePrices!.L ?? "") : "";
+        const purchaseS = hasSizePrices && sizePurchasePrices ? (sizePurchasePrices.S ?? "") : "";
+        const purchaseM = hasSizePrices && sizePurchasePrices ? (sizePurchasePrices.M ?? "") : "";
+        const purchaseL = hasSizePrices && sizePurchasePrices ? (sizePurchasePrices.L ?? "") : "";
+        const enableSizePricing = hasSizePrices ? "Y" : "";
+        const purchaseCost = hasSizePrices ? "" : (product.purchaseCost || "");
+        const price = hasSizePrices ? "" : product.price;
+        return `"${product.name}","${category}","${purchaseCost}","${price}","${product.unit}","${product.quantity}","${product.description || ""}","${enableSizePricing}","${sizesStr}","${saleS}","${saleM}","${saleL}","${purchaseS}","${purchaseM}","${purchaseL}","${format(new Date(product.createdAt), "yyyy-MM-dd")}"`;
+      }).join("\n");
+      const csv = csvHeaders + csvRows;
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `items-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast({ title: "Success", description: `Exported ${productsToExport.length} items` });
+    } catch (e) {
+      toast({ title: "Export Failed", description: e instanceof Error ? e.message : "Failed to export", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -569,7 +813,7 @@ export default function ItemManage() {
         rows = jsonData.slice(1);
       } else {
         const text = event.target?.result as string;
-        const lines = text.split('\n').slice(1);
+        const lines = text.split("\n").slice(1);
         rows = lines.map(line => {
           if (!line.trim()) return [];
           // Better CSV parsing that handles quoted fields correctly
@@ -603,12 +847,47 @@ export default function ItemManage() {
           return fields;
         });
       }
-      
-      // Prepare items for bulk import
-      const itemsToImport: any[] = [];
+
       const skipReasons: string[] = [];
       let skippedBeforeImport = 0;
-      
+
+      // Optionally create missing categories from the file
+      let categoriesToUse = categories;
+      const uniqueCategoryNamesFromRows = [...new Set(
+        rows
+          .map(r => (r && r[1] != null ? (r[1] || "").toString().trim() : ""))
+          .filter(Boolean)
+      )];
+      const missingCategoryNames = uniqueCategoryNamesFromRows.filter(
+        name => !categoriesToUse.some(c => c.name.toLowerCase() === name.toLowerCase())
+      );
+      if (createMissingCategoriesOnImport && missingCategoryNames.length > 0) {
+        // Dedupe by slug so "Chicken" and "chicken" create one category
+        const slugToName = new Map<string, string>();
+        let fallbackIndex = 0;
+        for (const name of missingCategoryNames) {
+          let slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+          if (!slug) slug = `category-${fallbackIndex++}`;
+          if (!slugToName.has(slug)) slugToName.set(slug, name);
+        }
+        for (const [slug, name] of slugToName) {
+          try {
+            await apiRequest("POST", "/api/categories", { name, slug });
+          } catch (err: any) {
+            if (err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
+              // Slug conflict (e.g. another category already has this slug), skip
+            } else {
+              skipReasons.push(`Could not create category "${name}": ${err?.message || "Unknown error"}`);
+            }
+          }
+        }
+        const fresh = await queryClient.fetchQuery<Category[]>({ queryKey: ["/api/categories"] });
+        categoriesToUse = fresh || categories;
+      }
+
+      // Prepare items for bulk import
+      const itemsToImport: any[] = [];
+
       for (const row of rows) {
         if (!row || row.length < 6) {
           if (row && row.length > 0) {
@@ -625,35 +904,76 @@ export default function ItemManage() {
         const unit = (row[4] || "").toString().trim();
         const quantity = (row[5] || "").toString().trim();
         const description = (row[6] || "").toString().trim();
+        const enableSizePricing = (row[7] || "").toString().trim().toUpperCase();
+        const sizesStr = (row[8] || "").toString().trim();
+        const saleS = (row[9] != null && row[9] !== "") ? String(row[9]).trim() : "";
+        const saleM = (row[10] != null && row[10] !== "") ? String(row[10]).trim() : "";
+        const saleL = (row[11] != null && row[11] !== "") ? String(row[11]).trim() : "";
+        const purchaseS = (row[12] != null && row[12] !== "") ? String(row[12]).trim() : "";
+        const purchaseM = (row[13] != null && row[13] !== "") ? String(row[13]).trim() : "";
+        const purchaseL = (row[14] != null && row[14] !== "") ? String(row[14]).trim() : "";
 
-        if (!name || !categoryName || !price || !unit || !quantity) {
+        const useSizePricing = (enableSizePricing === "Y" || enableSizePricing === "YES" || enableSizePricing === "TRUE") && sizesStr && (saleS || saleM || saleL);
+
+        if (!name || !categoryName || !unit || !quantity) {
           skippedBeforeImport++;
           const missing = [];
           if (!name) missing.push('Name');
           if (!categoryName) missing.push('Category');
-          if (!price) missing.push('Sales Price');
           if (!unit) missing.push('Unit');
           if (!quantity) missing.push('Quantity');
           skipReasons.push(`Row "${name || 'unnamed'}": Missing required fields: ${missing.join(', ')}`);
           continue;
         }
+        if (!useSizePricing && !price) {
+          skippedBeforeImport++;
+          skipReasons.push(`Row "${name}": Sales Price is required (or enable size pricing with at least one Sale S/M/L).`);
+          continue;
+        }
 
-        const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+        const category = categoriesToUse.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
         if (!category) {
           skippedBeforeImport++;
-          skipReasons.push(`Row "${name}": Category "${categoryName}" not found`);
+          skipReasons.push(`Row "${name}": Category "${categoryName}" not found. Create it in Manage Categories or enable "Create missing categories".`);
           continue;
+        }
+
+        let sizePrices: Record<string, string> | null = null;
+        let sizePurchasePrices: Record<string, string> | null = null;
+        let finalPrice = price;
+        let finalPurchaseCost = purchaseCost || undefined;
+
+        if (useSizePricing) {
+          const sizeLabels = sizesStr.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+          sizePrices = {};
+          sizePurchasePrices = {};
+          const saleBySize: Record<string, string> = { S: saleS, M: saleM, L: saleL };
+          const purchaseBySize: Record<string, string> = { S: purchaseS, M: purchaseM, L: purchaseL };
+          for (const size of sizeLabels) {
+            const saleVal = saleBySize[size] ?? (size === "S" ? saleS : size === "M" ? saleM : size === "L" ? saleL : "");
+            const purchaseVal = purchaseBySize[size] ?? (size === "S" ? purchaseS : size === "M" ? purchaseM : size === "L" ? purchaseL : "");
+            if (saleVal) sizePrices![size] = saleVal;
+            if (purchaseVal) sizePurchasePrices![size] = purchaseVal;
+          }
+          if (Object.keys(sizePrices).length === 0) {
+            skippedBeforeImport++;
+            skipReasons.push(`Row "${name}": Size pricing enabled but no Sale S/M/L values.`);
+            continue;
+          }
+          finalPrice = "0";
+          finalPurchaseCost = undefined;
         }
 
         itemsToImport.push({
           name,
           categoryId: category.id,
-          purchaseCost: purchaseCost || undefined,
-          price,
+          purchaseCost: finalPurchaseCost || undefined,
+          price: finalPrice,
           unit,
           quantity,
           description,
           imageUrl: "",
+          ...(sizePrices && Object.keys(sizePrices).length > 0 ? { sizePrices, sizePurchasePrices: (sizePurchasePrices && Object.keys(sizePurchasePrices).length > 0) ? sizePurchasePrices : null } : {}),
         });
       }
 
@@ -680,9 +1000,15 @@ export default function ItemManage() {
             console.log("Import skip reasons:", skipReasons);
           }
           
+          const imported = result.imported || 0;
+          const updated = result.updated || 0;
+          const parts = [];
+          if (imported > 0) parts.push(`${imported} imported`);
+          if (updated > 0) parts.push(`${updated} updated`);
+          const summary = parts.length > 0 ? parts.join(", ") : "0 items processed";
           toast({
             title: "Import Complete",
-            description: `Successfully imported ${result.imported || 0} items${totalSkipped > 0 ? `. ${totalSkipped} items skipped. Check console for details.` : ''}`,
+            description: `${summary}${totalSkipped > 0 ? `. ${totalSkipped} failed or skipped. Check console for details.` : "."}`,
             variant: totalSkipped > 0 ? "default" : "default",
           });
         } catch (error) {
@@ -723,19 +1049,23 @@ export default function ItemManage() {
       return;
     }
 
-    // Use actual categories from the system
+    // Use actual categories from the system. Size-based pricing columns: Enable Size Pricing (Y/N), Sizes (e.g. S,M,L), Sale S/M/L, Purchase S/M/L
     const sampleData = [
-      ["Name", "Category", "Purchase Cost", "Sales Price", "Unit", "Quantity", "Description"],
-      ["Sample Item 1", categories[0].name, "6.00", "10.60", "plate", "50", "Example item description"],
-      ["Sample Item 2", categories[0].name, "4.50", "8.50", "serving", "100", "Example item description"],
+      [
+        "Name", "Category", "Purchase Cost", "Sales Price", "Unit", "Quantity", "Description",
+        "Enable Size Pricing", "Sizes", "Sale S", "Sale M", "Sale L", "Purchase S", "Purchase M", "Purchase L",
+      ],
+      ["Sample Item 1", categories[0].name, "6.00", "10.60", "plate", "50", "Example item description", "", "", "", "", "", "", "", ""],
+      ["Sample Item 2", categories[0].name, "4.50", "8.50", "serving", "100", "Example item description", "", "", "", "", "", "", "", ""],
+      // Example row with size-based pricing (leave Purchase Cost and Sales Price as 0 when using size pricing)
+      ["Sample Drink", categories[0].name, "0", "0", "cup", "100", "Size-priced drink", "Y", "S,M,L", "2.50", "3.00", "3.50", "1.00", "1.20", "1.50"],
     ];
 
-    // Add more examples if there are more categories
     if (categories.length > 1) {
-      sampleData.push(["Sample Item 3", categories[1].name, "6.50", "10.50", "piece", "60", "Example item description"]);
+      sampleData.push(["Sample Item 3", categories[1].name, "6.50", "10.50", "piece", "60", "Example item description", "", "", "", "", "", "", "", ""]);
     }
     if (categories.length > 2) {
-      sampleData.push(["Sample Item 4", categories[2].name, "9.00", "15.00", "piece", "40", "Example item description"]);
+      sampleData.push(["Sample Item 4", categories[2].name, "9.00", "15.00", "piece", "40", "Example item description", "", "", "", "", "", "", "", ""]);
     }
     
     const worksheet = XLSX.utils.aoa_to_sheet(sampleData);
@@ -869,7 +1199,7 @@ export default function ItemManage() {
               </DialogContent>
             </Dialog>
 
-            <div>
+            <div className="flex items-center gap-3">
               <input
                 id="import-file"
                 type="file"
@@ -886,6 +1216,13 @@ export default function ItemManage() {
                 <Upload className="w-4 h-4 mr-2" />
                 Import Items
               </Button>
+              <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+                <Checkbox
+                  checked={createMissingCategoriesOnImport}
+                  onCheckedChange={(v) => setCreateMissingCategoriesOnImport(!!v)}
+                />
+                Create missing categories
+              </label>
             </div>
 
             <Button variant="outline" onClick={handleDownloadSample} data-testid="button-download-sample">
@@ -894,9 +1231,9 @@ export default function ItemManage() {
             </Button>
 
             {hasPermission("reports.export") && (
-              <Button variant="outline" onClick={handleExport} data-testid="button-export">
+              <Button variant="outline" onClick={handleExport} disabled={exporting} data-testid="button-export">
                 <Download className="w-4 h-4 mr-2" />
-                Export Items
+                {exporting ? "Exporting…" : "Export Items"}
               </Button>
             )}
 
@@ -971,11 +1308,20 @@ export default function ItemManage() {
                               onChange={handleImageUpload}
                               data-testid="input-image-upload"
                             />
-                            <div className="border-2 border-dashed rounded-md p-6 hover-elevate cursor-pointer transition-colors flex flex-col items-center gap-2">
+                            <div
+                              className={cn(
+                                "border-2 border-dashed rounded-md p-6 cursor-pointer transition-colors flex flex-col items-center gap-2",
+                                isDraggingImage ? "border-primary bg-primary/5" : "hover:border-primary/50 hover:bg-muted/50"
+                              )}
+                              onDragOver={handleImageDragOver}
+                              onDragLeave={handleImageDragLeave}
+                              onDrop={handleImageDrop}
+                              onClick={() => document.getElementById('item-image-upload')?.click()}
+                            >
                               <ImagePlus className="w-8 h-8 text-muted-foreground" />
                               <div className="text-center">
                                 <p className="text-sm font-medium">Upload Image</p>
-                                <p className="text-xs text-muted-foreground">Click to select an image file</p>
+                                <p className="text-xs text-muted-foreground">Drag and drop or click to select an image file</p>
                               </div>
                             </div>
                           </label>
@@ -1053,35 +1399,37 @@ export default function ItemManage() {
                       )}
                     />
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <FormField
-                        control={itemForm.control}
-                        name="purchaseCost"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Purchase Cost</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value || ""} type="number" step="0.01" placeholder="0.00" data-testid="input-purchase-cost" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                    {!enableSizePricing && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormField
+                          control={itemForm.control}
+                          name="purchaseCost"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Purchase Cost</FormLabel>
+                              <FormControl>
+                                <Input {...field} value={field.value || ""} type="number" step="0.01" placeholder="0.00" data-testid="input-purchase-cost" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                      <FormField
-                        control={itemForm.control}
-                        name="price"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Sales Price</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="number" step="0.01" placeholder="0.00" data-testid="input-sales-price" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                        <FormField
+                          control={itemForm.control}
+                          name="price"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Sales Price</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="number" step="0.01" placeholder="0.00" data-testid="input-sales-price" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField
@@ -1124,6 +1472,105 @@ export default function ItemManage() {
                       />
                     </div>
 
+                    {/* Size-based pricing for all units */}
+                    <div className="space-y-3 border rounded-lg p-4 bg-muted/50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="enable-size-pricing"
+                            checked={enableSizePricing}
+                            onCheckedChange={(checked) => {
+                              setEnableSizePricing(checked as boolean);
+                              if (!checked) {
+                                setSizePrices({});
+                                setSizeInputs([]);
+                              }
+                            }}
+                            data-testid="checkbox-enable-size-pricing"
+                          />
+                          <FormLabel 
+                            htmlFor="enable-size-pricing" 
+                            className="text-base font-semibold cursor-pointer"
+                          >
+                            Enable Size-based Pricing
+                          </FormLabel>
+                        </div>
+                        {enableSizePricing && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAddSize}
+                            data-testid="button-add-size"
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Size
+                          </Button>
+                        )}
+                      </div>
+                          {enableSizePricing && (
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            Set purchase cost and selling price per size (e.g., S, M, L).
+                          </p>
+                          {sizeInputs.length > 0 && (
+                            <div className="space-y-2">
+                              {sizeInputs.map((size) => (
+                                <div key={size} className="flex items-center gap-2 flex-wrap">
+                                  <div className="w-14 font-medium shrink-0">{size}</div>
+                                  <div className="flex gap-2 flex-1 min-w-0">
+                                    <div className="flex-1 min-w-0">
+                                      <label className="text-xs text-muted-foreground block mb-0.5">Purchase</label>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={sizePurchasePrices[size] || ""}
+                                        onChange={(e) => handleSizePurchasePriceChange(size, e.target.value)}
+                                        className="w-full"
+                                        data-testid={`input-size-purchase-${size}`}
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <label className="text-xs text-muted-foreground block mb-0.5">Selling</label>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={sizePrices[size] || ""}
+                                        onChange={(e) => handleSizePriceChange(size, e.target.value)}
+                                        className="w-full"
+                                        data-testid={`input-size-price-${size}`}
+                                      />
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveSize(size)}
+                                    data-testid={`button-remove-size-${size}`}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {sizeInputs.length === 0 && (
+                            <p className="text-sm text-muted-foreground italic">
+                              No sizes added. Click "Add Size" to set size-based pricing.
+                            </p>
+                          )}
+                        </>
+                      )}
+                      {!enableSizePricing && (
+                        <p className="text-sm text-muted-foreground italic">
+                          Enable size-based pricing to set different prices for different sizes/variants.
+                        </p>
+                      )}
+                    </div>
+
                     <FormField
                       control={itemForm.control}
                       name="description"
@@ -1147,6 +1594,57 @@ export default function ItemManage() {
                 </Form>
               </DialogContent>
             </Dialog>
+
+            {/* Add Size Dialog */}
+            <Dialog open={addSizeDialogOpen} onOpenChange={setAddSizeDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add Size</DialogTitle>
+                  <DialogDescription>
+                    Enter a size label (e.g., S, M, L, XL)
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label htmlFor="size-input" className="text-sm font-medium">
+                      Size Label
+                    </label>
+                    <Input
+                      id="size-input"
+                      placeholder="e.g., S, M, L, XL"
+                      value={newSizeInput}
+                      onChange={(e) => setNewSizeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleConfirmAddSize();
+                        }
+                      }}
+                      autoFocus
+                      data-testid="input-size-label"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setAddSizeDialogOpen(false);
+                      setNewSizeInput("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleConfirmAddSize}
+                    disabled={!newSizeInput.trim()}
+                    data-testid="button-confirm-add-size"
+                  >
+                    Add Size
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
@@ -1168,19 +1666,61 @@ export default function ItemManage() {
                 />
               </div>
 
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger data-testid="select-filter-category">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                    data-testid="select-filter-category"
+                  >
+                    {selectedCategoryIds.length === 0
+                      ? "All Categories"
+                      : selectedCategoryIds.length === 1
+                        ? categories.find((c) => c.id === selectedCategoryIds[0])?.name ?? "1 category"
+                        : `${selectedCategoryIds.length} categories`}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="start">
+                  <div className="max-h-[300px] overflow-y-auto p-2">
+                    <div
+                      className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => setSelectedCategoryIds([])}
+                    >
+                      <Checkbox
+                        checked={selectedCategoryIds.length === 0}
+                        onCheckedChange={(checked) => checked && setSelectedCategoryIds([])}
+                      />
+                      <span className="text-sm font-medium">All Categories</span>
+                    </div>
+                    {categories.map((category) => (
+                      <div
+                        key={category.id}
+                        className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50 cursor-pointer"
+                        onClick={() => {
+                          setSelectedCategoryIds((prev) =>
+                            prev.includes(category.id)
+                              ? prev.filter((id) => id !== category.id)
+                              : [...prev, category.id]
+                          );
+                        }}
+                      >
+                        <Checkbox
+                          checked={selectedCategoryIds.includes(category.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedCategoryIds((prev) =>
+                              checked
+                                ? [...prev, category.id]
+                                : prev.filter((id) => id !== category.id)
+                            );
+                          }}
+                        />
+                        <span className="text-sm">{category.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               <div className="flex gap-2">
                 <Select value={dateFilter} onValueChange={setDateFilter}>
@@ -1214,6 +1754,28 @@ export default function ItemManage() {
                     </PopoverContent>
                   </Popover>
                 )}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="min-w-[140px] justify-start">
+                      {selectedMonths.length === 0 ? "All months" : selectedMonths.length <= 2 ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ") : `${selectedMonths.length} months`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      {Array.from({ length: 24 }, (_, i) => {
+                        const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
+                        const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                        const checked = selectedMonths.includes(value);
+                        return (
+                          <div key={value} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer" onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}>
+                            <Checkbox checked={checked} onCheckedChange={() => {}} />
+                            <span className="text-sm">{format(d, "MMMM yyyy")}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </CardContent>
@@ -1259,14 +1821,32 @@ export default function ItemManage() {
                       )}
                     </div>
                     
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg font-bold text-primary font-mono" data-testid={`text-item-price-${product.id}`}>
-                        ${parseFloat(product.price).toFixed(2)}
-                      </span>
-                      <span className="text-sm text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
-                        per {product.unit}
-                      </span>
-                    </div>
+                    {/* For size-priced items show only size labels; otherwise show main price */}
+                    {product.sizePrices && (() => {
+                      const sp = product.sizePrices as Record<string, string> | null | undefined;
+                      if (sp && Object.keys(sp).length > 0) {
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {Object.keys(sp).map((size) => (
+                              <Badge key={size} variant="secondary" className="text-xs">
+                                {size}
+                              </Badge>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {(!product.sizePrices || Object.keys((product.sizePrices as Record<string, string>) || {}).length === 0) && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-bold text-primary font-mono" data-testid={`text-item-price-${product.id}`}>
+                          ${parseFloat(product.price).toFixed(2)}
+                        </span>
+                        <span className="text-sm text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
+                          per {product.unit}
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Stock:</span>
@@ -1282,6 +1862,19 @@ export default function ItemManage() {
                     )}
 
                     <div className="flex gap-1 pt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs"
+                        onClick={() => {
+                          setSelectedProductForQR(product);
+                          setQrCodeDialogOpen(true);
+                        }}
+                        data-testid={`button-qr-${product.id}`}
+                      >
+                        <QrCode className="w-3 h-3 mr-1" />
+                        QR
+                      </Button>
                       {hasPermission("inventory.edit") && (
                         <Button
                           size="sm"
@@ -1324,11 +1917,11 @@ export default function ItemManage() {
                 <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No items found</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  {searchQuery || selectedCategory !== "all" || dateFilter !== "all"
+                  {searchQuery || selectedCategoryIds.length > 0 || dateFilter !== "all"
                     ? "Try adjusting your search filters"
                     : "Get started by adding your first item"}
                 </p>
-                {!searchQuery && selectedCategory === "all" && dateFilter === "all" && (
+                {!searchQuery && selectedCategoryIds.length === 0 && dateFilter === "all" && (
                   <Button onClick={handleAddItemClick} data-testid="button-add-first-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Your First Item
@@ -1339,6 +1932,262 @@ export default function ItemManage() {
           )}
         </div>
       </div>
+
+      {/* QR Code / Barcode Dialog */}
+      <Dialog open={qrCodeDialogOpen} onOpenChange={setQrCodeDialogOpen}>
+        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-qr-code">
+          <DialogHeader>
+            <DialogTitle>{codeType === "qr" ? "QR Code" : "Barcode"} - {selectedProductForQR?.name}</DialogTitle>
+            <DialogDescription>
+              Scan this {codeType === "qr" ? "QR code" : "barcode"} to add product to cart in POS
+            </DialogDescription>
+          </DialogHeader>
+          {selectedProductForQR && (
+            <div className="space-y-4 py-4">
+              {/* Code Type Toggle */}
+              <div className="flex gap-2 justify-center">
+                <Button
+                  variant={codeType === "qr" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCodeType("qr")}
+                >
+                  QR Code
+                </Button>
+                <Button
+                  variant={codeType === "barcode" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCodeType("barcode")}
+                >
+                  Barcode
+                </Button>
+              </div>
+
+              <div className="flex flex-col items-center justify-center p-6 bg-muted/30 rounded-lg">
+                {codeType === "qr" ? (
+                  (() => {
+                    const barcode = selectedProductForQR.barcode || selectedProductForQR.id;
+                    return (
+                      <>
+                        <QRCodeSVG
+                          value={barcode}
+                          size={256}
+                          level="H"
+                          includeMargin={true}
+                        />
+                        <p className="mt-4 text-sm font-mono text-muted-foreground">
+                          {barcode}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground text-center">
+                          {selectedProductForQR.name}
+                        </p>
+                        <div className="mt-3 text-center">
+                          <p className="text-sm font-semibold text-primary">
+                            ${parseFloat(selectedProductForQR.price).toFixed(2)} USD
+                          </p>
+                          {settings?.exchangeRate && (
+                            <p className="text-xs text-muted-foreground">
+                              {(parseFloat(selectedProductForQR.price) * parseFloat(settings.exchangeRate)).toLocaleString('en-US', { maximumFractionDigits: 0 })} {settings?.secondaryCurrencySymbol || "៛"}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()
+                ) : (
+                  <BarcodeDisplay 
+                    barcode={selectedProductForQR.barcode || selectedProductForQR.id}
+                    productName={selectedProductForQR.name}
+                    price={selectedProductForQR.price}
+                    settings={settings}
+                  />
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={async () => {
+                    const barcode = selectedProductForQR.barcode || selectedProductForQR.id;
+                    const exchangeRate = settings?.exchangeRate ? parseFloat(settings.exchangeRate) : 4100;
+                    const secondaryCurrencySymbol = settings?.secondaryCurrencySymbol || "៛";
+                    const sellingPrice = parseFloat(selectedProductForQR.price);
+                    const sellingPriceKHR = sellingPrice * exchangeRate;
+                    
+                    try {
+                      const printWindow = window.open("", "_blank");
+                      if (!printWindow) return;
+
+                      if (codeType === "qr") {
+                        const canvas = document.createElement('canvas');
+                        await QRCode.toCanvas(canvas, barcode, { width: 300, margin: 2 });
+                        const qrDataUrl = canvas.toDataURL();
+                        
+                        printWindow.document.write(`
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <title>QR Code - ${selectedProductForQR.name}</title>
+                              <style>
+                                @media print {
+                                  body { margin: 0; padding: 20px; }
+                                }
+                                body {
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: center;
+                                  justify-content: center;
+                                  padding: 40px;
+                                  font-family: Arial, sans-serif;
+                                }
+                                .product-name {
+                                  font-size: 18px;
+                                  font-weight: bold;
+                                  margin-bottom: 10px;
+                                  text-align: center;
+                                }
+                                .price-info {
+                                  margin-top: 15px;
+                                  text-align: center;
+                                  font-size: 14px;
+                                }
+                                .price-usd {
+                                  font-size: 16px;
+                                  font-weight: bold;
+                                  color: #2563eb;
+                                }
+                                .price-khr {
+                                  font-size: 14px;
+                                  color: #666;
+                                  margin-top: 5px;
+                                }
+                                .barcode {
+                                  font-size: 12px;
+                                  color: #666;
+                                  margin-top: 10px;
+                                  font-family: monospace;
+                                }
+                                img {
+                                  max-width: 100%;
+                                  height: auto;
+                                }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="product-name">${selectedProductForQR.name}</div>
+                              <img src="${qrDataUrl}" alt="QR Code" />
+                              <div class="price-info">
+                                <div class="price-usd">$${sellingPrice.toFixed(2)} USD</div>
+                                <div class="price-khr">${sellingPriceKHR.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${secondaryCurrencySymbol}</div>
+                              </div>
+                              <div class="barcode">${barcode}</div>
+                            </body>
+                          </html>
+                        `);
+                      } else {
+                        // Generate barcode SVG
+                        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        JsBarcode(svg, barcode, {
+                          format: "CODE128",
+                          width: 2,
+                          height: 80,
+                          displayValue: true,
+                          fontSize: 14,
+                        });
+                        const svgString = new XMLSerializer().serializeToString(svg);
+                        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+                        
+                        printWindow.document.write(`
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <title>Barcode - ${selectedProductForQR.name}</title>
+                              <style>
+                                @media print {
+                                  body { margin: 0; padding: 20px; }
+                                }
+                                body {
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: center;
+                                  justify-content: center;
+                                  padding: 40px;
+                                  font-family: Arial, sans-serif;
+                                }
+                                .product-name {
+                                  font-size: 18px;
+                                  font-weight: bold;
+                                  margin-bottom: 10px;
+                                  text-align: center;
+                                }
+                                .price-info {
+                                  margin-top: 15px;
+                                  text-align: center;
+                                  font-size: 14px;
+                                }
+                                .price-usd {
+                                  font-size: 16px;
+                                  font-weight: bold;
+                                  color: #2563eb;
+                                }
+                                .price-khr {
+                                  font-size: 14px;
+                                  color: #666;
+                                  margin-top: 5px;
+                                }
+                                .barcode {
+                                  font-size: 12px;
+                                  color: #666;
+                                  margin-top: 10px;
+                                  font-family: monospace;
+                                }
+                                img {
+                                  max-width: 100%;
+                                  height: auto;
+                                }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="product-name">${selectedProductForQR.name}</div>
+                              <img src="${svgDataUrl}" alt="Barcode" />
+                              <div class="price-info">
+                                <div class="price-usd">$${sellingPrice.toFixed(2)} USD</div>
+                                <div class="price-khr">${sellingPriceKHR.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${secondaryCurrencySymbol}</div>
+                              </div>
+                              <div class="barcode">${barcode}</div>
+                            </body>
+                          </html>
+                        `);
+                      }
+                      
+                      printWindow.document.close();
+                      setTimeout(() => {
+                        printWindow.print();
+                      }, 500);
+                    } catch (error) {
+                      toast({
+                        title: "Error",
+                        description: `Failed to generate ${codeType === "qr" ? "QR code" : "barcode"} for printing`,
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  data-testid="button-print-qr"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Print {codeType === "qr" ? "QR Code" : "Barcode"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setQrCodeDialogOpen(false)}
+                  data-testid="button-close-qr"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

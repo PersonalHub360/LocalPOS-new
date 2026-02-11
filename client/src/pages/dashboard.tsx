@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { DollarSign, ShoppingCart, TrendingUp, Package, Calendar as CalendarIcon, Receipt, Wallet, ShoppingBag } from "lucide-react";
+import { DollarSign, ShoppingCart, TrendingUp, Package, Calendar as CalendarIcon, Receipt, Wallet, ShoppingBag, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +16,7 @@ interface DashboardStats {
   totalRevenue: number;
   totalOrders: number;
   totalExpenses: number;
+  totalStaffSalary?: number;
   profitLoss: number;
   totalPurchase: number;
 }
@@ -45,6 +46,55 @@ interface RecentOrder {
   diningOption: string;
 }
 
+// Compute start/end of period in local time so "today" matches user's timezone (fixes dashboard showing 0 when sales are after midnight local)
+function getLocalDateRange(filter: string, customDate: Date | undefined): { startDate: Date; endDate: Date } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  switch (filter) {
+    case "today":
+      return { startDate: today, endDate: endOfToday };
+    case "yesterday": {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return {
+        startDate: yesterday,
+        endDate: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999),
+      };
+    }
+    case "this-week": {
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      return { startDate: startOfWeek, endDate: endOfToday };
+    }
+    case "this-month": {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { startDate: startOfMonth, endDate: endOfToday };
+    }
+    case "last-month": {
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { startDate: startOfLastMonth, endDate: endOfLastMonth };
+    }
+    case "custom":
+      if (customDate) {
+        const d = new Date(customDate.getFullYear(), customDate.getMonth(), customDate.getDate());
+        return {
+          startDate: d,
+          endDate: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999),
+        };
+      }
+      return { startDate: today, endDate: endOfToday };
+    case "all":
+      return {
+        startDate: new Date(2000, 0, 1),
+        endDate: new Date(2099, 11, 31, 23, 59, 59, 999),
+      };
+    default:
+      return { startDate: today, endDate: endOfToday };
+  }
+}
+
 export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState<string>("today");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
@@ -55,6 +105,9 @@ export default function Dashboard() {
     if (dateFilter === "custom" && customDate) {
       params.append("date", customDate.toISOString());
     }
+    const { startDate, endDate } = getLocalDateRange(dateFilter, customDate);
+    params.append("startDate", startDate.toISOString());
+    params.append("endDate", endDate.toISOString());
     return params.toString();
   };
 
@@ -264,6 +317,27 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        <Card data-testid="card-staff-salary" className="border-l-4 border-l-orange-500">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Staff Salary</CardTitle>
+            <div className="w-8 h-8 rounded-md bg-orange-500/10 flex items-center justify-center">
+              <Users className="h-4 w-4 text-orange-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold" data-testid="text-staff-salary">
+                  {formatCurrency(stats?.totalStaffSalary || 0)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">For selected period (included in Profit/Loss)</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         <Card data-testid="card-profit-loss" className="border-l-4 border-l-amber-500">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Profit/Loss</CardTitle>
@@ -279,7 +353,7 @@ export default function Dashboard() {
                 <div className={`text-2xl font-bold ${(stats?.profitLoss || 0) >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`} data-testid="text-profit-loss">
                   {formatCurrency(stats?.profitLoss || 0)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1.5">For selected period</p>
+                <p className="text-xs text-muted-foreground mt-1.5">Revenue − Expenses − Staff Salary</p>
               </>
             )}
           </CardContent>

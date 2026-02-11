@@ -25,6 +25,10 @@ import {
   type InsertPayroll,
   type StaffSalary,
   type InsertStaffSalary,
+  type Position,
+  type InsertPosition,
+  type Department,
+  type InsertDepartment,
   type Settings,
   type InsertSettings,
   type AuditLog,
@@ -49,6 +53,12 @@ import {
   type InsertPermission,
   type RolePermission,
   type InsertRolePermission,
+  type MainProduct,
+  type InsertMainProduct,
+  type MainProductItem,
+  type InsertMainProductItem,
+  type Unit,
+  type InsertUnit,
   categories,
   products,
   tables,
@@ -62,6 +72,8 @@ import {
   leaves,
   payroll,
   staffSalaries,
+  positions,
+  departments,
   settings,
   inventoryAdjustments,
   users,
@@ -75,10 +87,14 @@ import {
   permissions,
   rolePermissions,
   auditLogs,
+  mainProducts,
+  mainProductItems,
+  units,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, desc, asc, sql, isNull, or } from "drizzle-orm";
+import { eq, and, gte, lte, desc, asc, sql, isNull, or, inArray, ne, not } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { format } from "date-fns";
 
 export interface IStorage {
   getCategories(): Promise<Category[]>;
@@ -88,8 +104,11 @@ export interface IStorage {
   deleteCategory(id: string): Promise<boolean>;
   
   getProducts(branchId?: string | null): Promise<Product[]>;
-  getProductsPaginated(branchId?: string | null, limit?: number, offset?: number, categoryId?: string | null, search?: string, minPrice?: number, maxPrice?: number, inStock?: boolean): Promise<{ products: Product[]; total: number }>;
+  getProductsPaginated(branchId?: string | null, limit?: number, offset?: number, categoryIdOrIds?: string | string[] | null, search?: string, minPrice?: number, maxPrice?: number, inStock?: boolean, dateFrom?: Date, dateTo?: Date, hasShortage?: boolean, status?: "in_stock" | "low_stock" | "out_of_stock", threshold?: number): Promise<{ products: Product[]; total: number }>;
+  getLowStockProductsPaginated(branchId?: string | null, threshold?: number, limit?: number, offset?: number, search?: string, categoryId?: string | null): Promise<{ products: Product[]; total: number }>;
+  getInventoryAdjustmentsPaginated(branchId?: string | null, limit?: number, offset?: number, search?: string, productId?: string | null, adjustmentType?: string | null): Promise<{ adjustments: InventoryAdjustment[]; total: number }>;
   getProduct(id: string): Promise<Product | undefined>;
+  getProductByBarcode(barcode: string): Promise<Product | undefined>;
   getProductsByCategory(categoryId: string, branchId?: string | null): Promise<Product[]>;
   getProductByName(name: string, excludeId?: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
@@ -104,13 +123,19 @@ export interface IStorage {
   deleteTable(id: string): Promise<boolean>;
   
   getOrders(branchId?: string | null): Promise<Order[]>;
+  getOrdersPaginated(branchId?: string | null, limit?: number, offset?: number, search?: string, paymentMethod?: string, paymentStatus?: string, minAmount?: number, maxAmount?: number, dateFrom?: Date, dateTo?: Date, productSearch?: string, months?: string[]): Promise<{ orders: Order[]; total: number }>;
+  getCustomerOrdersPaginated(customerId: string, branchId?: string | null, limit?: number, offset?: number, search?: string, paymentStatus?: string, dateFrom?: Date, dateTo?: Date): Promise<{ orders: Order[]; total: number }>;
+  getCustomerTransactionsPaginated(customerId: string, branchId?: string | null, limit?: number, offset?: number, search?: string, dateFrom?: Date, dateTo?: Date): Promise<{ transactions: Array<{ id: string; type: "due" | "payment"; date: Date; amount: number; description: string; paymentMethod?: string; order?: Order; payment?: DuePayment }>; total: number }>;
   getOrder(id: string): Promise<Order | undefined>;
   getDraftOrders(branchId?: string | null): Promise<Order[]>;
   getQROrders(branchId?: string | null): Promise<Order[]>;
+  getWebOrders(branchId?: string | null): Promise<Order[]>;
   getCompletedOrders(branchId?: string | null): Promise<Order[]>;
+  getSalesStats(branchId?: string | null, filters?: { dateFrom?: Date; dateTo?: Date; months?: string[]; paymentMethod?: string; paymentStatus?: string; minAmount?: number; maxAmount?: number; search?: string }): Promise<{ totalSales: number; totalRevenue: number; totalDue: number; totalPaid: number; averageOrderValue: number }>;
   createOrder(order: InsertOrder): Promise<Order>;
   createOrderWithItems(order: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order>;
   updateOrder(id: string, order: Partial<InsertOrder>): Promise<Order | undefined>;
+  updateOrderWithItems(id: string, updates: Partial<InsertOrder>, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order | undefined>;
   updateOrderStatus(id: string, status: string): Promise<Order | undefined>;
   deleteOrder(id: string): Promise<boolean>;
   
@@ -133,6 +158,7 @@ export interface IStorage {
   getSalesByPaymentMethod(startDate: Date, endDate: Date): Promise<Array<{ paymentMethod: string; amount: number }>>;
   getPopularProducts(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>>;
   getSalesSummary(startDate: Date, endDate: Date): Promise<Array<{ product: string; quantity: number; revenue: number }>>;
+  getSalesSummaryPaginated(startDate: Date, endDate: Date, branchId?: string | null, limit?: number, offset?: number, search?: string): Promise<{ items: Array<{ product: string; quantity: number; revenue: number }>; total: number }>;
   getRecentOrders(startDate: Date, endDate: Date): Promise<Order[]>;
   
   getExpenseCategories(): Promise<ExpenseCategory[]>;
@@ -141,7 +167,14 @@ export interface IStorage {
   updateExpenseCategory(id: string, category: Partial<InsertExpenseCategory>): Promise<ExpenseCategory | undefined>;
   deleteExpenseCategory(id: string): Promise<boolean>;
   
-  getExpenses(branchId?: string | null): Promise<Expense[]>;
+  getUnits(): Promise<Unit[]>;
+  getUnit(id: string): Promise<Unit | undefined>;
+  createUnit(unit: InsertUnit): Promise<Unit>;
+  updateUnit(id: string, unit: Partial<InsertUnit>): Promise<Unit | undefined>;
+  deleteUnit(id: string): Promise<boolean>;
+  
+  getExpenses(branchId?: string | null, dateFrom?: Date, dateTo?: Date, months?: string[]): Promise<Expense[]>;
+  getExpenseStats(branchId?: string | null, dateFrom?: Date, dateTo?: Date, months?: string[]): Promise<{ totalAmount: number; count: number; avgExpense: number }>;
   getExpense(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
@@ -162,6 +195,12 @@ export interface IStorage {
   getAttendance(): Promise<Attendance[]>;
   getAttendanceByDate(date: Date): Promise<Attendance[]>;
   getAttendanceByEmployee(employeeId: string): Promise<Attendance[]>;
+  getAttendanceStats(): Promise<{
+    totalRecords: number;
+    presentToday: number;
+    absentToday: number;
+    avgHours: number;
+  }>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
   updateAttendance(id: string, attendance: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   deleteAttendance(id: string): Promise<boolean>;
@@ -185,6 +224,18 @@ export interface IStorage {
   createStaffSalary(salary: InsertStaffSalary): Promise<StaffSalary>;
   updateStaffSalary(id: string, salary: Partial<InsertStaffSalary>): Promise<StaffSalary | undefined>;
   deleteStaffSalary(id: string): Promise<boolean>;
+
+  getPositions(): Promise<Position[]>;
+  getPosition(id: string): Promise<Position | undefined>;
+  createPosition(position: InsertPosition): Promise<Position>;
+  updatePosition(id: string, position: Partial<InsertPosition>): Promise<Position | undefined>;
+  deletePosition(id: string): Promise<boolean>;
+
+  getDepartments(): Promise<Department[]>;
+  getDepartment(id: string): Promise<Department | undefined>;
+  createDepartment(department: InsertDepartment): Promise<Department>;
+  updateDepartment(id: string, department: Partial<InsertDepartment>): Promise<Department | undefined>;
+  deleteDepartment(id: string): Promise<boolean>;
   
   getSettings(): Promise<Settings | undefined>;
   updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
@@ -197,7 +248,20 @@ export interface IStorage {
   getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined>;
   getInventoryAdjustmentsByProduct(productId: string): Promise<InventoryAdjustment[]>;
   createInventoryAdjustment(adjustment: InsertInventoryAdjustment): Promise<InventoryAdjustment>;
+  updateInventoryAdjustment(id: string, updateData: Partial<InsertInventoryAdjustment>): Promise<InventoryAdjustment>;
+  deleteInventoryAdjustment(id: string): Promise<void>;
   getLowStockProducts(threshold: number): Promise<Product[]>;
+  getSoldQuantitiesByProduct(): Promise<Record<string, number>>;
+  getInventoryStats(branchId?: string | null, threshold?: number): Promise<{
+    totalProducts: number;
+    lowStockCount: number;
+    outOfStockCount: number;
+    totalStockValue: number;
+    totalPurchaseCost: number;
+    totalQuantity: number;
+    totalShortage: number;
+    shortageCount: number;
+  }>;
   
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
@@ -249,7 +313,7 @@ export interface IStorage {
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<boolean>;
   
-  getDuePayments(customerId?: string, branchId?: string | null): Promise<DuePayment[]>;
+  getDuePayments(customerId?: string, branchId?: string | null, limit?: number, offset?: number): Promise<{ payments: DuePayment[]; total: number }>;
   getDuePayment(id: string): Promise<DuePayment | undefined>;
   createDuePayment(payment: InsertDuePayment): Promise<DuePayment>;
   updateDuePayment(id: string, payment: Partial<InsertDuePayment>): Promise<DuePayment | undefined>;
@@ -271,14 +335,63 @@ export interface IStorage {
     ordersCount: number;
   }>;
   
-  getAllCustomersDueSummary(branchId?: string | null): Promise<Array<{
+  getAllCustomersDueSummary(
+    branchId?: string | null, 
+    limit?: number, 
+    offset?: number,
+    search?: string,
+    statusFilter?: string,
+    minAmount?: number,
+    maxAmount?: number,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{ summaries: Array<{
     customer: Customer;
     totalDue: number;
     totalPaid: number;
     balance: number;
     credit: number;
     ordersCount: number;
-  }>>;
+  }>; total: number }>;
+  
+  getCustomersDueSummaryStats(
+    branchId?: string | null,
+    dateFrom?: Date,
+    dateTo?: Date,
+    search?: string,
+    statusFilter?: string,
+    minAmount?: number,
+    maxAmount?: number
+  ): Promise<{
+    totalCustomers: number;
+    pendingDues: number;
+    totalOutstanding: number;
+    totalCollected: number;
+  }>;
+  
+  // Main Products management
+  getMainProducts(): Promise<MainProduct[]>;
+  getMainProduct(id: string): Promise<MainProduct | undefined>;
+  createMainProduct(mainProduct: InsertMainProduct): Promise<MainProduct>;
+  updateMainProduct(id: string, mainProduct: Partial<InsertMainProduct>): Promise<MainProduct | undefined>;
+  deleteMainProduct(id: string): Promise<boolean>;
+  
+  // Main Product Items management
+  getMainProductItems(mainProductId: string): Promise<Array<MainProductItem & { product: Product }>>;
+  addMainProductItem(item: InsertMainProductItem): Promise<MainProductItem>;
+  removeMainProductItem(id: string): Promise<boolean>;
+  removeMainProductItemByProduct(mainProductId: string, productId: string): Promise<boolean>;
+  
+  // Main Product Stats
+  getMainProductStats(mainProductId: string): Promise<{
+    totalStock: number;
+    branchBreakdown: Array<{ branchName: string; quantity: number; sold: number; available: number }>;
+    totalQuantity: number;
+    totalSold: number;
+    totalAvailable: number;
+    available: number;
+    subProducts: Array<{ product: Product; quantity: number; sold: number; available: number; branchName: string | null }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -349,7 +462,12 @@ export class DatabaseStorage implements IStorage {
     search?: string,
     minPrice?: number,
     maxPrice?: number,
-    inStock?: boolean
+    inStock?: boolean,
+    dateFrom?: Date,
+    dateTo?: Date,
+    hasShortage?: boolean,
+    status?: "in_stock" | "low_stock" | "out_of_stock",
+    threshold: number = 10
   ): Promise<{ products: Product[]; total: number }> {
     // Build where conditions
     const conditions = [];
@@ -386,6 +504,40 @@ export class DatabaseStorage implements IStorage {
         conditions.push(lte(sql`CAST(${products.quantity} AS DECIMAL)`, 0));
       }
     }
+
+    // Date range filter (use dateTo as-is so client's timezone end time is respected)
+    if (dateFrom) {
+      conditions.push(gte(products.createdAt, dateFrom));
+    }
+    if (dateTo) {
+      conditions.push(lte(products.createdAt, dateTo));
+    }
+
+    // Shortage filter
+    if (hasShortage !== undefined) {
+      if (hasShortage) {
+        conditions.push(sql`CAST(${products.stockShort} AS DECIMAL) > 0`);
+      } else {
+        conditions.push(or(
+          sql`CAST(${products.stockShort} AS DECIMAL) = 0`,
+          isNull(products.stockShort)
+        ));
+      }
+    }
+
+    // Status filter (in_stock, low_stock, out_of_stock)
+    if (status) {
+      if (status === "out_of_stock") {
+        conditions.push(sql`CAST(${products.quantity} AS DECIMAL) = 0`);
+      } else if (status === "low_stock") {
+        conditions.push(and(
+          sql`CAST(${products.quantity} AS DECIMAL) > 0`,
+          sql`CAST(${products.quantity} AS DECIMAL) <= ${threshold}`
+        ));
+      } else if (status === "in_stock") {
+        conditions.push(sql`CAST(${products.quantity} AS DECIMAL) > ${threshold}`);
+      }
+    }
     
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
@@ -414,6 +566,11 @@ export class DatabaseStorage implements IStorage {
 
   async getProduct(id: string): Promise<Product | undefined> {
     const result = await db.select().from(products).where(eq(products.id, id));
+    return result[0];
+  }
+
+  async getProductByBarcode(barcode: string): Promise<Product | undefined> {
+    const result = await db.select().from(products).where(eq(products.barcode, barcode));
     return result[0];
   }
 
@@ -524,6 +681,16 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(orders).where(eq(orders.status, 'qr-pending')).orderBy(desc(orders.createdAt));
   }
 
+  async getWebOrders(branchId?: string | null): Promise<Order[]> {
+    const webPending = and(eq(orders.orderSource, 'web'), eq(orders.status, 'web-pending'));
+    if (branchId) {
+      return await db.select().from(orders)
+        .where(and(webPending, eq(orders.branchId, branchId)))
+        .orderBy(desc(orders.createdAt));
+    }
+    return await db.select().from(orders).where(webPending).orderBy(desc(orders.createdAt));
+  }
+
   async getCompletedOrders(branchId?: string | null): Promise<Order[]> {
     if (branchId) {
       return await db.select().from(orders)
@@ -531,6 +698,486 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(orders.createdAt));
     }
     return await db.select().from(orders).where(eq(orders.status, 'completed')).orderBy(desc(orders.createdAt));
+  }
+
+  async getOrdersPaginated(
+    branchId?: string | null,
+    limit: number = 50,
+    offset: number = 0,
+    search?: string,
+    paymentMethod?: string,
+    paymentStatus?: string,
+    minAmount?: number,
+    maxAmount?: number,
+    dateFrom?: Date,
+    dateTo?: Date,
+    productSearch?: string,
+    months?: string[]
+  ): Promise<{ orders: Order[]; total: number }> {
+    const conditions: any[] = [];
+    
+    // Branch filter
+    if (branchId) {
+      conditions.push(eq(orders.branchId, branchId));
+    }
+    
+    // Status filter - only completed orders for sales
+    conditions.push(eq(orders.status, 'completed'));
+    
+    // Exclude orders from due management
+    conditions.push(sql`(${orders.orderSource} IS NULL OR ${orders.orderSource} != 'due-management')`);
+    
+    // Search filter - search in orderNumber (invoice number) and customerName only
+    // No search by Sale ID (order ID) - removed as per user request
+    if (search) {
+      const searchTrimmed = search.trim();
+      
+      // Get invoice prefix from settings for invoice number search
+      const settings = await this.getSettings();
+      const invoicePrefix = settings?.invoicePrefix || "INV-";
+      
+      // Check if search term contains invoice prefix (case-insensitive)
+      const upperSearch = searchTrimmed.toUpperCase();
+      const upperPrefix = invoicePrefix.toUpperCase();
+      let orderNumberSearch = searchTrimmed;
+      let hasPrefix = false;
+      
+      // If search starts with invoice prefix, extract the order number part
+      if (upperSearch.startsWith(upperPrefix)) {
+        orderNumberSearch = searchTrimmed.substring(invoicePrefix.length);
+        hasPrefix = true;
+      }
+      
+      // Check if the search term (or extracted number) is purely numeric
+      const isNumeric = /^\d+$/.test(orderNumberSearch);
+      
+      // Escape single quotes in invoice prefix for SQL
+      const escapedPrefix = invoicePrefix.replace(/'/g, "''");
+      
+      // Pattern search for customer name (fuzzy matching)
+      const searchPattern = `%${searchTrimmed}%`;
+      
+      if (isNumeric) {
+        // For numeric searches (invoice numbers), use exact matching
+        // This ensures "84" only matches invoice "84", not "1184" or "1842"
+        const exactOrderNumber = orderNumberSearch;
+        
+        // Build exact invoice number matching conditions
+        const invoiceMatchConditions: any[] = [];
+        
+        // Always check exact match for orderNumber (invoice number without prefix)
+        invoiceMatchConditions.push(eq(orders.orderNumber, exactOrderNumber));
+        
+        // If search includes prefix, also check for full invoice format match
+        if (hasPrefix) {
+          invoiceMatchConditions.push(
+            sql`LOWER(${sql.raw(`'${escapedPrefix}'`)}) || ${orders.orderNumber} = LOWER(${sql.raw(`'${escapedPrefix}${exactOrderNumber}'`)})`
+          );
+        }
+        
+        // For numeric searches: exact invoice match OR customer name match (fuzzy)
+        const searchConditions: any[] = [];
+        
+        // Add invoice matching conditions
+        if (invoiceMatchConditions.length === 1) {
+          searchConditions.push(invoiceMatchConditions[0]);
+        } else {
+          searchConditions.push(or(...invoiceMatchConditions));
+        }
+        
+        // Add customer name fuzzy matching
+        searchConditions.push(
+          sql`LOWER(${orders.customerName}) LIKE LOWER(${searchPattern})`
+        );
+        
+        conditions.push(or(...searchConditions));
+      } else {
+        // For non-numeric searches, use fuzzy matching for customer name only
+        // No search by invoice number for non-numeric text
+        conditions.push(
+          sql`LOWER(${orders.customerName}) LIKE LOWER(${searchPattern})`
+        );
+      }
+    }
+    
+    // Payment method filter
+    if (paymentMethod && paymentMethod !== "all") {
+      // Handle comma-separated payment methods (for split payments)
+      conditions.push(
+        or(
+          eq(orders.paymentMethod, paymentMethod),
+          sql`${orders.paymentMethod} LIKE ${`%${paymentMethod}%`}`
+        )
+      );
+    }
+    
+    // Payment status filter
+    if (paymentStatus && paymentStatus !== "all") {
+      conditions.push(eq(orders.paymentStatus, paymentStatus));
+    }
+    
+    // Amount range filter
+    if (minAmount !== undefined) {
+      conditions.push(gte(sql`CAST(${orders.total} AS DECIMAL)`, minAmount));
+    }
+    if (maxAmount !== undefined) {
+      conditions.push(lte(sql`CAST(${orders.total} AS DECIMAL)`, maxAmount));
+    }
+    
+    // Date range filter (use dateTo as-is so client's timezone end time is respected, e.g. Jan 31 23:59:59.999 local)
+    if (dateFrom) {
+      conditions.push(gte(orders.createdAt, dateFrom));
+    }
+    if (dateTo) {
+      conditions.push(lte(orders.createdAt, dateTo));
+    }
+    
+    // Months filter (YYYY-MM): only when dateFrom/dateTo not both set (e.g. legacy or when client sends months only)
+    if (months && months.length > 0 && !(dateFrom && dateTo)) {
+      const monthConditions = months.map((m) => {
+        const parts = m.trim().split("-");
+        const y = parseInt(parts[0], 10);
+        const mo = parseInt(parts[1], 10);
+        if (isNaN(y) || isNaN(mo)) return null;
+        return sql`(EXTRACT(YEAR FROM ${orders.createdAt})::int = ${y} AND EXTRACT(MONTH FROM ${orders.createdAt})::int = ${mo})`;
+      }).filter(Boolean);
+      if (monthConditions.length > 0) {
+        conditions.push(or(...monthConditions));
+      }
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(whereClause);
+    const total = Number(countResult[0]?.count || 0);
+    
+    // Get paginated orders
+    let query = db.select().from(orders).where(whereClause).orderBy(desc(orders.createdAt));
+    
+    if (limit > 0) {
+      query = query.limit(limit) as any;
+    }
+    if (offset > 0) {
+      query = query.offset(offset) as any;
+    }
+    
+    const ordersList = await query;
+    
+    // If productSearch is provided, filter orders that contain products matching the search
+    if (productSearch && productSearch.trim()) {
+      const filteredOrders: Order[] = [];
+      for (const order of ordersList) {
+        const items = await this.getOrderItemsWithProducts(order.id);
+        const hasMatchingProduct = items.some(item => 
+          item.product && 
+          item.product.name.toLowerCase().includes(productSearch.toLowerCase())
+        );
+        if (hasMatchingProduct) {
+          filteredOrders.push(order);
+        }
+      }
+      
+      // Recalculate total for product search
+      // This is less efficient but necessary for product-based filtering
+      const allOrders = await db.select().from(orders).where(whereClause);
+      let productFilteredTotal = 0;
+      for (const order of allOrders) {
+        const items = await this.getOrderItemsWithProducts(order.id);
+        const hasMatchingProduct = items.some(item => 
+          item.product && 
+          item.product.name.toLowerCase().includes(productSearch.toLowerCase())
+        );
+        if (hasMatchingProduct) {
+          productFilteredTotal++;
+        }
+      }
+      
+      return { orders: filteredOrders, total: productFilteredTotal };
+    }
+    
+    return { orders: ordersList, total };
+  }
+
+  async getCustomerOrdersPaginated(
+    customerId: string,
+    branchId?: string | null,
+    limit: number = 50,
+    offset: number = 0,
+    search?: string,
+    paymentStatus?: string,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{ orders: Order[]; total: number }> {
+    const conditions: any[] = [
+      eq(orders.customerId, customerId),
+    ];
+    
+    // Branch filter - if branchId is provided, only show orders for that branch or null branch
+    if (branchId) {
+      conditions.push(
+        or(
+          eq(orders.branchId, branchId),
+          sql`${orders.branchId} IS NULL`
+        )
+      );
+    }
+    
+    // Search filter
+    if (search) {
+      const searchTrimmed = search.trim();
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchTrimmed);
+      
+      if (isUUID) {
+        conditions.push(eq(orders.id, searchTrimmed));
+      } else {
+        const searchPattern = `%${searchTrimmed}%`;
+        conditions.push(
+          or(
+            sql`LOWER(${orders.orderNumber}) LIKE LOWER(${searchPattern})`,
+            sql`LOWER(${orders.customerName}) LIKE LOWER(${searchPattern})`
+          )
+        );
+      }
+    }
+    
+    // Payment status filter
+    if (paymentStatus && paymentStatus !== "all") {
+      conditions.push(eq(orders.paymentStatus, paymentStatus));
+    }
+    
+    // Date range filter (use dateTo as-is so client's timezone end time is respected)
+    if (dateFrom) {
+      conditions.push(gte(orders.createdAt, dateFrom));
+    }
+    if (dateTo) {
+      conditions.push(lte(orders.createdAt, dateTo));
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(whereClause);
+    const total = Number(countResult[0]?.count || 0);
+    
+    // Get paginated orders
+    let query = db.select().from(orders).where(whereClause).orderBy(desc(orders.createdAt));
+    
+    if (limit > 0) {
+      query = query.limit(limit) as any;
+    }
+    if (offset > 0) {
+      query = query.offset(offset) as any;
+    }
+    
+    const ordersList = await query;
+    
+    return { orders: ordersList, total };
+  }
+
+  async getCustomerTransactionsPaginated(
+    customerId: string,
+    branchId?: string | null,
+    limit: number = 50,
+    offset: number = 0,
+    search?: string,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{ transactions: Array<{ id: string; type: "due" | "payment"; date: Date; amount: number; description: string; paymentMethod?: string; order?: Order; payment?: DuePayment }>; total: number }> {
+    // Get all orders for this customer that are due-related
+    // Include: orders with orderSource="due-management" OR orders with due/partial status OR orders that have payment allocations
+    const orderConditions: any[] = [eq(orders.customerId, customerId)];
+    
+    // Branch filter - if branchId is provided, only show orders for that branch or null branch
+    if (branchId) {
+      orderConditions.push(
+        or(
+          eq(orders.branchId, branchId),
+          sql`${orders.branchId} IS NULL`
+        )
+      );
+    }
+    
+    // Get orders that are due-related (due-management source OR due/partial status OR have allocations)
+    const allCustomerOrders = await db.select().from(orders).where(and(...orderConditions));
+    
+    // Get payment allocations to find orders that have been paid
+    const allocations = await db.select().from(duePaymentAllocations);
+    const orderIdsWithAllocations = new Set(allocations.map(a => a.orderId));
+    
+    // Filter due-related orders
+    const dueRelatedOrders = allCustomerOrders.filter(order => 
+      order.orderSource === "due-management" ||
+      order.paymentStatus === "due" ||
+      order.paymentStatus === "partial" ||
+      orderIdsWithAllocations.has(order.id)
+    );
+    
+    // Get due payments
+    const { payments: duePayments } = await this.getDuePayments(customerId, branchId);
+    
+    // Combine into transactions
+    type Transaction = {
+      id: string;
+      type: "due" | "payment";
+      date: Date;
+      amount: number;
+      description: string;
+      paymentMethod?: string;
+      order?: Order;
+      payment?: DuePayment;
+    };
+    
+    const transactions: Transaction[] = [
+      ...dueRelatedOrders.map(order => ({
+        id: order.id,
+        type: "due" as const,
+        date: new Date(order.createdAt),
+        amount: parseFloat(order.total || "0"),
+        description: order.orderSource === "due-management" ? "Due Entry" : `Order ${order.orderNumber}`,
+        order,
+      })),
+      ...duePayments.map(payment => {
+        // Parse paymentSlips if it's a string
+        let parsedPayment = payment;
+        if (payment.paymentSlips && typeof payment.paymentSlips === 'string') {
+          try {
+            parsedPayment = {
+              ...payment,
+              paymentSlips: JSON.parse(payment.paymentSlips),
+            };
+          } catch (e) {
+            // If parsing fails, keep as is
+          }
+        }
+        return {
+          id: payment.id,
+          type: "payment" as const,
+          date: new Date(payment.paymentDate),
+          amount: parseFloat(payment.amount || "0"),
+          description: payment.note || "Payment",
+          paymentMethod: payment.paymentMethod,
+          payment: parsedPayment,
+        };
+      }),
+    ];
+    
+    // Apply search filter
+    let filteredTransactions = transactions;
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase();
+      filteredTransactions = transactions.filter(t => 
+        t.description.toLowerCase().includes(searchLower) ||
+        (t.paymentMethod && t.paymentMethod.toLowerCase().includes(searchLower)) ||
+        (t.order && t.order.orderNumber.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    // Apply date range filter (use dateTo as-is so client's timezone end time is respected)
+    if (dateFrom) {
+      filteredTransactions = filteredTransactions.filter(t => t.date >= dateFrom);
+    }
+    if (dateTo) {
+      filteredTransactions = filteredTransactions.filter(t => t.date <= dateTo);
+    }
+    
+    // Sort by date, newest first
+    filteredTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+    
+    const total = filteredTransactions.length;
+    
+    // Apply pagination
+    const paginatedTransactions = limit > 0 
+      ? filteredTransactions.slice(offset, offset + limit)
+      : filteredTransactions;
+    
+    return { transactions: paginatedTransactions, total };
+  }
+
+  async getSalesStats(branchId?: string | null, filters?: { dateFrom?: Date; dateTo?: Date; months?: string[]; paymentMethod?: string; paymentStatus?: string; minAmount?: number; maxAmount?: number; search?: string }): Promise<{ totalSales: number; totalRevenue: number; totalDue: number; totalPaid: number; averageOrderValue: number }> {
+    const conditions: any[] = [];
+
+    if (branchId) conditions.push(eq(orders.branchId, branchId));
+    conditions.push(eq(orders.status, 'completed'));
+    conditions.push(sql`(${orders.orderSource} IS NULL OR ${orders.orderSource} != 'due-management')`);
+
+    if (filters?.search?.trim()) {
+      const searchTrimmed = filters.search.trim();
+      const settings = await this.getSettings();
+      const invoicePrefix = settings?.invoicePrefix || "INV-";
+      const upperSearch = searchTrimmed.toUpperCase();
+      const upperPrefix = invoicePrefix.toUpperCase();
+      let orderNumberSearch = searchTrimmed;
+      let hasPrefix = false;
+      if (upperSearch.startsWith(upperPrefix)) {
+        orderNumberSearch = searchTrimmed.substring(invoicePrefix.length);
+        hasPrefix = true;
+      }
+      const isNumeric = /^\d+$/.test(orderNumberSearch);
+      const escapedPrefix = invoicePrefix.replace(/'/g, "''");
+      const searchPattern = `%${searchTrimmed}%`;
+      if (isNumeric) {
+        const exactOrderNumber = orderNumberSearch;
+        const invoiceMatchConditions: any[] = [eq(orders.orderNumber, exactOrderNumber)];
+        if (hasPrefix) {
+          invoiceMatchConditions.push(
+            sql`LOWER(${sql.raw(`'${escapedPrefix}'`)}) || ${orders.orderNumber} = LOWER(${sql.raw(`'${escapedPrefix}${exactOrderNumber}'`)})`
+          );
+        }
+        const searchConditions = [
+          invoiceMatchConditions.length === 1 ? invoiceMatchConditions[0] : or(...invoiceMatchConditions),
+          sql`LOWER(${orders.customerName}) LIKE LOWER(${searchPattern})`,
+        ];
+        conditions.push(or(...searchConditions));
+      } else {
+        conditions.push(sql`LOWER(${orders.customerName}) LIKE LOWER(${searchPattern})`);
+      }
+    }
+
+    if (filters?.paymentMethod && filters.paymentMethod !== "all") {
+      conditions.push(or(
+        eq(orders.paymentMethod, filters.paymentMethod),
+        sql`${orders.paymentMethod} LIKE ${`%${filters.paymentMethod}%`}`
+      ));
+    }
+    if (filters?.paymentStatus && filters.paymentStatus !== "all") {
+      conditions.push(eq(orders.paymentStatus, filters.paymentStatus));
+    }
+    if (filters?.minAmount !== undefined) conditions.push(gte(sql`CAST(${orders.total} AS DECIMAL)`, filters.minAmount));
+    if (filters?.maxAmount !== undefined) conditions.push(lte(sql`CAST(${orders.total} AS DECIMAL)`, filters.maxAmount));
+    if (filters?.dateFrom) conditions.push(gte(orders.createdAt, filters.dateFrom));
+    if (filters?.dateTo) conditions.push(lte(orders.createdAt, filters.dateTo));
+    if (filters?.months && filters.months.length > 0 && !(filters.dateFrom && filters.dateTo)) {
+      const monthConditions = filters.months.map((m) => {
+        const parts = m.trim().split("-");
+        const y = parseInt(parts[0], 10);
+        const mo = parseInt(parts[1], 10);
+        if (isNaN(y) || isNaN(mo)) return null;
+        return sql`(EXTRACT(YEAR FROM ${orders.createdAt})::int = ${y} AND EXTRACT(MONTH FROM ${orders.createdAt})::int = ${mo})`;
+      }).filter(Boolean);
+      if (monthConditions.length > 0) conditions.push(or(...monthConditions));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const allOrders = await db.select().from(orders).where(whereClause);
+
+    let totalRevenue = 0;
+    let totalDue = 0;
+    let totalPaid = 0;
+    for (const order of allOrders) {
+      totalRevenue += parseFloat(order.total || "0");
+      totalPaid += parseFloat(order.paidAmount || "0");
+      totalDue += parseFloat(order.dueAmount || "0");
+    }
+    const totalSales = allOrders.length;
+    const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
+    return { totalSales, totalRevenue, totalDue, totalPaid, averageOrderValue };
   }
 
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
@@ -546,26 +1193,55 @@ export class DatabaseStorage implements IStorage {
   async createOrderWithItems(insertOrder: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const orderNumber = await this.getNextOrderNumber();
-      let orderData = {
+      let orderData: any = {
         ...insertOrder,
         orderNumber,
       };
       
-      // If payment status is "due", create or find customer
-      if (insertOrder.paymentStatus === 'due') {
-        const customerName = insertOrder.customerName || 'Walk-in Customer';
+      // Handle createdAt if provided - convert to Date if it's a string
+      if (insertOrder.createdAt) {
+        orderData.createdAt = insertOrder.createdAt instanceof Date 
+          ? insertOrder.createdAt 
+          : new Date(insertOrder.createdAt);
+      }
+      
+      // Create or find customer if customerName is provided (not just for due/partial orders)
+      if (insertOrder.customerName && insertOrder.customerName.trim() && insertOrder.customerName !== 'Walk-in Customer') {
+        const customerName = insertOrder.customerName.trim();
         
-        // Try to find existing customer by name
-        const existingCustomer = await tx
-          .select()
-          .from(customers)
-          .where(eq(customers.name, customerName))
-          .limit(1);
+        // Try to find existing customer by name and phone (if provided)
+        let existingCustomer;
+        if (insertOrder.customerPhone) {
+          existingCustomer = await tx
+            .select()
+            .from(customers)
+            .where(and(
+              eq(customers.name, customerName),
+              eq(customers.phone, insertOrder.customerPhone)
+            ))
+            .limit(1);
+        }
+        
+        // If not found by name+phone, try by name only
+        if (!existingCustomer || existingCustomer.length === 0) {
+          existingCustomer = await tx
+            .select()
+            .from(customers)
+            .where(eq(customers.name, customerName))
+            .limit(1);
+        }
         
         let customerId: string;
         
-        if (existingCustomer.length > 0) {
+        if (existingCustomer && existingCustomer.length > 0) {
           customerId = existingCustomer[0].id;
+          // Update customer phone if provided and different
+          if (insertOrder.customerPhone && existingCustomer[0].phone !== insertOrder.customerPhone) {
+            await tx
+              .update(customers)
+              .set({ phone: insertOrder.customerPhone })
+              .where(eq(customers.id, customerId));
+          }
         } else {
           // Create new customer
           const newCustomerResult = await tx
@@ -581,13 +1257,20 @@ export class DatabaseStorage implements IStorage {
           customerId = newCustomerResult[0].id;
         }
         
-        // Set customer-related fields for due orders
+        // Set customer-related fields
         orderData = {
           ...orderData,
           customerId,
           customerName: customerName,
-          dueAmount: insertOrder.total,
-          paidAmount: '0',
+        };
+      }
+      
+      // If payment status is "due" or "partial", set due/paid amounts
+      if (insertOrder.paymentStatus === 'due' || insertOrder.paymentStatus === 'partial') {
+        orderData = {
+          ...orderData,
+          dueAmount: insertOrder.dueAmount !== undefined ? insertOrder.dueAmount : (insertOrder.paymentStatus === 'due' ? insertOrder.total : '0'),
+          paidAmount: insertOrder.paidAmount !== undefined ? insertOrder.paidAmount : (insertOrder.paymentStatus === 'partial' ? '0' : '0'),
         };
       }
       
@@ -598,6 +1281,9 @@ export class DatabaseStorage implements IStorage {
         const orderItemsWithOrderId = items.map(item => ({
           ...item,
           orderId: newOrder.id,
+          itemDiscount: item.itemDiscount || "0",
+          itemDiscountType: item.itemDiscountType || "amount",
+          selectedSize: (item as any).selectedSize || undefined,
         }));
         await tx.insert(orderItems).values(orderItemsWithOrderId);
       }
@@ -607,8 +1293,184 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateOrder(id: string, updates: Partial<InsertOrder>): Promise<Order | undefined> {
-    const result = await db.update(orders).set(updates).where(eq(orders.id, id)).returning();
-    return result[0];
+    return await db.transaction(async (tx) => {
+      // If customerName is being updated and is provided, create or find customer
+      if (updates.customerName && updates.customerName.trim() && updates.customerName !== 'Walk-in Customer') {
+        const customerName = updates.customerName.trim();
+        
+        // Try to find existing customer by name and phone (if provided)
+        let existingCustomer;
+        if (updates.customerPhone) {
+          existingCustomer = await tx
+            .select()
+            .from(customers)
+            .where(and(
+              eq(customers.name, customerName),
+              eq(customers.phone, updates.customerPhone)
+            ))
+            .limit(1);
+        }
+        
+        // If not found by name+phone, try by name only
+        if (!existingCustomer || existingCustomer.length === 0) {
+          existingCustomer = await tx
+            .select()
+            .from(customers)
+            .where(eq(customers.name, customerName))
+            .limit(1);
+        }
+        
+        let customerId: string;
+        
+        if (existingCustomer && existingCustomer.length > 0) {
+          customerId = existingCustomer[0].id;
+          // Update customer phone if provided and different
+          if (updates.customerPhone && existingCustomer[0].phone !== updates.customerPhone) {
+            await tx
+              .update(customers)
+              .set({ phone: updates.customerPhone })
+              .where(eq(customers.id, customerId));
+          }
+        } else {
+          // Get the current order to get branchId
+          const currentOrder = await tx
+            .select()
+            .from(orders)
+            .where(eq(orders.id, id))
+            .limit(1);
+          
+          // Create new customer
+          const newCustomerResult = await tx
+            .insert(customers)
+            .values({
+              name: customerName,
+              phone: updates.customerPhone || null,
+              email: null,
+              branchId: currentOrder[0]?.branchId || null,
+              notes: null,
+            })
+            .returning();
+          customerId = newCustomerResult[0].id;
+        }
+        
+        // Set customer-related fields in updates
+        updates.customerId = customerId;
+        updates.customerName = customerName;
+      }
+      
+      const result = await tx.update(orders).set(updates).where(eq(orders.id, id)).returning();
+      return result[0];
+    });
+  }
+
+  async updateOrderWithItems(id: string, updates: Partial<InsertOrder>, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order | undefined> {
+    return await db.transaction(async (tx) => {
+      // Get the existing order to check current items for inventory restoration
+      const existingOrder = await tx.select().from(orders).where(eq(orders.id, id)).limit(1);
+      if (!existingOrder || existingOrder.length === 0) {
+        return undefined;
+      }
+      
+      // Get existing order items to restore inventory
+      const existingItems = await tx.select().from(orderItems).where(eq(orderItems.orderId, id));
+      
+      // Restore inventory for existing items
+      for (const item of existingItems) {
+        const product = await tx.select().from(products).where(eq(products.id, item.productId)).limit(1);
+        if (product && product[0]) {
+          const currentStock = parseFloat(product[0].stock || "0");
+          const newStock = currentStock + item.quantity;
+          await tx.update(products).set({ stock: newStock.toString() }).where(eq(products.id, item.productId));
+        }
+      }
+      
+      // Delete existing order items
+      await tx.delete(orderItems).where(eq(orderItems.orderId, id));
+      
+      // Handle customer creation/update (same logic as updateOrder)
+      if (updates.customerName && updates.customerName.trim() && updates.customerName !== 'Walk-in Customer') {
+        const customerName = updates.customerName.trim();
+        
+        let existingCustomer;
+        if (updates.customerPhone) {
+          existingCustomer = await tx
+            .select()
+            .from(customers)
+            .where(and(
+              eq(customers.name, customerName),
+              eq(customers.phone, updates.customerPhone)
+            ))
+            .limit(1);
+        }
+        
+        if (!existingCustomer || existingCustomer.length === 0) {
+          existingCustomer = await tx
+            .select()
+            .from(customers)
+            .where(eq(customers.name, customerName))
+            .limit(1);
+        }
+        
+        let customerId: string;
+        
+        if (existingCustomer && existingCustomer.length > 0) {
+          customerId = existingCustomer[0].id;
+          if (updates.customerPhone && existingCustomer[0].phone !== updates.customerPhone) {
+            await tx
+              .update(customers)
+              .set({ phone: updates.customerPhone })
+              .where(eq(customers.id, customerId));
+          }
+        } else {
+          const newCustomerResult = await tx
+            .insert(customers)
+            .values({
+              name: customerName,
+              phone: updates.customerPhone || null,
+              email: null,
+              branchId: existingOrder[0].branchId || null,
+              notes: null,
+            })
+            .returning();
+          customerId = newCustomerResult[0].id;
+        }
+        
+        updates.customerId = customerId;
+        updates.customerName = customerName;
+      }
+      
+      // Update the order
+      const result = await tx.update(orders).set(updates).where(eq(orders.id, id)).returning();
+      const updatedOrder = result[0];
+      
+      if (!updatedOrder) {
+        return undefined;
+      }
+      
+      // Create new order items and deduct inventory
+      if (items.length > 0) {
+        const orderItemsWithOrderId = items.map(item => ({
+          ...item,
+          orderId: id,
+          itemDiscount: item.itemDiscount || "0",
+          itemDiscountType: item.itemDiscountType || "amount",
+          selectedSize: (item as any).selectedSize || undefined,
+        }));
+        await tx.insert(orderItems).values(orderItemsWithOrderId);
+        
+        // Deduct inventory for new items
+        for (const item of items) {
+          const product = await tx.select().from(products).where(eq(products.id, item.productId)).limit(1);
+          if (product && product[0]) {
+            const currentStock = parseFloat(product[0].stock || "0");
+            const newStock = Math.max(0, currentStock - item.quantity);
+            await tx.update(products).set({ stock: newStock.toString() }).where(eq(products.id, item.productId));
+          }
+        }
+      }
+      
+      return updatedOrder;
+    });
   }
 
   async updateOrderStatus(id: string, status: string): Promise<Order | undefined> {
@@ -691,6 +1553,7 @@ export class DatabaseStorage implements IStorage {
     totalRevenue: number;
     totalOrders: number;
     totalExpenses: number;
+    totalStaffSalary: number;
     profitLoss: number;
     totalPurchase: number;
   }> {
@@ -724,7 +1587,18 @@ export class DatabaseStorage implements IStorage {
       ));
 
     const totalExpenses = allExpenses.reduce((sum, expense) => sum + parseFloat(expense.total), 0);
-    const profitLoss = totalRevenue - totalExpenses;
+
+    // Get staff salaries for the period
+    const allStaffSalaries = await db.select().from(staffSalaries)
+      .where(and(
+        gte(staffSalaries.salaryDate, startDate),
+        lte(staffSalaries.salaryDate, endDate)
+      ));
+
+    const totalStaffSalary = allStaffSalaries.reduce((sum, salary) => sum + parseFloat(salary.totalSalary), 0);
+
+    // Profit/Loss = Revenue - Expenses - Staff Salaries
+    const profitLoss = totalRevenue - totalExpenses - totalStaffSalary;
 
     const allOrders = await db.select().from(orders).where(eq(orders.status, 'completed'));
 
@@ -734,6 +1608,7 @@ export class DatabaseStorage implements IStorage {
       totalRevenue,
       totalOrders: allOrders.length,
       totalExpenses,
+      totalStaffSalary,
       profitLoss,
       totalPurchase: totalPurchaseCost,
     };
@@ -850,6 +1725,70 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => a.product.localeCompare(b.product));
   }
 
+  async getSalesSummaryPaginated(
+    startDate: Date, 
+    endDate: Date, 
+    branchId?: string | null,
+    limit: number = 50,
+    offset: number = 0,
+    search?: string
+  ): Promise<{ items: Array<{ product: string; quantity: number; revenue: number }>; total: number }> {
+    const conditions: any[] = [
+      eq(orders.status, 'completed'),
+      gte(orders.createdAt, startDate),
+      lte(orders.createdAt, endDate),
+      // Exclude orders from due management
+      sql`(${orders.orderSource} IS NULL OR ${orders.orderSource} != 'due-management')`,
+    ];
+
+    // Branch filter
+    if (branchId) {
+      conditions.push(eq(orders.branchId, branchId));
+    }
+
+    const whereClause = and(...conditions);
+
+    const completedOrders = await db.select().from(orders).where(whereClause);
+
+    const productStats = new Map<string, { name: string; quantity: number; revenue: number }>();
+
+    for (const order of completedOrders) {
+      const items = await this.getOrderItems(order.id);
+      for (const item of items) {
+        const product = await this.getProduct(item.productId);
+        if (product) {
+          const current = productStats.get(product.id) || { name: product.name, quantity: 0, revenue: 0 };
+          productStats.set(product.id, {
+            name: product.name,
+            quantity: current.quantity + item.quantity,
+            revenue: current.revenue + parseFloat(item.total),
+          });
+        }
+      }
+    }
+
+    let allItems = Array.from(productStats.values())
+      .map(({ name, quantity, revenue }) => ({ product: name, quantity, revenue }))
+      .sort((a, b) => a.product.localeCompare(b.product));
+
+    // Apply search filter if provided
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase();
+      allItems = allItems.filter(item => 
+        item.product.toLowerCase().includes(searchLower)
+      );
+    }
+
+    const total = allItems.length;
+
+    // Apply pagination
+    const paginatedItems = limit > 0 
+      ? allItems.slice(offset, offset + limit)
+      : allItems;
+
+    return { items: paginatedItems, total };
+  }
+
   async getRecentOrders(startDate: Date, endDate: Date): Promise<Order[]> {
     return await db.select().from(orders)
       .where(and(
@@ -885,11 +1824,57 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
-  async getExpenses(branchId?: string | null): Promise<Expense[]> {
+  async getExpenses(branchId?: string | null, dateFrom?: Date, dateTo?: Date, months?: string[]): Promise<Expense[]> {
+    const conditions: any[] = [];
     if (branchId) {
-      return await db.select().from(expenses).where(eq(expenses.branchId, branchId));
+      conditions.push(eq(expenses.branchId, branchId));
     }
-    return await db.select().from(expenses);
+    if (dateFrom) {
+      conditions.push(gte(expenses.expenseDate, dateFrom));
+    }
+    if (dateTo) conditions.push(lte(expenses.expenseDate, dateTo));
+    if (months && months.length > 0 && !(dateFrom && dateTo)) {
+      const monthConditions = months.map((m) => {
+        const parts = m.trim().split("-");
+        const y = parseInt(parts[0], 10);
+        const mo = parseInt(parts[1], 10);
+        if (isNaN(y) || isNaN(mo)) return null;
+        return sql`(EXTRACT(YEAR FROM ${expenses.expenseDate})::int = ${y} AND EXTRACT(MONTH FROM ${expenses.expenseDate})::int = ${mo})`;
+      }).filter(Boolean);
+      if (monthConditions.length > 0) {
+        conditions.push(or(...monthConditions));
+      }
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    return await db.select().from(expenses).where(whereClause);
+  }
+
+  async getExpenseStats(branchId?: string | null, dateFrom?: Date, dateTo?: Date, months?: string[]): Promise<{ totalAmount: number; count: number; avgExpense: number }> {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(expenses.branchId, branchId));
+    if (dateFrom) conditions.push(gte(expenses.expenseDate, dateFrom));
+    if (dateTo) conditions.push(lte(expenses.expenseDate, dateTo));
+    if (months && months.length > 0 && !(dateFrom && dateTo)) {
+      const monthConditions = months.map((m) => {
+        const parts = m.trim().split("-");
+        const y = parseInt(parts[0], 10);
+        const mo = parseInt(parts[1], 10);
+        if (isNaN(y) || isNaN(mo)) return null;
+        return sql`(EXTRACT(YEAR FROM ${expenses.expenseDate})::int = ${y} AND EXTRACT(MONTH FROM ${expenses.expenseDate})::int = ${mo})`;
+      }).filter(Boolean);
+      if (monthConditions.length > 0) conditions.push(or(...monthConditions));
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    let query = db.select({
+      totalAmount: sql<string>`COALESCE(SUM(CAST(${expenses.total} AS DECIMAL)), 0)`,
+      count: sql<number>`count(*)`,
+    }).from(expenses);
+    if (whereClause) query = query.where(whereClause) as any;
+    const rows = await query;
+    const totalAmount = parseFloat(rows[0]?.totalAmount || "0");
+    const count = Number(rows[0]?.count || 0);
+    const avgExpense = count > 0 ? totalAmount / count : 0;
+    return { totalAmount, count, avgExpense };
   }
 
   async getExpense(id: string): Promise<Expense | undefined> {
@@ -928,26 +1913,66 @@ export class DatabaseStorage implements IStorage {
     const result = await db.insert(purchases).values(insertPurchase).returning();
     const purchase = result[0];
     
+    let product: Product | undefined;
+    
+    // First, try to find product by productId if provided
     if (insertPurchase.productId) {
-      const product = await this.getProduct(insertPurchase.productId);
-      if (product) {
-        const currentQty = parseFloat(product.quantity);
-        const purchasedQty = parseFloat(insertPurchase.quantity);
-        const newQty = currentQty + purchasedQty;
+      product = await this.getProduct(insertPurchase.productId);
+    }
+    
+    // If product not found by ID, try to find by name
+    if (!product && insertPurchase.itemName) {
+      product = await this.getProductByName(insertPurchase.itemName);
+    }
+    
+    // Update inventory if product found
+    if (product) {
+      const currentQty = parseFloat(product.quantity || "0");
+      const purchasedQty = parseFloat(insertPurchase.quantity);
+      
+      // Calculate quantity to add based on pieces per unit if available
+      let quantityToAdd = purchasedQty;
+      
+      // If purchase has piecesPerUnit, calculate total pieces
+      if (insertPurchase.piecesPerUnit) {
+        const piecesPerUnit = parseFloat(insertPurchase.piecesPerUnit);
+        const totalPieces = purchasedQty * piecesPerUnit;
         
-        await db.update(products)
-          .set({ quantity: newQty.toString() })
-          .where(eq(products.id, insertPurchase.productId));
-        
-        await db.insert(inventoryAdjustments).values({
-          productId: insertPurchase.productId,
-          adjustmentType: "add",
-          quantity: purchasedQty.toString(),
-          reason: "purchase",
-          notes: `Automatic addition from purchase - ${insertPurchase.itemName}`,
-          performedBy: null,
-        });
+        // If product unit is "piece", add total pieces
+        if (product.unit === "piece") {
+          quantityToAdd = totalPieces;
+        } else if (product.unit === insertPurchase.unit) {
+          // If units match, add the purchased quantity
+          quantityToAdd = purchasedQty;
+        } else {
+          // If units don't match but we have pieces info, add total pieces if product is in pieces
+          // Otherwise, add the purchased quantity as-is
+          quantityToAdd = product.unit === "piece" ? totalPieces : purchasedQty;
+        }
+      } else {
+        // No pieces info, check if units match
+        if (product.unit === insertPurchase.unit) {
+          quantityToAdd = purchasedQty;
+        } else {
+          // Units don't match, add as-is (might need manual adjustment)
+          quantityToAdd = purchasedQty;
+        }
       }
+      
+      const newQty = currentQty + quantityToAdd;
+      
+      await db.update(products)
+        .set({ quantity: newQty.toString() })
+        .where(eq(products.id, product.id));
+      
+      await db.insert(inventoryAdjustments).values({
+        productId: product.id,
+        adjustmentType: "add",
+        quantity: quantityToAdd.toString(),
+        reason: "purchase",
+        notes: `Automatic addition from purchase - ${insertPurchase.itemName} (${insertPurchase.quantity} ${insertPurchase.unit}${insertPurchase.piecesPerUnit ? `, ${insertPurchase.piecesPerUnit} pieces/${insertPurchase.unit}` : ''})`,
+        performedBy: null,
+      });
     }
     
     return purchase;
@@ -957,30 +1982,72 @@ export class DatabaseStorage implements IStorage {
     const purchase = await this.getPurchase(id);
     if (!purchase) return undefined;
     
-    if (purchase.productId && updates.quantity !== undefined) {
-      const product = await this.getProduct(purchase.productId);
-      if (product) {
-        const oldQty = parseFloat(purchase.quantity);
-        const newQty = parseFloat(updates.quantity);
-        const delta = newQty - oldQty;
-        
-        if (delta !== 0) {
-          const currentInventory = parseFloat(product.quantity);
-          const newInventory = Math.max(0, currentInventory + delta);
-          
-          await db.update(products)
-            .set({ quantity: newInventory.toString() })
-            .where(eq(products.id, purchase.productId));
-          
-          await db.insert(inventoryAdjustments).values({
-            productId: purchase.productId,
-            adjustmentType: delta > 0 ? "add" : "remove",
-            quantity: Math.abs(delta).toString(),
-            reason: "purchase",
-            notes: `Adjustment from purchase update - ${purchase.itemName} (changed from ${oldQty} to ${newQty})`,
-            performedBy: null,
-          });
+    // Find product by ID or name
+    let product: Product | undefined;
+    if (purchase.productId) {
+      product = await this.getProduct(purchase.productId);
+    }
+    if (!product && purchase.itemName) {
+      product = await this.getProductByName(purchase.itemName);
+    }
+    
+    // Handle inventory update if quantity changed
+    if (product && updates.quantity !== undefined) {
+      const oldQty = parseFloat(purchase.quantity);
+      const newQty = parseFloat(updates.quantity);
+      
+      // Calculate old quantity to add (from original purchase)
+      let oldQuantityToAdd = oldQty;
+      if (purchase.piecesPerUnit) {
+        const piecesPerUnit = parseFloat(purchase.piecesPerUnit);
+        const totalPieces = oldQty * piecesPerUnit;
+        if (product.unit === "piece") {
+          oldQuantityToAdd = totalPieces;
+        } else if (product.unit === purchase.unit) {
+          oldQuantityToAdd = oldQty;
+        } else {
+          oldQuantityToAdd = product.unit === "piece" ? totalPieces : oldQty;
         }
+      } else if (product.unit !== purchase.unit) {
+        oldQuantityToAdd = oldQty; // Keep as-is if units don't match
+      }
+      
+      // Calculate new quantity to add (from updated purchase)
+      const updatedPiecesPerUnit = updates.piecesPerUnit || purchase.piecesPerUnit;
+      const updatedUnit = updates.unit || purchase.unit;
+      let newQuantityToAdd = newQty;
+      if (updatedPiecesPerUnit) {
+        const piecesPerUnit = parseFloat(updatedPiecesPerUnit);
+        const totalPieces = newQty * piecesPerUnit;
+        if (product.unit === "piece") {
+          newQuantityToAdd = totalPieces;
+        } else if (product.unit === updatedUnit) {
+          newQuantityToAdd = newQty;
+        } else {
+          newQuantityToAdd = product.unit === "piece" ? totalPieces : newQty;
+        }
+      } else if (product.unit !== updatedUnit) {
+        newQuantityToAdd = newQty; // Keep as-is if units don't match
+      }
+      
+      const delta = newQuantityToAdd - oldQuantityToAdd;
+      
+      if (delta !== 0) {
+        const currentInventory = parseFloat(product.quantity || "0");
+        const newInventory = Math.max(0, currentInventory + delta);
+        
+        await db.update(products)
+          .set({ quantity: newInventory.toString() })
+          .where(eq(products.id, product.id));
+        
+        await db.insert(inventoryAdjustments).values({
+          productId: product.id,
+          adjustmentType: delta > 0 ? "add" : "remove",
+          quantity: Math.abs(delta).toString(),
+          reason: "purchase",
+          notes: `Adjustment from purchase update - ${purchase.itemName} (changed from ${oldQty} ${purchase.unit} to ${newQty} ${updatedUnit})`,
+          performedBy: null,
+        });
       }
     }
     
@@ -992,26 +2059,49 @@ export class DatabaseStorage implements IStorage {
     const purchase = await this.getPurchase(id);
     if (!purchase) return false;
     
+    // Find product by ID or name
+    let product: Product | undefined;
     if (purchase.productId) {
-      const product = await this.getProduct(purchase.productId);
-      if (product) {
-        const purchasedQty = parseFloat(purchase.quantity);
-        const currentInventory = parseFloat(product.quantity);
-        const newInventory = Math.max(0, currentInventory - purchasedQty);
-        
-        await db.update(products)
-          .set({ quantity: newInventory.toString() })
-          .where(eq(products.id, purchase.productId));
-        
-        await db.insert(inventoryAdjustments).values({
-          productId: purchase.productId,
-          adjustmentType: "remove",
-          quantity: purchasedQty.toString(),
-          reason: "purchase",
-          notes: `Reversal from purchase deletion - ${purchase.itemName}`,
-          performedBy: null,
-        });
+      product = await this.getProduct(purchase.productId);
+    }
+    if (!product && purchase.itemName) {
+      product = await this.getProductByName(purchase.itemName);
+    }
+    
+    if (product) {
+      const purchasedQty = parseFloat(purchase.quantity);
+      
+      // Calculate quantity to remove based on pieces per unit if available
+      let quantityToRemove = purchasedQty;
+      if (purchase.piecesPerUnit) {
+        const piecesPerUnit = parseFloat(purchase.piecesPerUnit);
+        const totalPieces = purchasedQty * piecesPerUnit;
+        if (product.unit === "piece") {
+          quantityToRemove = totalPieces;
+        } else if (product.unit === purchase.unit) {
+          quantityToRemove = purchasedQty;
+        } else {
+          quantityToRemove = product.unit === "piece" ? totalPieces : purchasedQty;
+        }
+      } else if (product.unit !== purchase.unit) {
+        quantityToRemove = purchasedQty; // Keep as-is if units don't match
       }
+      
+      const currentInventory = parseFloat(product.quantity || "0");
+      const newInventory = Math.max(0, currentInventory - quantityToRemove);
+      
+      await db.update(products)
+        .set({ quantity: newInventory.toString() })
+        .where(eq(products.id, product.id));
+      
+      await db.insert(inventoryAdjustments).values({
+        productId: product.id,
+        adjustmentType: "remove",
+        quantity: quantityToRemove.toString(),
+        reason: "purchase",
+        notes: `Reversal from purchase deletion - ${purchase.itemName} (${purchase.quantity} ${purchase.unit}${purchase.piecesPerUnit ? `, ${purchase.piecesPerUnit} pieces/${purchase.unit}` : ''})`,
+        performedBy: null,
+      });
     }
     
     const result = await db.delete(purchases).where(eq(purchases.id, id));
@@ -1045,6 +2135,54 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  async getPositions(): Promise<Position[]> {
+    return await db.select().from(positions).orderBy(asc(positions.name));
+  }
+
+  async getPosition(id: string): Promise<Position | undefined> {
+    const result = await db.select().from(positions).where(eq(positions.id, id));
+    return result[0];
+  }
+
+  async createPosition(insertPosition: InsertPosition): Promise<Position> {
+    const result = await db.insert(positions).values(insertPosition).returning();
+    return result[0];
+  }
+
+  async updatePosition(id: string, updates: Partial<InsertPosition>): Promise<Position | undefined> {
+    const result = await db.update(positions).set(updates).where(eq(positions.id, id)).returning();
+    return result[0];
+  }
+
+  async deletePosition(id: string): Promise<boolean> {
+    const result = await db.delete(positions).where(eq(positions.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  async getDepartments(): Promise<Department[]> {
+    return await db.select().from(departments).orderBy(asc(departments.name));
+  }
+
+  async getDepartment(id: string): Promise<Department | undefined> {
+    const result = await db.select().from(departments).where(eq(departments.id, id));
+    return result[0];
+  }
+
+  async createDepartment(insertDepartment: InsertDepartment): Promise<Department> {
+    const result = await db.insert(departments).values(insertDepartment).returning();
+    return result[0];
+  }
+
+  async updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department | undefined> {
+    const result = await db.update(departments).set(updates).where(eq(departments.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteDepartment(id: string): Promise<boolean> {
+    const result = await db.delete(departments).where(eq(departments.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
   async getAttendance(): Promise<Attendance[]> {
     return await db.select().from(attendance);
   }
@@ -1064,6 +2202,84 @@ export class DatabaseStorage implements IStorage {
 
   async getAttendanceByEmployee(employeeId: string): Promise<Attendance[]> {
     return await db.select().from(attendance).where(eq(attendance.employeeId, employeeId));
+  }
+
+  async getAttendanceStats(): Promise<{
+    totalRecords: number;
+    presentToday: number;
+    absentToday: number;
+    avgHours: number;
+  }> {
+    // Get current date starting from midnight (12:00 AM)
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get all active employees
+    const allEmployees = await db.select().from(employees).where(eq(employees.status, "active"));
+    const totalActiveEmployees = allEmployees.length;
+
+    // Get all attendance records from today (from midnight)
+    const todayAttendance = await db.select().from(attendance)
+      .where(and(
+        gte(attendance.date, startOfDay),
+        lte(attendance.date, endOfDay)
+      ));
+
+    // Count employees with check-in from midnight onwards
+    const employeesWithCheckIn = new Set(
+      todayAttendance
+        .filter(record => record.checkIn && record.checkIn.trim() !== "")
+        .map(record => record.employeeId)
+    );
+
+    const presentToday = employeesWithCheckIn.size;
+    const absentToday = Math.max(0, totalActiveEmployees - presentToday);
+
+    // Calculate average working hours
+    let totalHours = 0;
+    let recordsWithHours = 0;
+
+    for (const record of todayAttendance) {
+      if (record.checkIn && record.checkOut) {
+        try {
+          // Parse time strings (format: "HH:mm" or "HH:mm:ss")
+          const parseTime = (timeStr: string): number => {
+            const parts = timeStr.trim().split(":");
+            const hours = parseInt(parts[0], 10) || 0;
+            const minutes = parseInt(parts[1], 10) || 0;
+            return hours + minutes / 60;
+          };
+
+          const checkInHours = parseTime(record.checkIn);
+          let checkOutHours = parseTime(record.checkOut);
+          
+          // Handle next day check-out (if check-out time is earlier than check-in, assume next day)
+          if (checkOutHours < checkInHours) {
+            checkOutHours += 24; // Add 24 hours for next day
+          }
+          
+          const hours = checkOutHours - checkInHours;
+          if (hours > 0) {
+            totalHours += hours;
+            recordsWithHours++;
+          }
+        } catch (error) {
+          // Skip invalid time formats
+        }
+      }
+    }
+
+    const avgHours = recordsWithHours > 0 ? totalHours / recordsWithHours : 0;
+
+    return {
+      totalRecords: todayAttendance.length,
+      presentToday,
+      absentToday,
+      avgHours: Math.round(avgHours * 10) / 10, // Round to 1 decimal place
+    };
   }
 
   async createAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
@@ -1161,6 +2377,67 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  async getStaffSalariesWithEmployees(startDate?: Date, endDate?: Date): Promise<Array<StaffSalary & { employee: Employee | null }>> {
+    const conditions = [];
+    if (startDate) {
+      conditions.push(gte(staffSalaries.salaryDate, startDate));
+    }
+    if (endDate) {
+      conditions.push(lte(staffSalaries.salaryDate, endDate));
+    }
+
+    let salariesQuery = db.select().from(staffSalaries);
+    if (conditions.length > 0) {
+      salariesQuery = salariesQuery.where(and(...conditions)) as any;
+    }
+    const allSalaries = await salariesQuery.orderBy(desc(staffSalaries.salaryDate));
+
+    // Get employee details for each salary
+    const result = await Promise.all(
+      allSalaries.map(async (salary) => {
+        const employee = await this.getEmployee(salary.employeeId);
+        return { ...salary, employee: employee || null };
+      })
+    );
+
+    return result;
+  }
+
+  async getStaffSalarySummary(startDate?: Date, endDate?: Date): Promise<{
+    totalSalaries: number;
+    totalAmount: number;
+    totalDeductions: number;
+    netTotal: number;
+    employeeCount: number;
+  }> {
+    const conditions = [];
+    if (startDate) {
+      conditions.push(gte(staffSalaries.salaryDate, startDate));
+    }
+    if (endDate) {
+      conditions.push(lte(staffSalaries.salaryDate, endDate));
+    }
+
+    let salariesQuery = db.select().from(staffSalaries);
+    if (conditions.length > 0) {
+      salariesQuery = salariesQuery.where(and(...conditions)) as any;
+    }
+    const allSalaries = await salariesQuery;
+
+    const totalAmount = allSalaries.reduce((sum, s) => sum + parseFloat(s.salaryAmount), 0);
+    const totalDeductions = allSalaries.reduce((sum, s) => sum + parseFloat(s.deductSalary || "0"), 0);
+    const netTotal = allSalaries.reduce((sum, s) => sum + parseFloat(s.totalSalary), 0);
+    const uniqueEmployees = new Set(allSalaries.map(s => s.employeeId));
+
+    return {
+      totalSalaries: allSalaries.length,
+      totalAmount,
+      totalDeductions,
+      netTotal,
+      employeeCount: uniqueEmployees.size,
+    };
+  }
+
   async getSettings(): Promise<Settings | undefined> {
     const result = await db.select().from(settings).limit(1);
     if (result.length === 0) {
@@ -1188,9 +2465,244 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(inventoryAdjustments).orderBy(desc(inventoryAdjustments.createdAt));
   }
 
+  async getInventoryAdjustmentsPaginated(
+    branchId?: string | null,
+    limit: number = 50,
+    offset: number = 0,
+    search?: string,
+    productId?: string | null,
+    adjustmentType?: string | null
+  ): Promise<{ adjustments: InventoryAdjustment[]; total: number }> {
+    const conditions = [];
+    
+    // Product filter
+    if (productId) {
+      conditions.push(eq(inventoryAdjustments.productId, productId));
+    }
+    
+    // Adjustment type filter
+    if (adjustmentType) {
+      conditions.push(eq(inventoryAdjustments.adjustmentType, adjustmentType));
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(inventoryAdjustments)
+      .where(whereClause);
+    const total = Number(countResult[0]?.count || 0);
+    
+    // Get paginated adjustments
+    let query = db.select().from(inventoryAdjustments);
+    if (whereClause) {
+      query = query.where(whereClause) as any;
+    }
+    
+    // If search is provided, we need to join with products table
+    let adjustments: InventoryAdjustment[] = [];
+    if (search) {
+      // Get all adjustments first, then filter by product name
+      const allAdjustments = await query
+        .orderBy(desc(inventoryAdjustments.createdAt))
+        .limit(10000); // Large limit to get all for filtering
+      
+      // Get product IDs for matching products
+      const searchPattern = `%${search}%`;
+      const matchingProducts = await db.select({ id: products.id })
+        .from(products)
+        .where(sql`LOWER(${products.name}) LIKE LOWER(${searchPattern})`);
+      const matchingProductIds = new Set(matchingProducts.map(p => p.id));
+      
+      // Filter adjustments by matching product IDs
+      adjustments = allAdjustments.filter(adj => matchingProductIds.has(adj.productId));
+      
+      // Apply pagination after filtering
+      const paginatedAdjustments = adjustments.slice(offset, offset + limit);
+      return {
+        adjustments: paginatedAdjustments,
+        total: adjustments.length,
+      };
+    } else {
+      adjustments = await query
+        .orderBy(desc(inventoryAdjustments.createdAt))
+        .limit(limit)
+        .offset(offset);
+    }
+    
+    return {
+      adjustments,
+      total,
+    };
+  }
+
   async getInventoryAdjustment(id: string): Promise<InventoryAdjustment | undefined> {
     const result = await db.select().from(inventoryAdjustments).where(eq(inventoryAdjustments.id, id));
     return result[0];
+  }
+
+  async updateInventoryAdjustment(id: string, updateData: Partial<InsertInventoryAdjustment>): Promise<InventoryAdjustment> {
+    // Use transaction to update adjustment and recalculate product quantity
+    return await db.transaction(async (tx) => {
+      // Get the original adjustment
+      const [originalAdjustment] = await tx.select()
+        .from(inventoryAdjustments)
+        .where(eq(inventoryAdjustments.id, id))
+        .limit(1);
+      
+      if (!originalAdjustment) {
+        throw new Error("Adjustment not found");
+      }
+      
+      // Get current product quantity
+      const [product] = await tx.select({ quantity: products.quantity })
+        .from(products)
+        .where(eq(products.id, originalAdjustment.productId))
+        .limit(1);
+      
+      if (!product) {
+        throw new Error("Product not found");
+      }
+      
+      const currentQuantity = parseFloat(product.quantity || "0");
+      
+      // Reverse the original adjustment
+      const originalQuantity = parseFloat(originalAdjustment.quantity);
+      let reversedQuantity = currentQuantity;
+      if (originalAdjustment.adjustmentType === "add") {
+        reversedQuantity = Math.max(0, currentQuantity - originalQuantity);
+      } else if (originalAdjustment.adjustmentType === "remove") {
+        reversedQuantity = currentQuantity + originalQuantity;
+      } else if (originalAdjustment.adjustmentType === "set") {
+        // For "set" type, we need to know the previous quantity before the adjustment
+        // This is complex, so we'll need to recalculate from all adjustments
+        // For now, we'll use a simpler approach: get all adjustments except this one
+        const allAdjustments = await tx.select()
+          .from(inventoryAdjustments)
+          .where(and(
+            eq(inventoryAdjustments.productId, originalAdjustment.productId),
+            not(eq(inventoryAdjustments.id, id))
+          ))
+          .orderBy(inventoryAdjustments.createdAt);
+        
+        // Get base quantity (we'll need to track this, but for now assume 0)
+        // This is a limitation - we'd need to store initial quantity
+        reversedQuantity = 0;
+        for (const adj of allAdjustments) {
+          const adjQty = parseFloat(adj.quantity);
+          if (adj.adjustmentType === "add") {
+            reversedQuantity += adjQty;
+          } else if (adj.adjustmentType === "remove") {
+            reversedQuantity = Math.max(0, reversedQuantity - adjQty);
+          } else if (adj.adjustmentType === "set") {
+            reversedQuantity = adjQty;
+          }
+        }
+      }
+      
+      // Apply the new adjustment
+      const newAdjustmentType = updateData.adjustmentType || originalAdjustment.adjustmentType;
+      const newAdjustmentQuantity = updateData.quantity 
+        ? parseFloat(updateData.quantity) 
+        : originalQuantity;
+      
+      let newQuantity = reversedQuantity;
+      if (newAdjustmentType === "add") {
+        newQuantity = reversedQuantity + newAdjustmentQuantity;
+      } else if (newAdjustmentType === "remove") {
+        newQuantity = Math.max(0, reversedQuantity - newAdjustmentQuantity);
+      } else if (newAdjustmentType === "set") {
+        newQuantity = newAdjustmentQuantity;
+      }
+      
+      // Update product quantity
+      await tx.update(products)
+        .set({ quantity: newQuantity.toString() })
+        .where(eq(products.id, originalAdjustment.productId));
+      
+      // Update adjustment record
+      const updatedData = {
+        ...originalAdjustment,
+        ...updateData,
+        id: originalAdjustment.id, // Keep original ID
+        productId: originalAdjustment.productId, // Don't allow changing product
+        createdAt: originalAdjustment.createdAt, // Keep original timestamp
+      };
+      
+      const result = await tx.update(inventoryAdjustments)
+        .set(updatedData)
+        .where(eq(inventoryAdjustments.id, id))
+        .returning();
+      
+      return result[0];
+    });
+  }
+
+  async deleteInventoryAdjustment(id: string): Promise<void> {
+    // Use transaction to delete adjustment and reverse its effect on product quantity
+    return await db.transaction(async (tx) => {
+      // Get the adjustment
+      const [adjustment] = await tx.select()
+        .from(inventoryAdjustments)
+        .where(eq(inventoryAdjustments.id, id))
+        .limit(1);
+      
+      if (!adjustment) {
+        throw new Error("Adjustment not found");
+      }
+      
+      // Get current product quantity
+      const [product] = await tx.select({ quantity: products.quantity })
+        .from(products)
+        .where(eq(products.id, adjustment.productId))
+        .limit(1);
+      
+      if (!product) {
+        throw new Error("Product not found");
+      }
+      
+      const currentQuantity = parseFloat(product.quantity || "0");
+      const adjustmentQuantity = parseFloat(adjustment.quantity);
+      let newQuantity = currentQuantity;
+      
+      // Reverse the adjustment effect
+      if (adjustment.adjustmentType === "add") {
+        newQuantity = Math.max(0, currentQuantity - adjustmentQuantity);
+      } else if (adjustment.adjustmentType === "remove") {
+        newQuantity = currentQuantity + adjustmentQuantity;
+      } else if (adjustment.adjustmentType === "set") {
+        // For "set" type, we need to recalculate from all other adjustments
+        const allAdjustments = await tx.select()
+          .from(inventoryAdjustments)
+          .where(and(
+            eq(inventoryAdjustments.productId, adjustment.productId),
+            not(eq(inventoryAdjustments.id, id))
+          ))
+          .orderBy(inventoryAdjustments.createdAt);
+        
+        newQuantity = 0;
+        for (const adj of allAdjustments) {
+          const adjQty = parseFloat(adj.quantity);
+          if (adj.adjustmentType === "add") {
+            newQuantity += adjQty;
+          } else if (adj.adjustmentType === "remove") {
+            newQuantity = Math.max(0, newQuantity - adjQty);
+          } else if (adj.adjustmentType === "set") {
+            newQuantity = adjQty;
+          }
+        }
+      }
+      
+      // Update product quantity
+      await tx.update(products)
+        .set({ quantity: newQuantity.toString() })
+        .where(eq(products.id, adjustment.productId));
+      
+      // Delete adjustment record
+      await tx.delete(inventoryAdjustments)
+        .where(eq(inventoryAdjustments.id, id));
+    });
   }
 
   async getInventoryAdjustmentsByProduct(productId: string): Promise<InventoryAdjustment[]> {
@@ -1200,13 +2712,205 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInventoryAdjustment(insertAdjustment: InsertInventoryAdjustment): Promise<InventoryAdjustment> {
-    const result = await db.insert(inventoryAdjustments).values(insertAdjustment).returning();
-    return result[0];
+    // Use transaction to ensure both adjustment record and product quantity are updated
+    return await db.transaction(async (tx) => {
+      // Get current product quantity
+      const [product] = await tx.select({ quantity: products.quantity })
+        .from(products)
+        .where(eq(products.id, insertAdjustment.productId))
+        .limit(1);
+      
+      if (!product) {
+        throw new Error("Product not found");
+      }
+      
+      const currentQuantity = parseFloat(product.quantity || "0");
+      const adjustmentQuantity = parseFloat(insertAdjustment.quantity);
+      let newQuantity = currentQuantity;
+      
+      // Calculate new quantity based on adjustment type
+      if (insertAdjustment.adjustmentType === "add") {
+        newQuantity = currentQuantity + adjustmentQuantity;
+      } else if (insertAdjustment.adjustmentType === "remove") {
+        newQuantity = Math.max(0, currentQuantity - adjustmentQuantity);
+      } else if (insertAdjustment.adjustmentType === "set") {
+        newQuantity = adjustmentQuantity;
+      }
+      
+      // Update product quantity
+      await tx.update(products)
+        .set({ quantity: newQuantity.toString() })
+        .where(eq(products.id, insertAdjustment.productId));
+      
+      // Create adjustment record
+      const result = await tx.insert(inventoryAdjustments).values(insertAdjustment).returning();
+      return result[0];
+    });
   }
 
   async getLowStockProducts(threshold: number): Promise<Product[]> {
     return await db.select().from(products)
       .where(sql`CAST(${products.quantity} AS DECIMAL) <= ${threshold}`);
+  }
+
+  async getLowStockProductsPaginated(
+    branchId?: string | null,
+    threshold: number = 10,
+    limit: number = 50,
+    offset: number = 0,
+    search?: string,
+    categoryId?: string | null
+  ): Promise<{ products: Product[]; total: number }> {
+    const conditions = [];
+    
+    // Branch filter
+    if (branchId) {
+      conditions.push(or(eq(products.branchId, branchId), isNull(products.branchId)));
+    }
+    
+    // Low stock filter
+    conditions.push(and(
+      sql`CAST(${products.quantity} AS DECIMAL) > 0`,
+      sql`CAST(${products.quantity} AS DECIMAL) <= ${threshold}`
+    ));
+    
+    // Category filter
+    if (categoryId) {
+      conditions.push(eq(products.categoryId, categoryId));
+    }
+    
+    // Search filter
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conditions.push(sql`LOWER(${products.name}) LIKE LOWER(${searchPattern})`);
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(whereClause);
+    const total = Number(countResult[0]?.count || 0);
+    
+    // Get paginated products
+    let query = db.select().from(products);
+    if (whereClause) {
+      query = query.where(whereClause) as any;
+    }
+    const productResults = await query
+      .limit(limit)
+      .offset(offset)
+      .orderBy(asc(products.name));
+    
+    return {
+      products: productResults,
+      total,
+    };
+  }
+
+  async getInventoryStats(branchId?: string | null, threshold: number = 10): Promise<{
+    totalProducts: number;
+    lowStockCount: number;
+    outOfStockCount: number;
+    totalStockValue: number;
+    totalPurchaseCost: number;
+    totalQuantity: number;
+    totalShortage: number;
+    shortageCount: number;
+  }> {
+    // Build where conditions
+    const conditions = [];
+    if (branchId) {
+      conditions.push(or(eq(products.branchId, branchId), isNull(products.branchId)));
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Get all products for stats calculation
+    let query = db.select().from(products);
+    if (whereClause) {
+      query = query.where(whereClause) as any;
+    }
+    const allProducts = await query;
+
+    // Calculate stats
+    const totalProducts = allProducts.length;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+    let totalStockValue = 0;
+    let totalPurchaseCost = 0;
+    let totalQuantity = 0;
+    let totalShortage = 0;
+    let shortageCount = 0;
+
+    for (const product of allProducts) {
+      const qty = parseFloat(product.quantity);
+      const price = parseFloat(product.price);
+      const purchaseCost = product.purchaseCost ? parseFloat(product.purchaseCost) : 0;
+      
+      // Total stock value (selling price * quantity)
+      totalStockValue += qty * price;
+      
+      // Total purchase cost (purchase cost * quantity)
+      totalPurchaseCost += qty * purchaseCost;
+      
+      // Total quantity
+      totalQuantity += qty;
+
+      if (qty === 0) {
+        outOfStockCount++;
+      } else if (qty <= threshold) {
+        lowStockCount++;
+      }
+
+      const stockShort = parseFloat(product.stockShort || "0") || 0;
+      if (stockShort > 0) {
+        totalShortage += stockShort;
+        shortageCount++;
+      }
+    }
+
+    return {
+      totalProducts,
+      lowStockCount,
+      outOfStockCount,
+      totalStockValue,
+      totalPurchaseCost,
+      totalQuantity,
+      totalShortage,
+      shortageCount,
+    };
+  }
+
+  async getSoldQuantitiesByProduct(): Promise<Record<string, number>> {
+    // Get all completed orders
+    const completedOrders = await db.select().from(orders)
+      .where(eq(orders.status, "completed"));
+    
+    // Get all order items for completed orders
+    const orderIds = completedOrders.map(order => order.id);
+    
+    if (orderIds.length === 0) {
+      return {};
+    }
+    
+    // Query order items for completed orders
+    const allItems = await db.select({
+      productId: orderItems.productId,
+      quantity: orderItems.quantity,
+    })
+      .from(orderItems)
+      .where(inArray(orderItems.orderId, orderIds));
+    
+    // Aggregate by productId
+    const soldQuantities: Record<string, number> = {};
+    for (const item of allItems) {
+      const qty = parseInt(item.quantity.toString());
+      soldQuantities[item.productId] = (soldQuantities[item.productId] || 0) + qty;
+    }
+    
+    return soldQuantities;
   }
 
   async getUsers(): Promise<User[]> {
@@ -1487,29 +3191,122 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCustomer(id: string): Promise<boolean> {
-    const result = await db.delete(customers).where(eq(customers.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    try {
+      // Check if customer exists in customers table
+      const existingCustomer = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+      
+      // Check if there are any orders or due payments for this customer ID
+      // (even if customer doesn't exist in customers table, they might have orders)
+      const ordersWithCustomer = await db.select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.customerId, id))
+        .limit(1);
+      
+      const paymentsWithCustomer = await db.select({ id: duePayments.id })
+        .from(duePayments)
+        .where(eq(duePayments.customerId, id))
+        .limit(1);
+
+      // If customer doesn't exist and has no related records, return false
+      if (existingCustomer.length === 0 && ordersWithCustomer.length === 0 && paymentsWithCustomer.length === 0) {
+        return false;
+      }
+
+      // Delete related due payment allocations first
+      const duePaymentsToDelete = await db.select({ id: duePayments.id })
+        .from(duePayments)
+        .where(eq(duePayments.customerId, id));
+      
+      for (const payment of duePaymentsToDelete) {
+        await db.delete(duePaymentAllocations).where(eq(duePaymentAllocations.paymentId, payment.id));
+      }
+
+      // Delete related due payments
+      await db.delete(duePayments).where(eq(duePayments.customerId, id));
+
+      // Delete related order items (for orders with this customer)
+      const ordersToDelete = await db.select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.customerId, id));
+      
+      for (const order of ordersToDelete) {
+        await db.delete(orderItems).where(eq(orderItems.orderId, order.id));
+      }
+
+      // Delete related orders
+      await db.delete(orders).where(eq(orders.customerId, id));
+
+      // Delete the customer from customers table if it exists
+      if (existingCustomer.length > 0) {
+        await db.delete(customers).where(eq(customers.id, id));
+        
+        // Verify deletion by checking if record still exists
+        const verify = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+        return verify.length === 0;
+      }
+
+      // If customer didn't exist in customers table but we deleted related records, return true
+      return true;
+    } catch (error) {
+      console.error("Error deleting customer:", error);
+      return false;
+    }
   }
 
-  async getDuePayments(customerId?: string, branchId?: string | null): Promise<DuePayment[]> {
-    let query = db.select().from(duePayments);
-    
-    if (customerId && branchId) {
-      return await query.where(and(
-        eq(duePayments.customerId, customerId),
-        eq(duePayments.branchId, branchId)
-      )).orderBy(desc(duePayments.paymentDate));
-    }
+  async getDuePayments(customerId?: string, branchId?: string | null, limit?: number, offset?: number): Promise<{ payments: DuePayment[]; total: number }> {
+    // Build where conditions
+    const conditions: any[] = [];
     if (customerId) {
-      return await query.where(eq(duePayments.customerId, customerId))
-        .orderBy(desc(duePayments.paymentDate));
+      conditions.push(eq(duePayments.customerId, customerId));
     }
+    // Branch filter - if branchId is provided, only show payments for that branch or null branch
     if (branchId) {
-      return await query.where(eq(duePayments.branchId, branchId))
-        .orderBy(desc(duePayments.paymentDate));
+      conditions.push(
+        or(
+          eq(duePayments.branchId, branchId),
+          sql`${duePayments.branchId} IS NULL`
+        )
+      );
+    }
+
+    // Get total count
+    const countQuery = db.select({ count: sql<number>`count(*)` }).from(duePayments);
+    const countConditions = conditions.length > 0 ? and(...conditions) : undefined;
+    const totalResult = await (countConditions ? countQuery.where(countConditions) : countQuery);
+    const total = Number(totalResult[0]?.count || 0);
+
+    // Build query with conditions, ordering, and pagination
+    let query = db.select().from(duePayments);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    query = query.orderBy(desc(duePayments.paymentDate)) as any;
+    
+    if (limit !== undefined) {
+      query = query.limit(limit) as any;
+    }
+    if (offset !== undefined) {
+      query = query.offset(offset) as any;
     }
     
-    return await query.orderBy(desc(duePayments.paymentDate));
+    const payments = await query;
+    
+    // Parse paymentSlips JSON strings for all payments
+    const paymentsWithParsedSlips = payments.map(payment => {
+      if (payment.paymentSlips) {
+        try {
+          return {
+            ...payment,
+            paymentSlips: JSON.parse(payment.paymentSlips as string),
+          };
+        } catch (e) {
+          return payment;
+        }
+      }
+      return payment;
+    });
+    
+    return { payments: paymentsWithParsedSlips, total };
   }
 
   async getDuePayment(id: string): Promise<DuePayment | undefined> {
@@ -1528,8 +3325,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteDuePayment(id: string): Promise<boolean> {
-    const result = await db.delete(duePayments).where(eq(duePayments.id, id));
-    return result.rowCount !== null && result.rowCount > 0;
+    try {
+      // First, check if payment exists
+      const existing = await db.select().from(duePayments).where(eq(duePayments.id, id)).limit(1);
+      if (existing.length === 0) {
+        return false;
+      }
+
+      // Delete related allocations first
+      await db.delete(duePaymentAllocations).where(eq(duePaymentAllocations.paymentId, id));
+
+      // Delete the payment
+      await db.delete(duePayments).where(eq(duePayments.id, id));
+
+      // Verify deletion by checking if record still exists
+      const verify = await db.select().from(duePayments).where(eq(duePayments.id, id)).limit(1);
+      return verify.length === 0;
+    } catch (error) {
+      console.error("Error deleting due payment:", error);
+      return false;
+    }
   }
 
   async getDuePaymentAllocations(paymentId?: string, orderId?: string): Promise<DuePaymentAllocation[]> {
@@ -1605,8 +3420,18 @@ export class DatabaseStorage implements IStorage {
           .where(eq(duePayments.id, createdPayment.id));
       }
       
+      // Parse paymentSlips JSON string if it exists
       const [updatedPayment] = await tx.select().from(duePayments)
         .where(eq(duePayments.id, createdPayment.id));
+      
+      // Parse paymentSlips JSON string if it exists for return value
+      if (updatedPayment.paymentSlips) {
+        try {
+          updatedPayment.paymentSlips = JSON.parse(updatedPayment.paymentSlips as string);
+        } catch (e) {
+          // If parsing fails, keep as is
+        }
+      }
       
       return updatedPayment;
     });
@@ -1619,60 +3444,278 @@ export class DatabaseStorage implements IStorage {
     credit: number;
     ordersCount: number;
   }> {
-    const dueOrders = await db.select().from(orders)
-      .where(and(
-        eq(orders.customerId, customerId),
-        or(
-          eq(orders.paymentStatus, "due"),
-          eq(orders.paymentStatus, "partial")
-        )
-      ));
+    // Get all orders for this customer (including paid, partial, and due)
+    const allOrders = await db.select().from(orders)
+      .where(eq(orders.customerId, customerId));
     
-    let totalDue = 0;
-    let totalPaid = 0;
+    // Filter orders with due or partial payment status
+    const dueOrders = allOrders.filter(order => 
+      order.paymentStatus === "due" || order.paymentStatus === "partial"
+    );
     
-    for (const order of dueOrders) {
-      const orderDue = parseFloat(order.dueAmount || order.total);
+    // Calculate totals from all orders (to show total business with customer)
+    let totalDue = 0; // Total amount of all orders
+    let totalPaid = 0; // Total amount paid across all orders
+    
+    for (const order of allOrders) {
+      const orderTotal = parseFloat(order.total || "0");
       const orderPaid = parseFloat(order.paidAmount || "0");
-      totalDue += orderDue;
+      totalDue += orderTotal;
       totalPaid += orderPaid;
     }
     
-    const payments = await this.getDuePayments(customerId);
+    // Calculate current balance (outstanding amount)
+    // This is the sum of (total - paid) for orders with due/partial status
+    let balance = 0;
+    for (const order of dueOrders) {
+      const orderTotal = parseFloat(order.total || "0");
+      const orderPaid = parseFloat(order.paidAmount || "0");
+      const orderBalance = orderTotal - orderPaid;
+      balance += orderBalance;
+    }
+    
+    // Get unapplied payments (credit)
+    const { payments } = await this.getDuePayments(customerId);
     const credit = payments.reduce((sum, p) => sum + parseFloat(p.unappliedAmount || "0"), 0);
     
     return {
-      totalDue,
-      totalPaid,
-      balance: totalDue - totalPaid,
-      credit,
-      ordersCount: dueOrders.length,
+      totalDue, // Total of all orders
+      totalPaid, // Total paid across all orders
+      balance, // Current outstanding balance (only from due/partial orders)
+      credit, // Unapplied payments
+      ordersCount: dueOrders.length, // Count of orders with due/partial status
     };
   }
 
-  async getAllCustomersDueSummary(branchId?: string | null): Promise<Array<{
+  async getAllCustomersDueSummary(
+    branchId?: string | null, 
+    limit?: number, 
+    offset?: number,
+    search?: string,
+    statusFilter?: string,
+    minAmount?: number,
+    maxAmount?: number,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{ summaries: Array<{
     customer: Customer;
     totalDue: number;
     totalPaid: number;
     balance: number;
     credit: number;
     ordersCount: number;
-  }>> {
+  }>; total: number }> {
+    // Get all customers from database
     const allCustomers = await this.getCustomers(branchId);
-    const summaries = [];
     
-    for (const customer of allCustomers) {
-      const summary = await this.getCustomerDueSummary(customer.id);
-      
-      if (summary.ordersCount > 0 || summary.credit > 0) {
-        summaries.push({
-          customer,
-          ...summary,
-        });
+    // Also get all orders to find customers that might not be in customers table yet
+    // (e.g., created from POS with just customerName)
+    let allOrdersQuery = db.select().from(orders);
+    if (branchId) {
+      allOrdersQuery = allOrdersQuery.where(eq(orders.branchId, branchId)) as any;
+    }
+    
+    // Apply date filter to orders if provided
+    if (dateFrom || dateTo) {
+      const dateConditions: any[] = [];
+      if (dateFrom) {
+        dateConditions.push(gte(orders.createdAt, dateFrom));
+      }
+      if (dateTo) {
+        dateConditions.push(lte(orders.createdAt, dateTo));
+      }
+      if (dateConditions.length > 0) {
+        const existingWhere = branchId ? eq(orders.branchId, branchId) : undefined;
+        const combinedWhere = existingWhere 
+          ? and(existingWhere, ...dateConditions)
+          : and(...dateConditions);
+        allOrdersQuery = allOrdersQuery.where(combinedWhere) as any;
       }
     }
     
-    return summaries;
+    const allOrders = await allOrdersQuery;
+    
+    const customerIdsFromOrders = new Set<string>();
+    const customerDataFromOrders = new Map<string, { name: string; phone: string | null; branchId: string | null; createdAt: Date }>();
+    
+    for (const order of allOrders) {
+      if (order.customerId) {
+        customerIdsFromOrders.add(order.customerId);
+        // Store customer data from orders for customers not in database
+        if (!customerDataFromOrders.has(order.customerId) && order.customerName) {
+          customerDataFromOrders.set(order.customerId, {
+            name: order.customerName || 'Unknown Customer',
+            phone: order.customerPhone || null,
+            branchId: order.branchId || null,
+            createdAt: order.createdAt || new Date(),
+          });
+        }
+      }
+    }
+    
+    // Get customers that exist in database
+    const existingCustomerIds = new Set(allCustomers.map(c => c.id));
+    
+    // Find customer IDs from orders that don't have a customer record
+    const missingCustomerIds = Array.from(customerIdsFromOrders).filter(id => !existingCustomerIds.has(id));
+    
+    // For missing customers, create placeholder customer objects from order data
+    const missingCustomers: Customer[] = [];
+    for (const customerId of missingCustomerIds) {
+      const customerData = customerDataFromOrders.get(customerId);
+      if (customerData) {
+        missingCustomers.push({
+          id: customerId,
+          name: customerData.name,
+          phone: customerData.phone,
+          email: null,
+          branchId: customerData.branchId,
+          notes: null,
+          createdAt: customerData.createdAt,
+        } as Customer);
+      }
+    }
+    
+    // Combine all customers
+    const allCustomersCombined = [...allCustomers, ...missingCustomers];
+    
+    const summaries = [];
+    
+    for (const customer of allCustomersCombined) {
+      const summary = await this.getCustomerDueSummary(customer.id);
+      
+      // Include ALL customers, even if they have no dues
+      summaries.push({
+        customer,
+        ...summary,
+      });
+    }
+    
+    // Apply server-side filtering
+    let filteredSummaries = summaries;
+    
+    // Search filter - supports customer name, phone, email, and invoice number
+    if (search && search.trim()) {
+      const searchTrimmed = search.trim();
+      const searchLower = searchTrimmed.toLowerCase();
+      
+      // Check if search is for invoice number (starts with "inv-" or is numeric)
+      const isInvoiceSearch = searchLower.startsWith("inv-") || /^\d+$/.test(searchTrimmed);
+      
+      if (isInvoiceSearch) {
+        // Extract invoice number (remove "inv-" prefix if present)
+        let invoiceNumber = searchTrimmed;
+        if (searchLower.startsWith("inv-")) {
+          invoiceNumber = searchTrimmed.substring(4); // Remove "inv-" prefix
+        }
+        
+        // Get invoice prefix from settings
+        const settings = await this.getSettings();
+        const invoicePrefix = settings?.invoicePrefix || "INV-";
+        
+        // Find orders with matching invoice number (exact match)
+        const matchingOrderConditions: any[] = [eq(orders.orderNumber, invoiceNumber)];
+        
+        // Also check for full invoice format if prefix is included in search
+        if (searchLower.startsWith("inv-")) {
+          const escapedPrefix = invoicePrefix.replace(/'/g, "''");
+          matchingOrderConditions.push(
+            sql`LOWER(${sql.raw(`'${escapedPrefix}'`)}) || ${orders.orderNumber} = LOWER(${sql.raw(`'${invoicePrefix}${invoiceNumber}'`)})`
+          );
+        }
+        
+        // Get orders matching the invoice number
+        const invoiceWhereConditions: any[] = [or(...matchingOrderConditions)];
+        
+        if (branchId) {
+          invoiceWhereConditions.push(eq(orders.branchId, branchId));
+        }
+        
+        const matchingOrders = await db.select({ customerId: orders.customerId })
+          .from(orders)
+          .where(and(...invoiceWhereConditions));
+        const matchingCustomerIds = new Set(matchingOrders.map(o => o.customerId).filter(id => id != null));
+        
+        // Filter summaries to only include customers with matching invoice numbers
+        filteredSummaries = filteredSummaries.filter(s => 
+          matchingCustomerIds.has(s.customer.id)
+        );
+      } else {
+        // Regular search by customer name, phone, or email
+        filteredSummaries = filteredSummaries.filter(s => 
+          s.customer.name.toLowerCase().includes(searchLower) ||
+          s.customer.phone?.toLowerCase().includes(searchLower) ||
+          s.customer.email?.toLowerCase().includes(searchLower)
+        );
+      }
+    }
+    
+    // Status filter
+    if (statusFilter === "pending") {
+      filteredSummaries = filteredSummaries.filter(s => s.balance > 0);
+    } else if (statusFilter === "cleared") {
+      filteredSummaries = filteredSummaries.filter(s => s.balance === 0 && (s.ordersCount > 0 || s.totalPaid > 0));
+    } else if (statusFilter === "no-record") {
+      // No Record: customers with no orders, no balance, and no payments
+      filteredSummaries = filteredSummaries.filter(s => s.ordersCount === 0 && s.balance === 0 && s.totalPaid === 0);
+    }
+    
+    // Amount filters
+    if (minAmount !== undefined && !isNaN(minAmount)) {
+      filteredSummaries = filteredSummaries.filter(s => s.balance >= minAmount);
+    }
+    if (maxAmount !== undefined && !isNaN(maxAmount)) {
+      filteredSummaries = filteredSummaries.filter(s => s.balance <= maxAmount);
+    }
+    
+    // Store total before pagination
+    const total = filteredSummaries.length;
+    
+    // Apply pagination
+    const paginatedSummaries = limit !== undefined || offset !== undefined
+      ? filteredSummaries.slice(offset || 0, (offset || 0) + (limit || filteredSummaries.length))
+      : filteredSummaries;
+    
+    return { summaries: paginatedSummaries, total };
+  }
+
+  async getCustomersDueSummaryStats(
+    branchId?: string | null,
+    dateFrom?: Date,
+    dateTo?: Date,
+    search?: string,
+    statusFilter?: string,
+    minAmount?: number,
+    maxAmount?: number
+  ): Promise<{
+    totalCustomers: number;
+    pendingDues: number;
+    totalOutstanding: number;
+    totalCollected: number;
+  }> {
+    const result = await this.getAllCustomersDueSummary(
+      branchId,
+      undefined,
+      undefined,
+      search,
+      statusFilter,
+      minAmount,
+      maxAmount,
+      dateFrom,
+      dateTo
+    );
+    
+    const totalCustomers = result.total;
+    const pendingDues = result.summaries.filter(s => s.balance > 0).length;
+    const totalOutstanding = result.summaries.reduce((sum, s) => sum + s.balance, 0);
+    const totalCollected = result.summaries.reduce((sum, s) => sum + s.totalPaid, 0);
+    
+    return {
+      totalCustomers,
+      pendingDues,
+      totalOutstanding,
+      totalCollected,
+    };
   }
 
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
@@ -1720,6 +3763,200 @@ export class DatabaseStorage implements IStorage {
 
     const logs = await query;
     return { logs, total };
+  }
+
+  // Main Products management
+  async getMainProducts(): Promise<MainProduct[]> {
+    return await db.select().from(mainProducts).orderBy(asc(mainProducts.name));
+  }
+
+  async getMainProduct(id: string): Promise<MainProduct | undefined> {
+    const result = await db.select().from(mainProducts).where(eq(mainProducts.id, id));
+    return result[0];
+  }
+
+  async createMainProduct(mainProduct: InsertMainProduct): Promise<MainProduct> {
+    const result = await db.insert(mainProducts).values(mainProduct).returning();
+    return result[0];
+  }
+
+  async updateMainProduct(id: string, mainProduct: Partial<InsertMainProduct>): Promise<MainProduct | undefined> {
+    const result = await db
+      .update(mainProducts)
+      .set(mainProduct)
+      .where(eq(mainProducts.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteMainProduct(id: string): Promise<boolean> {
+    const result = await db.delete(mainProducts).where(eq(mainProducts.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getMainProductItems(mainProductId: string): Promise<Array<MainProductItem & { product: Product }>> {
+    const items = await db
+      .select()
+      .from(mainProductItems)
+      .where(eq(mainProductItems.mainProductId, mainProductId));
+    
+    const result: Array<MainProductItem & { product: Product }> = [];
+    for (const item of items) {
+      const product = await this.getProduct(item.productId);
+      if (product) {
+        result.push({ ...item, product });
+      }
+    }
+    return result;
+  }
+
+  async addMainProductItem(item: InsertMainProductItem): Promise<MainProductItem> {
+    // Check if item already exists
+    const existing = await db
+      .select()
+      .from(mainProductItems)
+      .where(
+        and(
+          eq(mainProductItems.mainProductId, item.mainProductId),
+          eq(mainProductItems.productId, item.productId)
+        )
+      );
+    
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    
+    const result = await db.insert(mainProductItems).values(item).returning();
+    return result[0];
+  }
+
+  async removeMainProductItem(id: string): Promise<boolean> {
+    const result = await db.delete(mainProductItems).where(eq(mainProductItems.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async removeMainProductItemByProduct(mainProductId: string, productId: string): Promise<boolean> {
+    const result = await db
+      .delete(mainProductItems)
+      .where(
+        and(
+          eq(mainProductItems.mainProductId, mainProductId),
+          eq(mainProductItems.productId, productId)
+        )
+      )
+      .returning();
+    return result.length > 0;
+  }
+
+  async getMainProductStats(mainProductId: string): Promise<{
+    totalStock: number;
+    branchBreakdown: Array<{ branchName: string; quantity: number; sold: number; available: number }>;
+    totalQuantity: number;
+    totalSold: number;
+    totalAvailable: number;
+    available: number;
+    subProducts: Array<{ product: Product; quantity: number; sold: number; available: number; branchName: string | null }>;
+  }> {
+    // Get main product to access mainStockCount
+    const mainProduct = await this.getMainProduct(mainProductId);
+    const mainStockCount = mainProduct?.mainStockCount ? parseFloat(String(mainProduct.mainStockCount)) : null;
+    
+    const items = await this.getMainProductItems(mainProductId);
+    const soldQuantities = await this.getSoldQuantitiesByProduct();
+    
+    // Calculate total quantity from sub-products (Total Supplied)
+    let totalQuantityFromSubProducts = 0;
+    let totalSold = 0;
+    const branchMap = new Map<string, { quantity: number; sold: number; available: number }>();
+    const subProducts: Array<{ product: Product; quantity: number; sold: number; available: number; branchName: string | null }> = [];
+    
+    for (const item of items) {
+      const qty = parseFloat(item.product.quantity);
+      const sold = soldQuantities[item.product.id] || 0;
+      const available = Math.max(0, qty - sold);
+      
+      totalQuantityFromSubProducts += qty;
+      totalSold += sold;
+      
+      const branchName = item.product.branchId 
+        ? (await this.getBranch(item.product.branchId))?.name || "Unknown"
+        : "Main";
+      
+      const currentBranch = branchMap.get(branchName) || { quantity: 0, sold: 0, available: 0 };
+      branchMap.set(branchName, {
+        quantity: currentBranch.quantity + qty,
+        sold: currentBranch.sold + sold,
+        available: currentBranch.available + available,
+      });
+      
+      subProducts.push({
+        product: item.product,
+        quantity: qty,
+        sold,
+        available,
+        branchName: item.product.branchId ? branchName : null,
+      });
+    }
+    
+    const branchBreakdown = Array.from(branchMap.entries()).map(([branchName, data]) => ({
+      branchName,
+      quantity: data.quantity,
+      sold: data.sold,
+      available: data.available,
+    }));
+    
+    // Calculate total quantity (sum of all branch quantities - Total Supplied)
+    const totalQuantity = branchBreakdown.reduce((sum, branch) => sum + branch.quantity, 0);
+    
+    // Use mainStockCount as totalStock if set, otherwise use sum of sub-products
+    const totalStock = mainStockCount !== null && mainStockCount > 0 ? mainStockCount : totalQuantityFromSubProducts;
+    
+    // Total Available = Total Stock - Total Supplied (Total Quantity)
+    const totalAvailable = Math.max(0, totalStock - totalQuantity);
+    
+    // Available is the same as totalAvailable for consistency
+    const available = totalAvailable;
+    
+    return {
+      totalStock,
+      branchBreakdown,
+      totalQuantity,
+      totalSold,
+      totalAvailable,
+      available,
+      subProducts,
+    };
+  }
+
+  // Units management
+  async getUnits(): Promise<Unit[]> {
+    return await db.select().from(units).orderBy(units.name);
+  }
+
+  async getUnit(id: string): Promise<Unit | undefined> {
+    const result = await db.select().from(units).where(eq(units.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createUnit(insertUnit: InsertUnit): Promise<Unit> {
+    const result = await db.insert(units).values(insertUnit).returning();
+    return result[0];
+  }
+
+  async updateUnit(id: string, updates: Partial<InsertUnit>): Promise<Unit | undefined> {
+    const result = await db.update(units).set(updates).where(eq(units.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteUnit(id: string): Promise<boolean> {
+    try {
+      await db.delete(units).where(eq(units.id, id));
+      const verify = await db.select().from(units).where(eq(units.id, id)).limit(1);
+      return verify.length === 0;
+    } catch (error) {
+      console.error("Error deleting unit:", error);
+      return false;
+    }
   }
 }
 

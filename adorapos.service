@@ -1,6 +1,5 @@
 [Unit]
 Description=Adora POS System
-Documentation=https://github.com/yourusername/localpos
 After=network.target
 
 [Service]
@@ -8,25 +7,16 @@ Type=simple
 User=nodejs
 WorkingDirectory=/var/www/adorapos
 Environment=NODE_ENV=production
-Environment=PORT=9000
-
-# PM2 commands - uses wrapper script that loads .env.production
+Environment=PORT=7060
 ExecStart=/var/www/adorapos/start.sh
-ExecStop=/home/nodejs/node_modules/.bin/pm2 stop ecosystem.config.cjs
-ExecReload=/home/nodejs/node_modules/.bin/pm2 reload ecosystem.config.cjs
-
-# Restart policy
+ExecStop=/bin/kill -SIGTERM $MAINPID
+ExecReload=/bin/kill -SIGHUP $MAINPID
 Restart=on-failure
 RestartSec=10s
-
-# Resource limits
 LimitNOFILE=65536
 LimitNPROC=65536
-
-# Security
 NoNewPrivileges=true
 PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
-

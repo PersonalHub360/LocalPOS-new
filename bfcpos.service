@@ -8,12 +8,12 @@ Type=simple
 User=nodejs
 WorkingDirectory=/var/www/bfcpos
 Environment=NODE_ENV=production
-Environment=PORT=7000
+Environment=PORT=7050
 
-# PM2 commands - uses wrapper script that loads .env.production
+# Direct node execution - uses wrapper script that loads .env.production
 ExecStart=/var/www/bfcpos/start.sh
-ExecStop=/home/nodejs/node_modules/.bin/pm2 stop ecosystem.config.cjs
-ExecReload=/home/nodejs/node_modules/.bin/pm2 reload ecosystem.config.cjs
+ExecStop=/bin/kill -SIGTERM $MAINPID
+ExecReload=/bin/kill -SIGHUP $MAINPID
 
 # Restart policy
 Restart=on-failure

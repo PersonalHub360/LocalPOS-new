@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -27,12 +27,20 @@ export const products = pgTable("products", {
   unit: text("unit").notNull().default("piece"),
   description: text("description"),
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull().default("0"),
+  stockShort: decimal("stock_short", { precision: 10, scale: 2 }),
+  stockShortReason: text("stock_short_reason"),
+  barcode: varchar("barcode", { length: 255 }),
+  sizePrices: jsonb("size_prices"), // JSON object for size-based pricing: {"S": "100", "M": "150", "L": "200"}
+  sizePurchasePrices: jsonb("size_purchase_prices"), // Purchase cost per size when size-based pricing: {"S": "50", "M": "75", "L": "100"}
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({
   id: true,
   createdAt: true,
+}).extend({
+  sizePrices: z.record(z.string(), z.string()).optional().nullable(), // Optional size-based pricing: {"S": "100", "M": "150", "L": "200"}
+  sizePurchasePrices: z.record(z.string(), z.string()).optional().nullable(), // Optional purchase cost per size
 });
 
 export type InsertProduct = z.infer<typeof insertProductSchema>;
@@ -81,6 +89,7 @@ export const orders = pgTable("orders", {
   diningOption: text("dining_option").notNull().default("dine-in"),
   customerName: text("customer_name"),
   customerPhone: text("customer_phone"),
+  customerContactType: text("customer_contact_type"), // For web orders: phone, whatsapp, telegram, facebook, other
   orderSource: text("order_source").notNull().default("pos"),
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
   discount: decimal("discount", { precision: 10, scale: 2 }).notNull().default("0"),
@@ -99,7 +108,8 @@ export const orders = pgTable("orders", {
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   orderNumber: true,
-  createdAt: true,
+}).extend({
+  createdAt: z.coerce.date().optional(),
 });
 
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
@@ -112,6 +122,9 @@ export const orderItems = pgTable("order_items", {
   quantity: integer("quantity").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  itemDiscount: decimal("item_discount", { precision: 10, scale: 2 }).default("0"),
+  itemDiscountType: varchar("item_discount_type", { length: 20 }).default("amount"),
+  selectedSize: varchar("selected_size", { length: 50 }), // Store selected size (S, M, L, etc.) for cup products
 });
 
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
@@ -130,6 +143,7 @@ export const duePayments = pgTable("due_payments", {
   paymentMethod: text("payment_method").notNull(),
   reference: text("reference"),
   note: text("note"),
+  paymentSlips: text("payment_slips"), // JSON array of image URLs
   recordedBy: varchar("recorded_by"),
   branchId: varchar("branch_id"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
@@ -208,6 +222,8 @@ export const purchases = pgTable("purchases", {
   quantity: decimal("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  piecesPerUnit: decimal("pieces_per_unit", { precision: 10, scale: 2 }),
+  pricePerPiece: decimal("price_per_piece", { precision: 10, scale: 2 }),
   purchaseDate: timestamp("purchase_date").notNull(),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
@@ -331,6 +347,36 @@ export const insertStaffSalarySchema = createInsertSchema(staffSalaries).omit({
 export type InsertStaffSalary = z.infer<typeof insertStaffSalarySchema>;
 export type StaffSalary = typeof staffSalaries.$inferSelect;
 
+export const positions = pgTable("positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertPositionSchema = createInsertSchema(positions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPosition = z.infer<typeof insertPositionSchema>;
+export type Position = typeof positions.$inferSelect;
+
+export const departments = pgTable("departments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertDepartmentSchema = createInsertSchema(departments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
+export type Department = typeof departments.$inferSelect;
+
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   businessName: text("business_name").notNull().default("BondPos POS"),
@@ -375,6 +421,9 @@ export const settings = pgTable("settings", {
   kitchenPrinter: text("kitchen_printer").notNull().default("none"),
   paperSize: text("paper_size").notNull().default("80mm"),
   enableBarcodeScanner: text("enable_barcode_scanner").notNull().default("false"),
+  barcodeScannerType: text("barcode_scanner_type").notNull().default("keyboard"), // keyboard, usb, bluetooth
+  barcodeScanDelay: integer("barcode_scan_delay").notNull().default(200), // milliseconds
+  barcodeBeepSound: text("barcode_beep_sound").notNull().default("true"),
   enableCashDrawer: text("enable_cash_drawer").notNull().default("true"),
   
   currency: text("currency").notNull().default("usd"),
@@ -398,6 +447,8 @@ export const settings = pgTable("settings", {
   notificationEmail: text("notification_email"),
   
   colorTheme: text("color_theme").notNull().default("orange"),
+  primaryColor: text("primary_color"), // custom hex e.g. #6366f1
+  componentSize: text("component_size").notNull().default("medium"), // small | medium | large
   layoutPreference: text("layout_preference").notNull().default("grid"),
   fontSize: text("font_size").notNull().default("medium"),
   compactMode: text("compact_mode").notNull().default("false"),
@@ -584,3 +635,51 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
 
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+// Main Products - for grouping multiple products together
+export const mainProducts = pgTable("main_products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  mainStockCount: decimal("main_stock_count", { precision: 10, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertMainProductSchema = createInsertSchema(mainProducts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMainProduct = z.infer<typeof insertMainProductSchema>;
+export type MainProduct = typeof mainProducts.$inferSelect;
+
+export const units = pgTable("units", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertUnitSchema = createInsertSchema(units).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertUnit = z.infer<typeof insertUnitSchema>;
+export type Unit = typeof units.$inferSelect;
+
+// Main Product Items - links products to main products
+export const mainProductItems = pgTable("main_product_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mainProductId: varchar("main_product_id").notNull().references(() => mainProducts.id, { onDelete: "cascade" }),
+  productId: varchar("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertMainProductItemSchema = createInsertSchema(mainProductItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMainProductItem = z.infer<typeof insertMainProductItemSchema>;
+export type MainProductItem = typeof mainProductItems.$inferSelect;

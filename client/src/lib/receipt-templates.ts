@@ -27,41 +27,63 @@ export function generateReceiptHTML(
 ): string {
   const { sale, items, settings, totalKHR, paymentDetails } = data;
 
+  // Ensure invoice ID is never undefined/null on printed receipt
+  const safeOrderNumber =
+    sale?.orderNumber != null && String(sale.orderNumber).trim() !== ""
+      ? String(sale.orderNumber)
+      : "—";
+  const saleForTemplate = { ...sale, orderNumber: safeOrderNumber };
+  const dataWithSafeSale = { ...data, sale: saleForTemplate };
+
   const receiptHeader = settings?.receiptHeader || "";
   const receiptFooter = settings?.receiptFooter || "";
   const showLogo = settings?.showLogoOnReceipt === "true";
   const receiptLogo = settings?.receiptLogo || "";
   const invoicePrefix = settings?.invoicePrefix || "INV-";
+  const companyName = settings?.businessName || "";
+  const companyAddress = settings?.address || "";
 
-  let logoHtml = "";
-  if (showLogo && receiptLogo) {
-    logoHtml = `<div style="text-align: center; margin-bottom: 15px;">
-      <img src="${receiptLogo}" alt="Logo" style="max-width: 180px; max-height: 80px;" />
-    </div>`;
+  // Company details section
+  let companyDetailsHtml = "";
+  if (companyName || companyAddress) {
+    let logoSection = "";
+    if (showLogo && receiptLogo) {
+      logoSection = `<div style="text-align: center; margin-bottom: 10px;">
+        <img src="${receiptLogo}" alt="Company Logo" style="max-width: 180px; max-height: 80px;" />
+      </div>`;
+    }
+    
+    companyDetailsHtml = `
+      <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #000;">
+        ${logoSection}
+        ${companyName ? `<div style="font-size: 18px; font-weight: 700; margin-bottom: 8px; color: #000000;">${companyName}</div>` : ""}
+        ${companyAddress ? `<div style="font-size: 12px; color: #000000; line-height: 1.6; font-weight: 600;">${companyAddress.replace(/\n/g, '<br>')}</div>` : ""}
+      </div>
+    `;
   }
 
-  const headerHtml = receiptHeader ? `<div style="text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 1.1em;">${receiptHeader}</div>` : "";
-  const footerHtml = receiptFooter ? `<div style="text-align: center; margin-top: 15px; font-size: 0.85em; color: #666;">${receiptFooter}</div>` : "";
+  const headerHtml = receiptHeader ? `<div style="text-align: center; margin-bottom: 15px; font-weight: 700; font-size: 1.1em; color: #000000;">${receiptHeader}</div>` : "";
+  const footerHtml = receiptFooter ? `<div style="text-align: center; margin-top: 15px; font-size: 0.85em; color: #000000; font-weight: 600;">${receiptFooter}</div>` : "";
 
   switch (template) {
     case "classic":
-      return generateClassicTemplate(data, logoHtml, headerHtml, footerHtml, invoicePrefix);
+      return generateClassicTemplate(dataWithSafeSale, companyDetailsHtml, headerHtml, footerHtml, invoicePrefix);
     case "modern":
-      return generateModernTemplate(data, logoHtml, headerHtml, footerHtml, invoicePrefix);
+      return generateModernTemplate(dataWithSafeSale, companyDetailsHtml, headerHtml, footerHtml, invoicePrefix);
     case "compact":
-      return generateCompactTemplate(data, logoHtml, headerHtml, footerHtml, invoicePrefix);
+      return generateCompactTemplate(dataWithSafeSale, companyDetailsHtml, headerHtml, footerHtml, invoicePrefix);
     case "detailed":
-      return generateDetailedTemplate(data, logoHtml, headerHtml, footerHtml, invoicePrefix);
+      return generateDetailedTemplate(dataWithSafeSale, companyDetailsHtml, headerHtml, footerHtml, invoicePrefix);
     case "elegant":
-      return generateElegantTemplate(data, logoHtml, headerHtml, footerHtml, invoicePrefix);
+      return generateElegantTemplate(dataWithSafeSale, companyDetailsHtml, headerHtml, footerHtml, invoicePrefix);
     default:
-      return generateClassicTemplate(data, logoHtml, headerHtml, footerHtml, invoicePrefix);
+      return generateClassicTemplate(dataWithSafeSale, companyDetailsHtml, headerHtml, footerHtml, invoicePrefix);
   }
 }
 
 function generateClassicTemplate(
   data: ReceiptData,
-  logoHtml: string,
+  companyDetailsHtml: string,
   headerHtml: string,
   footerHtml: string,
   invoicePrefix: string
@@ -70,11 +92,11 @@ function generateClassicTemplate(
   
   const itemsRows = items.map(item => `
     <tr>
-      <td>${item.productName || "N/A"}</td>
-      <td style="text-align: center;">${item.quantity}</td>
-      <td style="text-align: right;">$${parseFloat(item.price).toFixed(2)}</td>
-      <td style="text-align: center;">-</td>
-      <td style="text-align: right;">$${parseFloat(item.total).toFixed(2)}</td>
+      <td style="color: #000000; font-weight: 600;">${item.productName || "N/A"}</td>
+      <td style="text-align: center; color: #000000; font-weight: 600;">${item.quantity}</td>
+      <td style="text-align: right; color: #000000; font-weight: 600;">$${parseFloat(item.price).toFixed(2)}</td>
+      <td style="text-align: center; color: #000000; font-weight: 600;">-</td>
+      <td style="text-align: right; color: #000000; font-weight: 600;">$${parseFloat(item.total).toFixed(2)}</td>
     </tr>
   `).join('');
 
@@ -84,38 +106,61 @@ function generateClassicTemplate(
       <head>
         <title>Receipt - ${invoicePrefix}${sale.orderNumber}</title>
         <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
+          * { margin: 0; padding: 0; box-sizing: border-box; color: #000000; }
           body { 
             font-family: 'Courier New', monospace; 
             padding: 20px; 
             max-width: 400px; 
             margin: 0 auto;
             font-size: 12px;
+            color: #000000;
+            font-weight: 600;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
-          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
-          .header h1 { font-size: 20px; margin-bottom: 5px; font-weight: bold; }
-          .header p { font-size: 11px; margin: 2px 0; }
-          .info { margin: 15px 0; font-size: 11px; }
-          .info div { display: flex; justify-content: space-between; margin: 5px 0; }
+          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px dashed #000; padding-bottom: 10px; color: #000000; }
+          .header h1 { font-size: 20px; margin-bottom: 5px; font-weight: 700; color: #000000; }
+          .header p { font-size: 11px; margin: 2px 0; color: #000000; font-weight: 600; }
+          .info { margin: 15px 0; font-size: 11px; color: #000000; font-weight: 600; }
+          .info div { display: flex; justify-content: space-between; margin: 5px 0; color: #000000; font-weight: 600; }
+          .info div span { color: #000000; font-weight: 600; }
           table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-          th, td { padding: 5px; text-align: left; border-bottom: 1px dashed #ccc; }
-          th { background-color: #f0f0f0; font-weight: bold; text-align: center; }
+          th, td { padding: 5px; text-align: left; border-bottom: 1px dashed #000; color: #000000; font-weight: 600; }
+          th { background-color: #f0f0f0; font-weight: 700; text-align: center; color: #000000; }
+          td { font-weight: 600; color: #000000; }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
-          .summary { margin: 15px 0; font-size: 12px; }
-          .summary div { display: flex; justify-content: space-between; margin: 5px 0; }
-          .total { font-weight: bold; font-size: 16px; margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; }
-          .footer { text-align: center; margin-top: 20px; font-size: 10px; border-top: 2px dashed #000; padding-top: 10px; }
+          .summary { margin: 15px 0; font-size: 12px; color: #000000; font-weight: 600; }
+          .summary div { display: flex; justify-content: space-between; margin: 5px 0; color: #000000; font-weight: 600; }
+          .summary div span { color: #000000; font-weight: 600; }
+          .total { font-weight: 700; font-size: 16px; margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; color: #000000; }
+          .total span { color: #000000; font-weight: 700; }
+          .footer { text-align: center; margin-top: 20px; font-size: 10px; border-top: 2px dashed #000; padding-top: 10px; color: #000000; font-weight: 600; }
+          .footer p { color: #000000; font-weight: 600; }
           @media print { 
-            body { padding: 10px; } 
-            @page { margin: 0.5cm; size: 80mm auto; }
+            * { color: #000000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body { 
+              padding: 10px; 
+              color: #000000 !important;
+              font-weight: 600 !important;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            } 
+            @page { 
+              margin: 0.5cm; 
+              size: 80mm auto;
+            }
             table tbody { display: table-row-group; }
             tr { page-break-inside: avoid; }
+            th, td { color: #000000 !important; font-weight: 600 !important; }
+            .header, .header h1, .header p, .info, .info div, .info div span,
+            .summary, .summary div, .summary div span, .total, .total span,
+            .footer, .footer p { color: #000000 !important; }
           }
         </style>
       </head>
       <body>
-        ${logoHtml}
+        ${companyDetailsHtml}
         ${headerHtml}
         <div class="header">
           <h1>RECEIPT</h1>
@@ -157,7 +202,7 @@ function generateClassicTemplate(
 
 function generateModernTemplate(
   data: ReceiptData,
-  logoHtml: string,
+  companyDetailsHtml: string,
   headerHtml: string,
   footerHtml: string,
   invoicePrefix: string
@@ -212,7 +257,7 @@ function generateModernTemplate(
         </style>
       </head>
       <body>
-        ${logoHtml}
+        ${companyDetailsHtml}
         ${headerHtml}
         <div class="header">
           <h1>Receipt</h1>
@@ -277,7 +322,7 @@ function generateModernTemplate(
 
 function generateCompactTemplate(
   data: ReceiptData,
-  logoHtml: string,
+  companyDetailsHtml: string,
   headerHtml: string,
   footerHtml: string,
   invoicePrefix: string
@@ -327,7 +372,7 @@ function generateCompactTemplate(
         </style>
       </head>
       <body>
-        ${logoHtml}
+        ${companyDetailsHtml}
         ${headerHtml}
         <div class="header">
           <h1>${invoicePrefix}${sale.orderNumber}</h1>
@@ -359,7 +404,7 @@ function generateCompactTemplate(
 
 function generateDetailedTemplate(
   data: ReceiptData,
-  logoHtml: string,
+  companyDetailsHtml: string,
   headerHtml: string,
   footerHtml: string,
   invoicePrefix: string
@@ -412,7 +457,7 @@ function generateDetailedTemplate(
         </style>
       </head>
       <body>
-        ${logoHtml}
+        ${companyDetailsHtml}
         ${headerHtml}
         <div class="header">
           <h1>DETAILED RECEIPT</h1>
@@ -489,7 +534,7 @@ function generateDetailedTemplate(
 
 function generateElegantTemplate(
   data: ReceiptData,
-  logoHtml: string,
+  companyDetailsHtml: string,
   headerHtml: string,
   footerHtml: string,
   invoicePrefix: string
@@ -577,7 +622,7 @@ function generateElegantTemplate(
         </style>
       </head>
       <body>
-        ${logoHtml}
+        ${companyDetailsHtml}
         ${headerHtml}
         <div class="header">
           <h1>Receipt</h1>

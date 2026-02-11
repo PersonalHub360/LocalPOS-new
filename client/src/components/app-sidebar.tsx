@@ -17,6 +17,8 @@ import {
   Landmark,
   Building2,
   CreditCard,
+  Printer,
+  Users,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +42,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
 import type { Settings } from "@shared/schema";
 import { useState, useEffect } from "react";
 
@@ -85,6 +89,12 @@ const operationsMenuItems: MenuItem[] = [
     permission: "expenses.view",
   },
   {
+    title: "Staff Salary",
+    url: "/staff-salary",
+    icon: Users,
+    permission: "hrm.view",
+  },
+  {
     title: "Items",
     url: "/items",
     icon: Package,
@@ -106,12 +116,6 @@ const operationsMenuItems: MenuItem[] = [
 
 const managementMenuItems: MenuItem[] = [
   {
-    title: "HRM",
-    url: "/hrm",
-    icon: UserCog,
-    permission: "hrm.view",
-  },
-  {
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
@@ -130,10 +134,10 @@ const managementMenuItems: MenuItem[] = [
     permission: "due.view",
   },
   {
-    title: "Branches",
-    url: "/branches",
-    icon: Building2,
-    permission: "branches.view",
+    title: "Hardware",
+    url: "/hardware",
+    icon: Printer,
+    permission: "settings.view",
   },
   {
     title: "Settings",
@@ -142,15 +146,6 @@ const managementMenuItems: MenuItem[] = [
     permission: "settings.view",
   },
 ];
-
-interface AuthUser {
-  id: string;
-  username: string;
-  fullName: string;
-  email: string | null;
-  role: string;
-  permissions?: string[];
-}
 
 // Helper function to check if user has permission
 function hasPermission(userPermissions: string[] | undefined, requiredPermission: string | undefined): boolean {
@@ -181,13 +176,8 @@ function filterMenuItems(items: MenuItem[], userPermissions: string[] | undefine
 export function AppSidebar() {
   const [location] = useLocation();
   
-  // Get current user and permissions
-  const { data: user } = useQuery<AuthUser>({
-    queryKey: ["/api/auth/session"],
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-    staleTime: 0, // Always consider data stale to ensure fresh permissions
-  });
+  // Get current user from auth context
+  const { user } = useAuth();
 
   // Get settings for app name and tagline
   const { data: settings } = useQuery<Settings>({
@@ -196,7 +186,13 @@ export function AppSidebar() {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", { 
+        method: "POST",
+        credentials: "include",
+      });
+      // Clear the session query cache
+      queryClient.setQueryData(["/api/auth/session"], null);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
       window.location.href = "/login";
     } catch (error) {
       console.error("Logout failed:", error);
@@ -229,7 +225,7 @@ export function AppSidebar() {
                   <img 
                     src={settings.businessLogo} 
                     alt={appName} 
-                    className="flex aspect-square size-8 sm:size-9 rounded-lg bg-sidebar-primary object-contain p-1 shadow-sm shrink-0"
+                    className="flex aspect-square size-8 sm:size-9 object-contain shrink-0"
                     onError={() => setLogoError(true)}
                   />
                 ) : (

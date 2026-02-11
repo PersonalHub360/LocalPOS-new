@@ -8,7 +8,18 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { User, Lock, Eye, EyeOff, Utensils, BarChart3, ShoppingCart, TrendingUp } from "lucide-react";
+import {
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  Utensils,
+  BarChart3,
+  ShoppingBag,
+  ArrowRight,
+  Store,
+  Sparkles,
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import type { Settings } from "@shared/schema";
 
@@ -24,37 +35,57 @@ export default function Login() {
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
 
-  // Fetch settings for dynamic branding
   const { data: settings } = useQuery<Settings>({
     queryKey: ["/api/settings"],
   });
 
-  // Reset logo error when settings change
   useEffect(() => {
     setLogoError(false);
   }, [settings?.businessLogo]);
 
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirect = urlParams.get("redirect");
+    if (redirect) setRedirectUrl(redirect);
+  }, []);
+
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      username: "",
-      password: "",
-    },
+    defaultValues: { username: "", password: "" },
   });
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginFormData) => {
       const response = await apiRequest("POST", "/api/auth/login", data);
-      return response;
+      return await response.json();
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
-      toast({
-        title: "Login successful",
-        description: "Welcome back!",
+      toast({ title: "Login successful", description: "Welcome back!" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await queryClient.refetchQueries({
+        queryKey: ["/api/auth/session"],
+        exact: true,
       });
-      setLocation("/dashboard");
+      if (redirectUrl) {
+        if (window.opener && !window.opener.closed) {
+          try {
+            const redirectOrigin = new URL(redirectUrl).origin;
+            window.opener.postMessage(
+              { type: "AUTH_SUCCESS", message: "Authentication successful" },
+              redirectOrigin
+            );
+            setTimeout(() => window.close(), 500);
+          } catch {
+            window.location.href = redirectUrl;
+          }
+        } else {
+          window.location.href = redirectUrl;
+        }
+      } else {
+        setLocation("/dashboard");
+      }
     },
     onError: (error: any) => {
       toast({
@@ -65,186 +96,190 @@ export default function Login() {
     },
   });
 
-  const onSubmit = (data: LoginFormData) => {
-    loginMutation.mutate(data);
-  };
+  const onSubmit = (data: LoginFormData) => loginMutation.mutate(data);
+
+  const goToCustomerPortal = () => setLocation("/menu");
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left Side - Blue Login Panel */}
-      <div className="w-full lg:w-5/12 blue-split-login flex items-center justify-center p-4 sm:p-6 md:p-8 animate-slide-in-left min-h-screen lg:min-h-0">
-        <div className="w-full max-w-md space-y-6 sm:space-y-8">
-          {/* Logo */}
-          <div className="flex items-center gap-2 sm:gap-3 text-white">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-br from-slate-50 via-white to-primary/5 dark:from-background dark:via-background dark:to-primary/10">
+      {/* Left: Login card + Customer portal CTA */}
+      <div className="w-full lg:w-[480px] shrink-0 flex flex-col justify-center px-4 sm:px-6 lg:px-12 py-8 lg:py-12">
+        <div className="w-full max-w-sm mx-auto space-y-8">
+          {/* Logo & app name */}
+          <div className="flex items-center gap-3">
             {settings?.businessLogo && !logoError ? (
-              <img 
-                src={settings.businessLogo} 
-                alt={settings.appName || "Logo"} 
-                className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/20 object-contain p-1 shrink-0"
+              <img
+                src={settings.businessLogo}
+                alt={settings.appName || "Logo"}
+                className="w-10 h-10 rounded-xl object-contain bg-primary/10 p-1.5 shrink-0 shadow-sm"
                 onError={() => setLogoError(true)}
               />
             ) : (
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Utensils className="w-5 h-5 text-primary" />
               </div>
             )}
-            <h1 className="text-xl sm:text-2xl font-bold">{settings?.appName || "BondPos"}</h1>
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">
+                {settings?.appName || "POS"}
+              </h1>
+              <p className="text-xs text-muted-foreground">Staff & management</p>
+            </div>
           </div>
 
-          {/* Sign In Header */}
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Sign In</h2>
+          {/* Staff sign-in card */}
+          <div className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 dark:shadow-none p-6 sm:p-8 space-y-5">
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">Staff sign in</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Use your account to access the dashboard
+              </p>
+            </div>
+
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            {...field}
+                            data-testid="input-username"
+                            placeholder="Username"
+                            autoComplete="username"
+                            disabled={loginMutation.isPending}
+                            className="pl-9 h-11 bg-muted/30 border-border/80 focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage className="text-destructive text-xs" />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            {...field}
+                            data-testid="input-password"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Password"
+                            autoComplete="current-password"
+                            disabled={loginMutation.isPending}
+                            className="pl-9 pr-10 h-11 bg-muted/30 border-border/80 focus:ring-2 focus:ring-primary/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+                            data-testid="button-toggle-password"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage className="text-destructive text-xs" />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  data-testid="button-login"
+                  className="w-full h-11 font-medium"
+                  disabled={loginMutation.isPending}
+                >
+                  {loginMutation.isPending ? "Signing in…" : "Sign in"}
+                </Button>
+              </form>
+            </Form>
           </div>
-
-          {/* Login Form */}
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-5">
-              <FormField
-                control={form.control}
-                name="username"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <div className="relative">
-                        <User className="login-input-icon w-4 h-4 sm:w-5 sm:h-5" />
-                        <Input
-                          {...field}
-                          data-testid="input-username"
-                          placeholder="Username"
-                          autoComplete="username"
-                          disabled={loginMutation.isPending}
-                          className="login-input-field text-sm sm:text-base"
-                        />
-                      </div>
-                    </FormControl>
-                    <FormMessage className="text-red-200 text-xs sm:text-sm" />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <div className="relative">
-                        <Lock className="login-input-icon w-4 h-4 sm:w-5 sm:h-5" />
-                        <Input
-                          {...field}
-                          data-testid="input-password"
-                          type={showPassword ? "text" : "password"}
-                          placeholder="Password"
-                          autoComplete="current-password"
-                          disabled={loginMutation.isPending}
-                          className="login-input-field text-sm sm:text-base pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
-                          data-testid="button-toggle-password"
-                        >
-                          {showPassword ? (
-                            <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" />
-                          ) : (
-                            <Eye className="w-4 h-4 sm:w-5 sm:h-5" />
-                          )}
-                        </button>
-                      </div>
-                    </FormControl>
-                    <FormMessage className="text-red-200 text-xs sm:text-sm" />
-                  </FormItem>
-                )}
-              />
-
-              <Button
-                type="submit"
-                data-testid="button-login"
-                className="w-full h-11 sm:h-12 text-sm sm:text-base font-semibold bg-blue-500 hover:bg-blue-600 text-white"
-                disabled={loginMutation.isPending}
-              >
-                {loginMutation.isPending ? "Signing In..." : "Sign In"}
-              </Button>
-            </form>
-          </Form>
 
           {/* Divider */}
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="flex-1 h-px bg-white/20" />
-            <span className="text-white/60 text-xs sm:text-sm">OR</span>
-            <div className="flex-1 h-px bg-white/20" />
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              or
+            </span>
+            <div className="flex-1 h-px bg-border" />
           </div>
 
-          {/* Social Login */}
-          <div>
-            <p className="text-white/80 text-center mb-3 sm:mb-4 text-xs sm:text-sm">Sign in with</p>
-            <div className="flex justify-center gap-3 sm:gap-4">
-              <button className="social-login-btn w-10 h-10 sm:w-12 sm:h-12" data-testid="button-facebook-login">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
-              </button>
-              <button className="social-login-btn w-10 h-10 sm:w-12 sm:h-12" data-testid="button-twitter-login">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
-                </svg>
-              </button>
-              <button className="social-login-btn w-10 h-10 sm:w-12 sm:h-12" data-testid="button-google-login">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24">
-                  <path fill="#EA4335" d="M5.26620003,9.76452941 C6.19878754,6.93863203 8.85444915,4.90909091 12,4.90909091 C13.6909091,4.90909091 15.2181818,5.50909091 16.4181818,6.49090909 L19.9090909,3 C17.7818182,1.14545455 15.0545455,0 12,0 C7.27006974,0 3.1977497,2.69829785 1.23999023,6.65002441 L5.26620003,9.76452941 Z"/>
-                  <path fill="#34A853" d="M16.0407269,18.0125889 C14.9509167,18.7163016 13.5660892,19.0909091 12,19.0909091 C8.86648613,19.0909091 6.21911939,17.076871 5.27698177,14.2678769 L1.23746264,17.3349879 C3.19279051,21.2936293 7.26500293,24 12,24 C14.9328362,24 17.7353462,22.9573905 19.834192,20.9995801 L16.0407269,18.0125889 Z"/>
-                  <path fill="#4A90E2" d="M19.834192,20.9995801 C22.0291676,18.9520994 23.4545455,15.903663 23.4545455,12 C23.4545455,11.2909091 23.3454545,10.5818182 23.1818182,9.90909091 L12,9.90909091 L12,14.4545455 L18.4363636,14.4545455 C18.1187732,16.013626 17.2662994,17.2212117 16.0407269,18.0125889 L19.834192,20.9995801 Z"/>
-                  <path fill="#FBBC05" d="M5.27698177,14.2678769 C5.03832634,13.556323 4.90909091,12.7937589 4.90909091,12 C4.90909091,11.2182781 5.03443647,10.4668121 5.26620003,9.76452941 L1.23999023,6.65002441 C0.43658717,8.26043162 0,10.0753848 0,12 C0,13.9195484 0.444780743,15.7301709 1.23746264,17.3349879 L5.27698177,14.2678769 Z"/>
-                </svg>
-              </button>
+          {/* Customer web portal CTA */}
+          <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 dark:bg-primary/10 p-5 sm:p-6 text-center space-y-3">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/15 text-primary">
+              <Store className="w-6 h-6" />
             </div>
+            <div>
+              <h3 className="font-semibold text-foreground">I'm a customer</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Browse the menu and order online. No account needed.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11 font-medium gap-2 border-primary/40 bg-background/80 hover:bg-primary/10 hover:border-primary/60"
+              onClick={goToCustomerPortal}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              View customer web portal
+              <ArrowRight className="w-4 h-4 ml-auto" />
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Right Side - Illustration Panel */}
-      <div className="hidden lg:flex lg:w-7/12 login-illustration-side animate-slide-in-right">
-        <div className="max-w-2xl text-center space-y-4 lg:space-y-6 px-4 lg:px-0">
-          {/* Illustration Placeholder */}
-          <div className="flex items-center justify-center mb-6 lg:mb-8">
-            <div className="relative">
-              <div className="w-64 h-64 lg:w-96 lg:h-96 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 opacity-10 absolute -top-10 -left-10" />
-              <div className="relative grid grid-cols-2 gap-4 lg:gap-6 p-4 lg:p-8">
-                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 lg:p-6 rounded-2xl flex flex-col items-center justify-center space-y-2 lg:space-y-3">
-                  <BarChart3 className="w-12 h-12 lg:w-16 lg:h-16 text-blue-600" />
-                  <p className="text-xs lg:text-sm font-medium text-blue-900 dark:text-blue-100">Analytics</p>
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 lg:p-6 rounded-2xl flex flex-col items-center justify-center space-y-2 lg:space-y-3">
-                  <ShoppingCart className="w-12 h-12 lg:w-16 lg:h-16 text-blue-600" />
-                  <p className="text-xs lg:text-sm font-medium text-blue-900 dark:text-blue-100">Orders</p>
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 lg:p-6 rounded-2xl flex flex-col items-center justify-center space-y-2 lg:space-y-3">
-                  <TrendingUp className="w-12 h-12 lg:w-16 lg:h-16 text-blue-600" />
-                  <p className="text-xs lg:text-sm font-medium text-blue-900 dark:text-blue-100">Sales</p>
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-950/20 p-4 lg:p-6 rounded-2xl flex flex-col items-center justify-center space-y-2 lg:space-y-3">
-                  <Utensils className="w-12 h-12 lg:w-16 lg:h-16 text-blue-600" />
-                  <p className="text-xs lg:text-sm font-medium text-blue-900 dark:text-blue-100">POS</p>
-                </div>
-              </div>
+      {/* Right: Customer-focused hero */}
+      <div className="hidden lg:flex flex-1 items-center justify-center p-12 lg:p-16 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent dark:from-primary/20 dark:via-primary/10 dark:to-transparent rounded-l-3xl border-l border-border/50">
+        <div className="max-w-md text-center space-y-8">
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-2 text-sm font-medium">
+            <Sparkles className="w-4 h-4" />
+            Order online
+          </div>
+          <div>
+            <h2 className="text-3xl lg:text-4xl font-bold text-foreground tracking-tight">
+              {settings?.websiteTitle || settings?.appName || "Order from our menu"}
+            </h2>
+            <p className="text-muted-foreground mt-3 text-base leading-relaxed">
+              {settings?.websiteDescription ||
+                "Browse products, add to cart, and place your order in a few taps. No sign-in required."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-left">
+            <div className="rounded-xl bg-background/60 dark:bg-card/50 border border-border/50 p-4 space-y-2">
+              <ShoppingBag className="w-8 h-8 text-primary" />
+              <p className="text-sm font-medium text-foreground">Browse menu</p>
+              <p className="text-xs text-muted-foreground">Filter by category & search</p>
+            </div>
+            <div className="rounded-xl bg-background/60 dark:bg-card/50 border border-border/50 p-4 space-y-2">
+              <BarChart3 className="w-8 h-8 text-primary" />
+              <p className="text-sm font-medium text-foreground">Quick checkout</p>
+              <p className="text-xs text-muted-foreground">Name, phone & place order</p>
             </div>
           </div>
 
-          {/* Content */}
-          <h2 className="text-2xl lg:text-3xl font-bold text-foreground px-4">
-            {settings?.appTagline || "Point of Sale Management System"}
-          </h2>
-          <p className="text-sm lg:text-base text-muted-foreground leading-relaxed px-4">
-            {settings?.websiteDescription || `Streamline your restaurant operations with ${settings?.appName || "BondPos"}. Manage orders, track inventory, analyze sales, and generate comprehensive reports - all in one powerful platform.`}
-          </p>
-
-          {/* Pagination Dots */}
-          <div className="flex justify-center gap-2 pt-2 lg:pt-4">
-            <div className="w-2 h-2 rounded-full bg-blue-600" />
-            <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
-            <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
-          </div>
+          <Button
+            size="lg"
+            className="gap-2 shadow-lg"
+            onClick={goToCustomerPortal}
+          >
+            <Store className="w-5 h-5" />
+            Open customer portal
+            <ArrowRight className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </div>

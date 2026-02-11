@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { useBranch } from "@/contexts/BranchContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -45,19 +47,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, Pencil, Printer, Trash2, Download, FileSpreadsheet, FileText, Search, Calendar as CalendarIcon, Trash, Upload } from "lucide-react";
+import { Eye, Pencil, Printer, Trash2, Download, FileSpreadsheet, FileText, Search, Calendar as CalendarIcon, Trash, Upload, Plus, Filter, X } from "lucide-react";
 import { generateReceiptHTML, type ReceiptTemplate } from "@/lib/receipt-templates";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format, startOfDay, endOfDay, subDays, isWithinInterval } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/use-permissions";
-import type { Order } from "@shared/schema";
+import { useDebounce } from "@/hooks/use-debounce";
+import type { Order, Product } from "@shared/schema";
+import { ProductSelect } from "@/components/product-select";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 type DateFilterType = "all" | "today" | "yesterday" | "thisMonth" | "lastMonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
 
@@ -80,17 +93,30 @@ interface SalesSummaryItem {
 interface PaymentSplit {
   method: string;
   amount: number;
-  customerId?: string;
-  customerName?: string;
-  customerPhone?: string;
 }
 
 export default function SalesManage() {
+  const [location] = useLocation();
   const [activeTab, setActiveTab] = useState("detailed");
   const [viewSale, setViewSale] = useState<Order | null>(null);
   const [editSale, setEditSale] = useState<Order | null>(null);
   const [deleteSaleId, setDeleteSaleId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Check for orderId in URL query parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get("orderId");
+    if (orderId) {
+      setSearchTerm(orderId);
+      // Set debounced search term immediately for URL parameter (no debounce needed)
+      setDebouncedSearchTerm(orderId);
+      // Clear the orderId from URL after setting search term
+      urlParams.delete("orderId");
+      const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : "");
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
   const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
@@ -99,6 +125,15 @@ export default function SalesManage() {
   const [summaryStartDate, setSummaryStartDate] = useState<Date | undefined>(undefined);
   const [summaryEndDate, setSummaryEndDate] = useState<Date | undefined>(undefined);
   const [productSearchTerm, setProductSearchTerm] = useState("");
+  // New filter states
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
+  const [minAmount, setMinAmount] = useState<string>("");
+  const [maxAmount, setMaxAmount] = useState<string>("");
+  const [orderItemSearch, setOrderItemSearch] = useState<string>("");
+  const debouncedOrderItemSearch = useDebounce(orderItemSearch, 300);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [allOrderItems, setAllOrderItems] = useState<Map<string, OrderItemWithProduct[]>>(new Map());
   const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
   const [newPaymentMethod, setNewPaymentMethod] = useState<string>("cash");
   const [newPaymentAmount, setNewPaymentAmount] = useState<string>("");
@@ -106,11 +141,184 @@ export default function SalesManage() {
   const [printSale, setPrintSale] = useState<Order | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<ReceiptTemplate>("classic");
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [addSaleOpen, setAddSaleOpen] = useState(false);
+  const [newSaleItems, setNewSaleItems] = useState<Array<{ productId: string; productName: string; quantity: number; price: string }>>([]);
+  const [newSaleCustomerName, setNewSaleCustomerName] = useState("");
+  const [newSaleCustomerPhone, setNewSaleCustomerPhone] = useState("");
+  const [newSaleDiningOption, setNewSaleDiningOption] = useState("dine-in");
+  const [newSalePaymentMethod, setNewSalePaymentMethod] = useState("cash");
+  const [newSalePaymentStatus, setNewSalePaymentStatus] = useState("paid");
+  const [newSaleDate, setNewSaleDate] = useState<Date>(new Date());
+  const [newSaleDiscount, setNewSaleDiscount] = useState("0");
+  const [newSaleDiscountType, setNewSaleDiscountType] = useState<'amount' | 'percentage'>('amount');
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [selectedProductQuantity, setSelectedProductQuantity] = useState("1");
+  const [exporting, setExporting] = useState(false);
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
+  const { selectedBranchId } = useBranch();
 
-  const { data: sales = [], isLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
+  // Pagination state
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPageSize, setSalesPageSize] = useState(10);
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [summaryPageSize, setSummaryPageSize] = useState(10);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [debouncedProductSearchTerm, setDebouncedProductSearchTerm] = useState("");
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setSalesPage(1); // Reset to first page when search changes
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Debounce product search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedProductSearchTerm(productSearchTerm);
+      setSummaryPage(1); // Reset to first page when search changes
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [productSearchTerm]);
+
+  // Get date range from filters
+  const getDateRangeFromFilter = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    let dateFrom: Date | undefined;
+    let dateTo: Date | undefined;
+
+    if (dateFilter === "today") {
+      dateFrom = startOfDay(now);
+      dateTo = endOfDay(now);
+    } else if (dateFilter === "yesterday") {
+      const yesterday = subDays(now, 1);
+      dateFrom = startOfDay(yesterday);
+      dateTo = endOfDay(yesterday);
+    } else if (dateFilter === "thisMonth") {
+      dateFrom = new Date(currentYear, now.getMonth(), 1);
+      dateTo = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "lastMonth") {
+      dateFrom = new Date(currentYear, now.getMonth() - 1, 1);
+      dateTo = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+    } else if (dateFilter === "custom" && startDate && endDate) {
+      dateFrom = startOfDay(startDate);
+      dateTo = endOfDay(endDate);
+    } else if (dateFilter === "january") {
+      dateFrom = new Date(currentYear, 0, 1);
+      dateTo = new Date(currentYear, 1, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "february") {
+      dateFrom = new Date(currentYear, 1, 1);
+      dateTo = new Date(currentYear, 2, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "march") {
+      dateFrom = new Date(currentYear, 2, 1);
+      dateTo = new Date(currentYear, 3, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "april") {
+      dateFrom = new Date(currentYear, 3, 1);
+      dateTo = new Date(currentYear, 4, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "may") {
+      dateFrom = new Date(currentYear, 4, 1);
+      dateTo = new Date(currentYear, 5, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "june") {
+      dateFrom = new Date(currentYear, 5, 1);
+      dateTo = new Date(currentYear, 6, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "july") {
+      dateFrom = new Date(currentYear, 6, 1);
+      dateTo = new Date(currentYear, 7, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "august") {
+      dateFrom = new Date(currentYear, 7, 1);
+      dateTo = new Date(currentYear, 8, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "september") {
+      dateFrom = new Date(currentYear, 8, 1);
+      dateTo = new Date(currentYear, 9, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "october") {
+      dateFrom = new Date(currentYear, 9, 1);
+      dateTo = new Date(currentYear, 10, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "november") {
+      dateFrom = new Date(currentYear, 10, 1);
+      dateTo = new Date(currentYear, 11, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "december") {
+      dateFrom = new Date(currentYear, 11, 1);
+      dateTo = new Date(currentYear, 12, 0, 23, 59, 59, 999);
+    }
+
+    return { dateFrom, dateTo };
+  }, [dateFilter, startDate, endDate]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setSalesPage(1);
+  }, [debouncedSearchTerm, paymentMethodFilter, paymentStatusFilter, minAmount, maxAmount, dateFilter, startDate, endDate, debouncedOrderItemSearch, selectedBranchId, selectedMonths]);
+
+  // Build query params for sales list/export (shared).
+  // When months are selected, use exact date-time range in user's local time (toISOString for API)
+  // so filtering is by date+time and not affected by server timezone (fixes Jan export including Feb 1st sales).
+  const getSalesQueryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedBranchId) params.append("branchId", selectedBranchId);
+    if (debouncedSearchTerm?.trim()) params.append("search", debouncedSearchTerm);
+    if (paymentMethodFilter !== "all") params.append("paymentMethod", paymentMethodFilter);
+    if (paymentStatusFilter !== "all") params.append("paymentStatus", paymentStatusFilter);
+    if (minAmount?.trim() && !isNaN(parseFloat(minAmount))) params.append("minAmount", minAmount);
+    if (maxAmount?.trim() && !isNaN(parseFloat(maxAmount))) params.append("maxAmount", maxAmount);
+    if (selectedMonths.length > 0) {
+      const sorted = [...selectedMonths].sort();
+      const [y1, m1] = sorted[0].split("-").map(Number);
+      const [y2, m2] = sorted[sorted.length - 1].split("-").map(Number);
+      const start = new Date(y1, m1 - 1, 1, 0, 0, 0, 0);
+      const end = new Date(y2, m2, 0, 23, 59, 59, 999);
+      params.append("dateFrom", start.toISOString());
+      params.append("dateTo", end.toISOString());
+    } else {
+      if (getDateRangeFromFilter.dateFrom) params.append("dateFrom", getDateRangeFromFilter.dateFrom.toISOString());
+      if (getDateRangeFromFilter.dateTo) params.append("dateTo", getDateRangeFromFilter.dateTo.toISOString());
+    }
+    if (debouncedOrderItemSearch?.trim()) params.append("productSearch", debouncedOrderItemSearch);
+    return params;
+  }, [selectedBranchId, debouncedSearchTerm, paymentMethodFilter, paymentStatusFilter, minAmount, maxAmount, selectedMonths, getDateRangeFromFilter.dateFrom, getDateRangeFromFilter.dateTo, debouncedOrderItemSearch]);
+
+  // Fetch paginated sales with backend filtering (key includes params string so month/list filters trigger refetch)
+  const salesParamsString = getSalesQueryParams.toString();
+  const { data: salesData, isLoading } = useQuery<{ orders: Order[]; total: number }>({
+    queryKey: ["/api/orders/paginated", salesPage, salesPageSize, salesParamsString],
+    queryFn: async () => {
+      const params = new URLSearchParams(salesParamsString);
+      params.set("page", salesPage.toString());
+      params.set("limit", salesPageSize.toString());
+      const response = await fetch(`/api/orders/paginated?${params}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch sales");
+      return response.json();
+    },
+  });
+
+  const sales = salesData?.orders || [];
+  const salesTotal = salesData?.total || 0;
+
+  // Fetch sales stats (same filters as list so cards reflect filtered totals from backend)
+  const { data: salesStats } = useQuery<{
+    totalSales: number;
+    totalRevenue: number;
+    totalDue: number;
+    totalPaid: number;
+    averageOrderValue: number;
+  }>({
+    queryKey: ["/api/sales/stats", salesParamsString],
+    queryFn: async () => {
+      const response = await fetch(`/api/sales/stats?${salesParamsString}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch sales stats");
+      return response.json();
+    },
+  });
+
+  // Order items are now fetched by backend when productSearch is used
+  // No need to fetch all order items client-side anymore
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    enabled: addSaleOpen,
   });
 
   // Get date range for sales summary - memoize to prevent infinite re-renders
@@ -176,11 +384,35 @@ export default function SalesManage() {
 
     return { start: start.toISOString(), end: end.toISOString() };
   }, [summaryDateFilter, summaryStartDate, summaryEndDate]);
-  
-  const { data: salesSummary = [], isLoading: isSummaryLoading } = useQuery<SalesSummaryItem[]>({
-    queryKey: ["/api/sales/summary", summaryDateRange.start, summaryDateRange.end],
+
+  // Reset to page 1 when summary filters change
+  useEffect(() => {
+    setSummaryPage(1);
+  }, [summaryDateFilter, summaryStartDate, summaryEndDate, debouncedProductSearchTerm, selectedBranchId]);
+
+  // Fetch paginated sales summary with backend filtering
+  const { data: salesSummaryData, isLoading: isSummaryLoading } = useQuery<{ items: SalesSummaryItem[]; total: number }>({
+    queryKey: [
+      "/api/sales/summary/paginated",
+      {
+        branchId: selectedBranchId,
+        startDate: summaryDateRange.start,
+        endDate: summaryDateRange.end,
+        page: summaryPage,
+        limit: summaryPageSize,
+        search: debouncedProductSearchTerm,
+      }
+    ],
     queryFn: async () => {
-      const url = `/api/sales/summary?startDate=${summaryDateRange.start}&endDate=${summaryDateRange.end}`;
+      const params = new URLSearchParams({
+        startDate: summaryDateRange.start,
+        endDate: summaryDateRange.end,
+        page: summaryPage.toString(),
+        limit: summaryPageSize.toString(),
+        ...(selectedBranchId && { branchId: selectedBranchId }),
+        ...(debouncedProductSearchTerm && { search: debouncedProductSearchTerm }),
+      });
+      const url = `/api/sales/summary/paginated?${params}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) {
         throw new Error(`${res.status}: ${await res.text()}`);
@@ -188,6 +420,9 @@ export default function SalesManage() {
       return res.json();
     },
   });
+
+  const salesSummary = salesSummaryData?.items || [];
+  const summaryTotal = salesSummaryData?.total || 0;
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Order> }) => {
@@ -253,6 +488,38 @@ export default function SalesManage() {
     },
   });
 
+  const createSaleMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest("POST", "/api/orders", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({
+        title: "Success",
+        description: "Sale created successfully",
+      });
+      setAddSaleOpen(false);
+      // Reset form
+      setNewSaleItems([]);
+      setNewSaleCustomerName("");
+      setNewSaleCustomerPhone("");
+      setNewSaleDiningOption("dine-in");
+      setNewSalePaymentMethod("cash");
+      setNewSalePaymentStatus("paid");
+      setNewSaleDiscount("0");
+      setNewSaleDiscountType('amount');
+      setSelectedProductId("");
+      setSelectedProductQuantity("1");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create sale",
+        variant: "destructive",
+      });
+    },
+  });
+
   const toggleSelectAll = () => {
     if (selectedSales.size === filteredSales.length) {
       setSelectedSales(new Set());
@@ -312,14 +579,25 @@ export default function SalesManage() {
 
   const handlePrint = async (sale: Order, template?: ReceiptTemplate) => {
     try {
+      // Fetch settings for receipt customization
+      const settingsResponse = await fetch("/api/settings");
+      const settings = settingsResponse.ok ? await settingsResponse.json() : null;
+
+      // Validate company details are configured
+      if (!settings || !settings.businessName || !settings.address) {
+        toast({
+          title: "Company Details Not Configured",
+          description: "Please configure Company Name and Address in Settings > Receipt before printing receipts.",
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+
       // Fetch order items
       const response = await fetch(`/api/orders/${sale.id}/items`);
       if (!response.ok) throw new Error("Failed to fetch order items");
       const items: OrderItemWithProduct[] = await response.json();
-
-      // Fetch settings for receipt customization
-      const settingsResponse = await fetch("/api/settings");
-      const settings = settingsResponse.ok ? await settingsResponse.json() : null;
 
       // Use provided template or default to classic
       const templateToUse = template || selectedTemplate;
@@ -335,74 +613,24 @@ export default function SalesManage() {
         try {
           const splits: PaymentSplit[] = JSON.parse(sale.paymentSplits);
           if (splits.length > 0) {
-            const hasCustomerSplits = splits.some(s => s.customerName || s.customerId);
-            const splitType = hasCustomerSplits ? "Split by Customer" : "Split by Payment Method";
-            
-            if (hasCustomerSplits) {
-              // Table format for customer splits
-              const splitsRows = splits.map(split => {
-                const methodLabel = getPaymentMethodLabel(split.method);
-                const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                return `
-                  <tr style="border-bottom: 1px dashed #d1d5db;">
-                    <td style="padding: 6px 4px; font-size: 11px; font-weight: 600; color: #111827; border-right: 1px solid #d1d5db; vertical-align: top;">
-                      ${split.customerName || "Unknown Customer"}
-                      ${split.customerPhone ? `<br><span style="font-size: 9px; font-weight: normal; color: #6b7280;">${split.customerPhone}</span>` : ''}
-                    </td>
-                    <td style="padding: 6px 4px; font-size: 11px; color: #374151; border-right: 1px solid #d1d5db; vertical-align: top;">${methodLabel}</td>
-                    <td style="padding: 6px 4px; font-size: 11px; text-align: right; font-weight: 600; color: #111827; border-right: 1px solid #d1d5db; vertical-align: top;">$${split.amount.toFixed(2)}</td>
-                    <td style="padding: 6px 4px; font-size: 10px; text-align: right; color: #6b7280; vertical-align: top;">៛${amountKHR}</td>
-                  </tr>
-                `;
-              }).join('');
-              
-              paymentDetails = `
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #d1d5db;">
-                  <div style="font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                    ${splitType}
-                  </div>
-                  <table style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; margin-top: 8px;" cellpadding="0" cellspacing="0">
-                    <thead>
-                      <tr style="background-color: #f3f4f6; border-bottom: 2px solid #d1d5db;">
-                        <th style="padding: 6px 4px; text-align: left; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">Customer</th>
-                        <th style="padding: 6px 4px; text-align: left; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">Method</th>
-                        <th style="padding: 6px 4px; text-align: right; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase; border-right: 1px solid #d1d5db;">USD</th>
-                        <th style="padding: 6px 4px; text-align: right; font-size: 10px; font-weight: 700; color: #374151; text-transform: uppercase;">KHR</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${splitsRows}
-                    </tbody>
-                  </table>
+            const splitsHtml = splits.map(split => {
+              const methodLabel = getPaymentMethodLabel(split.method);
+              const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+              return `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                  <span>${methodLabel}:</span>
+                  <span><strong>$${split.amount.toFixed(2)}</strong> (៛${amountKHR})</span>
                 </div>
               `;
-            } else {
-              // Row format for payment method splits (keep existing format)
-              const splitsHtml = splits.map(split => {
-                const methodLabel = getPaymentMethodLabel(split.method);
-                const amountKHR = (split.amount * 4100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-                return `
-                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #d1d5db;">
-                    <span style="font-size: 13px; color: #374151;">${methodLabel}:</span>
-                    <div style="text-align: right;">
-                      <span style="font-weight: 700; font-size: 13px; color: #111827;">$${split.amount.toFixed(2)}</span>
-                      <span style="font-size: 11px; color: #6b7280; margin-left: 5px;">(៛${amountKHR})</span>
-                    </div>
-                  </div>
-                `;
-              }).join('');
-              
-              paymentDetails = `
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #d1d5db;">
-                  <div style="font-weight: 700; font-size: 14px; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                    ${splitType}
-                  </div>
-                  <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px;">
-                    ${splitsHtml}
-                  </div>
+            }).join('');
+            paymentDetails = `
+              <div style="margin-top: 10px;">
+                <p style="margin-bottom: 10px;"><strong>Payment Split:</strong></p>
+                <div style="border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; background-color: #f9fafb;">
+                  ${splitsHtml}
                 </div>
-              `;
-            }
+              </div>
+            `;
           }
         } catch (error) {
           console.error("Failed to parse payment splits:", error);
@@ -559,69 +787,75 @@ export default function SalesManage() {
     return colors[status] || colors.pending;
   };
 
-  const exportToExcel = () => {
-    const exportData = filteredSales.map((sale) => ({
-      "Sale ID": sale.id,
-      "Invoice No": `INV-${sale.orderNumber}`,
-      "Date & Time": format(new Date(sale.createdAt), "PPpp"),
-      "Customer Name": sale.customerName || "Walk-in Customer",
-      "Dining Option": sale.diningOption,
-      "Subtotal": `$${sale.subtotal}`,
-      "Discount Amount": `$${sale.discount}`,
-      "Total Amount": `$${sale.total}`,
-      "Pay by": sale.paymentMethod || "N/A",
-      "Payment Status": sale.paymentStatus,
-      "Order Status": sale.status,
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
-
-    const fileName = `sales_report_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
-
-    toast({
-      title: "Success",
-      description: "Sales data exported to Excel successfully",
-    });
+  const exportToExcel = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch(`/api/orders/export?${getSalesQueryParams}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch export data");
+      const { orders: exportOrders } = await response.json();
+      const list = (exportOrders || []).filter((s: Order) => s.orderSource !== "due-management");
+      const exportData = list.map((sale: Order) => ({
+        "Sale ID": sale.id,
+        "Invoice No": `INV-${sale.orderNumber}`,
+        "Date & Time": format(new Date(sale.createdAt), "PPpp"),
+        "Customer Name": sale.customerName || "Walk-in Customer",
+        "Dining Option": sale.diningOption,
+        "Subtotal": `$${sale.subtotal}`,
+        "Discount Amount": `$${sale.discount}`,
+        "Total Amount": `$${sale.total}`,
+        "Pay by": sale.paymentMethod || "N/A",
+        "Payment Status": sale.paymentStatus,
+        "Order Status": sale.status,
+      }));
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
+      const fileName = `sales_report_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      toast({ title: "Success", description: `Exported ${list.length} sales to Excel` });
+    } catch (e) {
+      toast({ title: "Export Failed", description: e instanceof Error ? e.message : "Failed to export", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
   };
 
-  const exportToPDF = () => {
-    const doc = new jsPDF();
-
-    doc.setFontSize(18);
-    doc.text("Sales Report", 14, 22);
-    
-    doc.setFontSize(11);
-    doc.text(`Generated: ${format(new Date(), "PPpp")}`, 14, 32);
-
-    const tableData = filteredSales.map((sale) => [
-      sale.id,
-      `INV-${sale.orderNumber}`,
-      format(new Date(sale.createdAt), "PPpp"),
-      sale.customerName || "Walk-in Customer",
-      `$${sale.discount}`,
-      `$${sale.total}`,
-      sale.paymentMethod || "N/A",
-      sale.paymentStatus,
-    ]);
-
-    autoTable(doc, {
-      startY: 40,
-      head: [["Sale ID", "Invoice No", "Date & Time", "Customer", "Discount", "Total", "Pay by", "Payment"]],
-      body: tableData,
-      theme: "striped",
-      headStyles: { fillColor: [234, 88, 12] },
-    });
-
-    const fileName = `sales_report_${format(new Date(), "yyyy-MM-dd")}.pdf`;
-    doc.save(fileName);
-
-    toast({
-      title: "Success",
-      description: "Sales data exported to PDF successfully",
-    });
+  const exportToPDF = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch(`/api/orders/export?${getSalesQueryParams}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch export data");
+      const { orders: exportOrders } = await response.json();
+      const list = (exportOrders || []).filter((s: Order) => s.orderSource !== "due-management");
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text("Sales Report", 14, 22);
+      doc.setFontSize(11);
+      doc.text(`Generated: ${format(new Date(), "PPpp")} (${list.length} records)`, 14, 32);
+      const tableData = list.map((sale: Order) => [
+        sale.id,
+        `INV-${sale.orderNumber}`,
+        format(new Date(sale.createdAt), "PPpp"),
+        sale.customerName || "Walk-in Customer",
+        `$${sale.discount}`,
+        `$${sale.total}`,
+        sale.paymentMethod || "N/A",
+        sale.paymentStatus,
+      ]);
+      autoTable(doc, {
+        startY: 40,
+        head: [["Sale ID", "Invoice No", "Date & Time", "Customer", "Discount", "Total", "Pay by", "Payment"]],
+        body: tableData,
+        theme: "striped",
+        headStyles: { fillColor: [234, 88, 12] },
+      });
+      doc.save(`sales_report_${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      toast({ title: "Success", description: `Exported ${list.length} sales to PDF` });
+    } catch (e) {
+      toast({ title: "Export Failed", description: e instanceof Error ? e.message : "Failed to export", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleDownloadSample = () => {
@@ -795,97 +1029,14 @@ export default function SalesManage() {
     e.target.value = '';
   };
 
+  // Backend handles all filtering, so we just use the sales from the query
+  // Exclude orders from due management (this should be handled in backend, but keeping for safety)
   const filteredSales = sales.filter((sale) => {
-    if (sale.status !== "completed") {
+    // Exclude orders created from due management page
+    if (sale.orderSource === "due-management") {
       return false;
     }
-
-    const searchLower = searchTerm.toLowerCase();
-    const invoiceNo = `INV-${sale.orderNumber}`.toLowerCase();
-    const matchesSearch =
-      !searchTerm ||
-      sale.id.toLowerCase().includes(searchLower) ||
-      sale.orderNumber.toLowerCase().includes(searchLower) ||
-      invoiceNo.includes(searchLower) ||
-      sale.customerName?.toLowerCase().includes(searchLower) ||
-      sale.total.toLowerCase().includes(searchLower);
-
-    const saleDate = new Date(sale.createdAt);
-    let matchesDate = true;
-    const now = new Date();
-    const currentYear = now.getFullYear();
-
-    if (dateFilter === "today") {
-      const today = startOfDay(new Date());
-      const todayEnd = endOfDay(new Date());
-      matchesDate = isWithinInterval(saleDate, { start: today, end: todayEnd });
-    } else if (dateFilter === "yesterday") {
-      const yesterday = startOfDay(subDays(new Date(), 1));
-      const yesterdayEnd = endOfDay(subDays(new Date(), 1));
-      matchesDate = isWithinInterval(saleDate, { start: yesterday, end: yesterdayEnd });
-    } else if (dateFilter === "thisMonth") {
-      const start = new Date(currentYear, now.getMonth(), 1);
-      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "lastMonth") {
-      const start = new Date(currentYear, now.getMonth() - 1, 1);
-      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "january") {
-      const start = new Date(currentYear, 0, 1);
-      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "february") {
-      const start = new Date(currentYear, 1, 1);
-      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "march") {
-      const start = new Date(currentYear, 2, 1);
-      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "april") {
-      const start = new Date(currentYear, 3, 1);
-      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "may") {
-      const start = new Date(currentYear, 4, 1);
-      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "june") {
-      const start = new Date(currentYear, 5, 1);
-      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "july") {
-      const start = new Date(currentYear, 6, 1);
-      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "august") {
-      const start = new Date(currentYear, 7, 1);
-      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "september") {
-      const start = new Date(currentYear, 8, 1);
-      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "october") {
-      const start = new Date(currentYear, 9, 1);
-      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "november") {
-      const start = new Date(currentYear, 10, 1);
-      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "december") {
-      const start = new Date(currentYear, 11, 1);
-      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    } else if (dateFilter === "custom" && startDate && endDate) {
-      const start = startOfDay(startDate);
-      const end = endOfDay(endDate);
-      matchesDate = isWithinInterval(saleDate, { start, end });
-    }
-
-    return matchesSearch && matchesDate;
+    return true;
   });
 
   return (
@@ -897,6 +1048,15 @@ export default function SalesManage() {
             <p className="text-sm md:text-base text-muted-foreground mt-1">Manage sales activities and records</p>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            {hasPermission("sales.create") && (
+              <Button
+                onClick={() => setAddSaleOpen(true)}
+                data-testid="button-add-sales"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Sales
+              </Button>
+            )}
             <input
               type="file"
               id="import-sales-file"
@@ -924,9 +1084,9 @@ export default function SalesManage() {
             {hasPermission("reports.export") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button data-testid="button-export">
+                  <Button data-testid="button-export" disabled={exporting}>
                     <Download className="w-4 h-4 mr-2" />
-                    Export
+                    {exporting ? "Exporting…" : "Export"}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -942,6 +1102,50 @@ export default function SalesManage() {
               </DropdownMenu>
             )}
           </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{salesStats?.totalSales || 0}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.totalRevenue || 0).toFixed(2)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Due</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.totalDue || 0).toFixed(2)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.totalPaid || 0).toFixed(2)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Average Order</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.averageOrderValue || 0).toFixed(2)}</div>
+            </CardContent>
+          </Card>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -961,7 +1165,7 @@ export default function SalesManage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by customer name, sale ID..."
+                  placeholder="Search by invoice number, customer name, sale ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9"
@@ -1017,7 +1221,7 @@ export default function SalesManage() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
+                        <CalendarComponent
                           mode="single"
                           selected={startDate}
                           onSelect={setStartDate}
@@ -1034,7 +1238,7 @@ export default function SalesManage() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
+                        <CalendarComponent
                           mode="single"
                           selected={endDate}
                           onSelect={setEndDate}
@@ -1043,6 +1247,153 @@ export default function SalesManage() {
                       </PopoverContent>
                     </Popover>
                   </>
+                )}
+              </div>
+            </div>
+
+            {/* Advanced Filters */}
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4" />
+                  <Label className="text-base font-semibold">Advanced Filters</Label>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPaymentMethodFilter("all");
+                    setPaymentStatusFilter("all");
+                    setMinAmount("");
+                    setMaxAmount("");
+                    setOrderItemSearch("");
+                    setSearchTerm("");
+                    setDateFilter("all");
+                    setStartDate(undefined);
+                    setEndDate(undefined);
+                    setSelectedMonths([]);
+                  }}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Clear All
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Payment Method Filter */}
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Methods" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Methods</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="aba">ABA Bank</SelectItem>
+                      <SelectItem value="acleda">Acleda Bank</SelectItem>
+                      <SelectItem value="wing">Wing Bank</SelectItem>
+                      <SelectItem value="card">Card</SelectItem>
+                      <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="due">Due</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Payment Status Filter */}
+                <div className="space-y-2">
+                  <Label>Payment Status</Label>
+                  <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="due">Due</SelectItem>
+                      <SelectItem value="partial">Partial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Min Amount */}
+                <div className="space-y-2">
+                  <Label>Min Amount ($)</Label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                  />
+                </div>
+
+                {/* Max Amount */}
+                <div className="space-y-2">
+                  <Label>Max Amount ($)</Label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={maxAmount}
+                    onChange={(e) => setMaxAmount(e.target.value)}
+                  />
+                </div>
+
+                {/* Months (multi-select) */}
+                <div className="space-y-2">
+                  <Label>Months</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        {selectedMonths.length === 0
+                          ? "All months"
+                          : selectedMonths.length <= 2
+                            ? selectedMonths.map((m) => {
+                                const [y, mo] = m.split("-").map(Number);
+                                return format(new Date(y, mo - 1, 1), "MMM yyyy");
+                              }).join(", ")
+                            : `${selectedMonths.length} months selected`}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[280px] p-0" align="start">
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {Array.from({ length: 24 }, (_, i) => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() - (23 - i));
+                          const y = d.getFullYear();
+                          const mo = String(d.getMonth() + 1).padStart(2, "0");
+                          const value = `${y}-${mo}`;
+                          const label = format(d, "MMMM yyyy");
+                          const checked = selectedMonths.includes(value);
+                          return (
+                            <div
+                              key={value}
+                              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
+                              onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
+                            >
+                              <Checkbox checked={checked} onCheckedChange={() => {}} />
+                              <span className="text-sm">{label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Order Items Filter (Optional) */}
+              <div className="space-y-2">
+                <Label>Search by Product/Item (Optional)</Label>
+                <Input
+                  placeholder="Enter product name to filter sales..."
+                  value={orderItemSearch}
+                  onChange={(e) => setOrderItemSearch(e.target.value)}
+                  className="max-w-md"
+                />
+                {orderItemSearch && (
+                  <p className="text-xs text-muted-foreground">
+                    Searching for products in order items...
+                  </p>
                 )}
               </div>
             </div>
@@ -1211,6 +1562,96 @@ export default function SalesManage() {
                 </Table>
               </div>
             )}
+            
+            {/* Pagination */}
+            {salesTotal > 0 && (
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {((salesPage - 1) * salesPageSize) + 1} to {Math.min(salesPage * salesPageSize, salesTotal)} of {salesTotal} sales
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Per page:</span>
+                    <Select
+                      value={salesPageSize.toString()}
+                      onValueChange={(value) => {
+                        setSalesPageSize(parseInt(value, 10));
+                        setSalesPage(1); // Reset to first page when changing page size
+                      }}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {salesTotal > salesPageSize && (
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (salesPage > 1) setSalesPage(salesPage - 1);
+                          }}
+                          className={salesPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      {Array.from({ length: Math.ceil(salesTotal / salesPageSize) }, (_, i) => i + 1)
+                        .filter(page => {
+                          // Show first page, last page, current page, and pages around current
+                          return page === 1 || 
+                                 page === Math.ceil(salesTotal / salesPageSize) ||
+                                 (page >= salesPage - 1 && page <= salesPage + 1);
+                        })
+                        .map((page, index, array) => {
+                          // Add ellipsis if there's a gap
+                          const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
+                          return (
+                            <div key={page} className="flex items-center">
+                              {showEllipsisBefore && (
+                                <PaginationEllipsis />
+                              )}
+                              <PaginationItem>
+                                <PaginationLink
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setSalesPage(page);
+                                  }}
+                                  isActive={salesPage === page}
+                                  className="cursor-pointer"
+                                >
+                                  {page}
+                                </PaginationLink>
+                              </PaginationItem>
+                            </div>
+                          );
+                        })}
+                      <PaginationItem>
+                        <PaginationNext 
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (salesPage < Math.ceil(salesTotal / salesPageSize)) {
+                              setSalesPage(salesPage + 1);
+                            }
+                          }}
+                          className={salesPage >= Math.ceil(salesTotal / salesPageSize) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
           </TabsContent>
@@ -1260,7 +1701,7 @@ export default function SalesManage() {
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
+                            <CalendarComponent
                               mode="single"
                               selected={summaryStartDate}
                               onSelect={setSummaryStartDate}
@@ -1277,7 +1718,7 @@ export default function SalesManage() {
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
+                            <CalendarComponent
                               mode="single"
                               selected={summaryEndDate}
                               onSelect={setSummaryEndDate}
@@ -1303,18 +1744,14 @@ export default function SalesManage() {
 
                 {isSummaryLoading ? (
                   <p className="text-muted-foreground">Loading sales summary...</p>
-                ) : (() => {
-                  const filteredSummary = salesSummary.filter((item) =>
-                    item.product.toLowerCase().includes(productSearchTerm.toLowerCase())
-                  );
-                  
-                  return filteredSummary.length === 0 ? (
-                    <p className="text-muted-foreground">
-                      {productSearchTerm 
-                        ? `No products found matching "${productSearchTerm}"`
-                        : "No sales data available for the selected period"}
-                    </p>
-                  ) : (
+                ) : salesSummary.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    {debouncedProductSearchTerm 
+                      ? `No products found matching "${debouncedProductSearchTerm}"`
+                      : "No sales data available for the selected period"}
+                  </p>
+                ) : (
+                  <>
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
@@ -1326,47 +1763,129 @@ export default function SalesManage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredSummary.map((item, index) => {
-                            // Find sales containing this product for View action
-                            const productSales = filteredSales.filter(sale => {
-                              // This is a simplified check - in a real scenario, you'd need to check order items
-                              return true; // Placeholder - would need to check actual order items
-                            });
-                            
-                            return (
-                              <TableRow key={index} data-testid={`row-summary-${index}`}>
-                                <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
-                                <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
-                                <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
-                                <TableCell>
-                                  <div className="flex items-center gap-2">
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          onClick={() => {
-                                            // Filter detailed report by product name
-                                            setActiveTab("detailed");
-                                            setSearchTerm(item.product.split(" - ")[0] || item.product);
-                                          }}
-                                          data-testid={`button-view-summary-${index}`}
-                                        >
-                                          <Eye className="w-4 h-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>View Sales</TooltipContent>
-                                    </Tooltip>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
+                          {salesSummary.map((item, index) => (
+                            <TableRow key={index} data-testid={`row-summary-${index}`}>
+                              <TableCell data-testid={`text-product-${index}`} className="font-medium">{item.product}</TableCell>
+                              <TableCell data-testid={`text-quantity-${index}`}>{item.quantity}</TableCell>
+                              <TableCell data-testid={`text-revenue-${index}`}>${item.revenue.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          // Filter detailed report by product name
+                                          setActiveTab("detailed");
+                                          setOrderItemSearch(item.product);
+                                        }}
+                                        data-testid={`button-view-summary-${index}`}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>View Sales</TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
                         </TableBody>
                       </Table>
                     </div>
-                  );
-                })()}
+                    
+                    {/* Pagination for Summary */}
+                    {summaryTotal > 0 && (
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="flex items-center gap-4">
+                          <div className="text-sm text-muted-foreground">
+                            Showing {((summaryPage - 1) * summaryPageSize) + 1} to {Math.min(summaryPage * summaryPageSize, summaryTotal)} of {summaryTotal} products
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Per page:</span>
+                            <Select
+                              value={summaryPageSize.toString()}
+                              onValueChange={(value) => {
+                                setSummaryPageSize(parseInt(value, 10));
+                                setSummaryPage(1); // Reset to first page when changing page size
+                              }}
+                            >
+                              <SelectTrigger className="w-20">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="25">25</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        {summaryTotal > summaryPageSize && (
+                          <Pagination>
+                            <PaginationContent>
+                              <PaginationItem>
+                                <PaginationPrevious 
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (summaryPage > 1) setSummaryPage(summaryPage - 1);
+                                  }}
+                                  className={summaryPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                              </PaginationItem>
+                              {Array.from({ length: Math.ceil(summaryTotal / summaryPageSize) }, (_, i) => i + 1)
+                                .filter(page => {
+                                  // Show first page, last page, current page, and pages around current
+                                  return page === 1 || 
+                                         page === Math.ceil(summaryTotal / summaryPageSize) ||
+                                         (page >= summaryPage - 1 && page <= summaryPage + 1);
+                                })
+                                .map((page, index, array) => {
+                                  // Add ellipsis if there's a gap
+                                  const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
+                                  return (
+                                    <div key={page} className="flex items-center">
+                                      {showEllipsisBefore && (
+                                        <PaginationEllipsis />
+                                      )}
+                                      <PaginationItem>
+                                        <PaginationLink
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            setSummaryPage(page);
+                                          }}
+                                          isActive={summaryPage === page}
+                                          className="cursor-pointer"
+                                        >
+                                          {page}
+                                        </PaginationLink>
+                                      </PaginationItem>
+                                    </div>
+                                  );
+                                })}
+                              <PaginationItem>
+                                <PaginationNext 
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (summaryPage < Math.ceil(summaryTotal / summaryPageSize)) {
+                                      setSummaryPage(summaryPage + 1);
+                                    }
+                                  }}
+                                  className={summaryPage >= Math.ceil(summaryTotal / summaryPageSize) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1602,19 +2121,11 @@ export default function SalesManage() {
                           className="flex items-center justify-between p-3 bg-muted/30"
                           data-testid={`payment-split-${index}`}
                         >
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="flex flex-col">
-                              <span className="font-medium capitalize">
-                                {getPaymentMethodLabel(split.method)}
-                              </span>
-                              {split.customerName && (
-                                <span className="text-xs text-muted-foreground">
-                                  {split.customerName}
-                                  {split.customerPhone && ` (${split.customerPhone})`}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-lg font-bold text-primary ml-auto">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium capitalize">
+                              {getPaymentMethodLabel(split.method)}
+                            </span>
+                            <span className="text-lg font-bold text-primary">
                               ${split.amount.toFixed(2)}
                             </span>
                           </div>
@@ -1841,11 +2352,23 @@ export default function SalesManage() {
                 onClick={async () => {
                   if (!printSale) return;
                   try {
+                    const settingsResponse = await fetch("/api/settings");
+                    const settings = settingsResponse.ok ? await settingsResponse.json() : null;
+
+                    // Validate company details are configured
+                    if (!settings || !settings.businessName || !settings.address) {
+                      toast({
+                        title: "Company Details Not Configured",
+                        description: "Please configure Company Name and Address in Settings > Receipt before previewing receipts.",
+                        variant: "destructive",
+                        duration: 5000,
+                      });
+                      return;
+                    }
+
                     const response = await fetch(`/api/orders/${printSale.id}/items`);
                     if (!response.ok) throw new Error("Failed to fetch order items");
                     const items: OrderItemWithProduct[] = await response.json();
-                    const settingsResponse = await fetch("/api/settings");
-                    const settings = settingsResponse.ok ? await settingsResponse.json() : null;
 
                     const totalUSD = parseFloat(printSale.total);
                     const totalKHRNum = totalUSD * 4100;
@@ -1971,6 +2494,328 @@ export default function SalesManage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Sales Dialog */}
+      <Dialog open={addSaleOpen} onOpenChange={setAddSaleOpen}>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-add-sale">
+          <DialogHeader>
+            <DialogTitle>Add New Sale</DialogTitle>
+            <DialogDescription>Create a new sales transaction</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Customer Information */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="customer-name">Customer Name</Label>
+                <Input
+                  id="customer-name"
+                  value={newSaleCustomerName}
+                  onChange={(e) => setNewSaleCustomerName(e.target.value)}
+                  placeholder="Walk-in Customer"
+                  data-testid="input-add-customer-name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="customer-phone">Customer Phone (Optional)</Label>
+                <Input
+                  id="customer-phone"
+                  value={newSaleCustomerPhone}
+                  onChange={(e) => setNewSaleCustomerPhone(e.target.value)}
+                  placeholder="012345678"
+                  data-testid="input-add-customer-phone"
+                />
+              </div>
+              <div>
+                <Label htmlFor="dining-option">Dining Option</Label>
+                <Select value={newSaleDiningOption} onValueChange={setNewSaleDiningOption}>
+                  <SelectTrigger id="dining-option" data-testid="select-add-dining-option">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dine-in">Dine-In</SelectItem>
+                    <SelectItem value="takeaway">Takeaway</SelectItem>
+                    <SelectItem value="delivery">Delivery</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="payment-method">Payment Method</Label>
+                <Select value={newSalePaymentMethod} onValueChange={setNewSalePaymentMethod}>
+                  <SelectTrigger id="payment-method" data-testid="select-add-payment-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="aba">ABA</SelectItem>
+                    <SelectItem value="acleda">Acleda</SelectItem>
+                    <SelectItem value="due">Due</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="payment-status">Payment Status</Label>
+                <Select value={newSalePaymentStatus} onValueChange={setNewSalePaymentStatus}>
+                  <SelectTrigger id="payment-status" data-testid="select-add-payment-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="sale-date">Sale Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                      id="sale-date"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {newSaleDate ? format(newSaleDate, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={newSaleDate}
+                      onSelect={(date) => date && setNewSaleDate(date)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            {/* Add Products */}
+            <div className="space-y-4 border-t pt-4">
+              <Label className="text-base font-semibold">Order Items</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <Label htmlFor="product-select">Product</Label>
+                  <ProductSelect
+                    value={selectedProductId}
+                    onValueChange={setSelectedProductId}
+                    placeholder="Select a product"
+                    showPrice={true}
+                    dataTestId="select-add-product"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="product-quantity">Quantity</Label>
+                  <Input
+                    id="product-quantity"
+                    type="number"
+                    min="1"
+                    value={selectedProductQuantity}
+                    onChange={(e) => setSelectedProductQuantity(e.target.value)}
+                    data-testid="input-add-product-quantity"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!selectedProductId) {
+                    toast({
+                      title: "Error",
+                      description: "Please select a product",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  const product = products.find(p => p.id === selectedProductId);
+                  if (!product) return;
+                  
+                  const quantity = parseInt(selectedProductQuantity) || 1;
+                  const existingIndex = newSaleItems.findIndex(item => item.productId === selectedProductId);
+                  
+                  if (existingIndex >= 0) {
+                    const updated = [...newSaleItems];
+                    updated[existingIndex].quantity += quantity;
+                    setNewSaleItems(updated);
+                  } else {
+                    setNewSaleItems([...newSaleItems, {
+                      productId: selectedProductId,
+                      productName: product.name,
+                      quantity,
+                      price: product.price,
+                    }]);
+                  }
+                  
+                  setSelectedProductId("");
+                  setSelectedProductQuantity("1");
+                }}
+                className="w-full"
+                data-testid="button-add-product-to-sale"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+
+              {/* Items List */}
+              {newSaleItems.length > 0 && (
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead className="text-right">Quantity</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="w-12"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {newSaleItems.map((item, index) => {
+                        const itemTotal = parseFloat(item.price) * item.quantity;
+                        return (
+                          <TableRow key={index}>
+                            <TableCell>{item.productName}</TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">${item.price}</TableCell>
+                            <TableCell className="text-right">${itemTotal.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  setNewSaleItems(newSaleItems.filter((_, i) => i !== index));
+                                }}
+                                data-testid={`button-remove-item-${index}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            {/* Discount and Summary */}
+            <div className="space-y-4 border-t pt-4">
+              <Label className="text-base font-semibold">Discount & Summary</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="discount-type">Discount Type</Label>
+                  <Select value={newSaleDiscountType} onValueChange={(value: 'amount' | 'percentage') => setNewSaleDiscountType(value)}>
+                    <SelectTrigger id="discount-type" data-testid="select-add-discount-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="amount">Amount ($)</SelectItem>
+                      <SelectItem value="percentage">Percentage (%)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="discount">Discount</Label>
+                  <Input
+                    id="discount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newSaleDiscount}
+                    onChange={(e) => setNewSaleDiscount(e.target.value)}
+                    data-testid="input-add-discount"
+                  />
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="border rounded-md p-4 bg-muted/20 space-y-2">
+                {(() => {
+                  const subtotal = newSaleItems.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
+                  const discountAmount = newSaleDiscountType === 'percentage'
+                    ? (subtotal * parseFloat(newSaleDiscount || '0')) / 100
+                    : parseFloat(newSaleDiscount || '0');
+                  const total = Math.max(0, subtotal - discountAmount);
+                  
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <Label className="text-muted-foreground">Subtotal:</Label>
+                        <p className="font-medium">${subtotal.toFixed(2)}</p>
+                      </div>
+                      {discountAmount > 0 && (
+                        <div className="flex justify-between">
+                          <Label className="text-muted-foreground">Discount:</Label>
+                          <p className="font-medium text-accent">-${discountAmount.toFixed(2)}</p>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t pt-2">
+                        <Label className="text-lg font-semibold">Total:</Label>
+                        <p className="font-bold text-lg">${total.toFixed(2)}</p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddSaleOpen(false)} data-testid="button-cancel-add-sale">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (newSaleItems.length === 0) {
+                  toast({
+                    title: "Error",
+                    description: "Please add at least one product",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+
+                const subtotal = newSaleItems.reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0);
+                const discountAmount = newSaleDiscountType === 'percentage'
+                  ? (subtotal * parseFloat(newSaleDiscount || '0')) / 100
+                  : parseFloat(newSaleDiscount || '0');
+                const total = Math.max(0, subtotal - discountAmount);
+
+                const orderData = {
+                  customerName: newSaleCustomerName || null,
+                  customerPhone: newSaleCustomerPhone || null,
+                  diningOption: newSaleDiningOption,
+                  subtotal: subtotal.toString(),
+                  discount: newSaleDiscount,
+                  discountType: newSaleDiscountType,
+                  total: total.toString(),
+                  status: "completed",
+                  paymentMethod: newSalePaymentMethod,
+                  paymentStatus: newSalePaymentStatus,
+                  createdAt: newSaleDate.toISOString(),
+                  items: newSaleItems.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    price: item.price,
+                    total: (parseFloat(item.price) * item.quantity).toString(),
+                    itemDiscount: "0",
+                    itemDiscountType: 'amount',
+                  })),
+                };
+
+                createSaleMutation.mutate(orderData);
+              }}
+              disabled={createSaleMutation.isPending || newSaleItems.length === 0}
+              data-testid="button-save-add-sale"
+            >
+              {createSaleMutation.isPending ? "Creating..." : "Create Sale"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

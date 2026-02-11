@@ -1,6 +1,4 @@
 // PM2 ecosystem configuration for Adora POS System
-// This file manages the Node.js application process
-
 module.exports = {
   apps: [{
     name: 'adorapos-app',
@@ -8,34 +6,22 @@ module.exports = {
     interpreter: 'node',
     instances: 1,
     exec_mode: 'cluster',
-    
-    // Environment variables loaded via systemd EnvironmentFile
-    // See adorapos.service for environment configuration
     env_production: {
       NODE_ENV: 'production',
-      PORT: 9000,
+      PORT: 7060,
     },
-    
-    // Restart policy
     autorestart: true,
     watch: false,
     max_memory_restart: '1G',
-    
-    // Logging
     error_file: '/var/log/adorapos/error.log',
     out_file: '/var/log/adorapos/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     merge_logs: true,
-    
-    // Restart delay
     min_uptime: '10s',
     max_restarts: 10,
     restart_delay: 4000,
-    
-    // Graceful shutdown
     kill_timeout: 5000,
     wait_ready: false,
     listen_timeout: 10000,
   }]
 };
-

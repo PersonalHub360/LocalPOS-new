@@ -15,13 +15,14 @@ import type { z } from "zod";
 import { Plus, Search, Download, Upload, Edit, Trash2, FolderPlus, Calendar, ImagePlus, X, ShoppingCart, Eye, Printer, FileSpreadsheet, TrendingUp, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useDebounce } from "@/hooks/use-debounce";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { UnitSelect } from "@/components/unit-select";
+import { ProductSelect } from "@/components/product-select";
 import * as XLSX from 'xlsx';
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-
-const UNIT_OPTIONS = ["kg", "gram", "ml", "litre", "piece", "box", "packet", "bottle", "can", "bag"];
 
 const DATE_FILTER_OPTIONS = [
   { label: "All Time", value: "all" },
@@ -52,6 +53,7 @@ export default function PurchaseManage() {
   const [viewingPurchase, setViewingPurchase] = useState<Purchase | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
@@ -72,7 +74,7 @@ export default function PurchaseManage() {
   });
 
   const filteredPurchases = allPurchases.filter((purchase) => {
-    const matchesSearch = purchase.itemName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = purchase.itemName.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
     
     const matchesCategory = selectedCategory === "all" || purchase.categoryId === selectedCategory;
     
@@ -168,9 +170,15 @@ export default function PurchaseManage() {
       quantity: "",
       unit: "kg",
       price: "",
+      piecesPerUnit: null,
+      pricePerPiece: null,
       purchaseDate: new Date(),
     },
   });
+
+  const selectedUnit = purchaseForm.watch("unit");
+  const containerUnits = ["box", "packet", "bottle", "can", "bag"];
+  const showPiecesFields = containerUnits.includes(selectedUnit);
 
   const handleProductSelect = (productId: string) => {
     if (!productId || productId === "none") {
@@ -361,6 +369,8 @@ export default function PurchaseManage() {
       quantity: purchase.quantity,
       unit: purchase.unit,
       price: purchase.price,
+      piecesPerUnit: purchase.piecesPerUnit || null,
+      pricePerPiece: purchase.pricePerPiece || null,
       purchaseDate: new Date(purchase.purchaseDate),
     });
     setPurchaseDialogOpen(true);
@@ -385,6 +395,8 @@ export default function PurchaseManage() {
       quantity: "",
       unit: "kg",
       price: "",
+      piecesPerUnit: null,
+      pricePerPiece: null,
       purchaseDate: new Date(),
     });
     setPurchaseDialogOpen(true);
@@ -906,20 +918,17 @@ export default function PurchaseManage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Link to Existing Product (optional)</FormLabel>
-                          <Select onValueChange={handleProductSelect} value={field.value || undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-product">
-                                <SelectValue placeholder="Select product from inventory or leave blank" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="none">None (Custom Purchase)</SelectItem>
-                              {products.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  {product.name} ({product.unit})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>                          </Select>
+                          <FormControl>
+                            <ProductSelect
+                              value={field.value || undefined}
+                              onValueChange={handleProductSelect}
+                              placeholder="Select product from inventory or leave blank"
+                              showUnit={true}
+                              includeNoneOption={true}
+                              noneOptionLabel="None (Custom Purchase)"
+                              dataTestId="select-product"
+                            />
+                          </FormControl>
                           <FormMessage />
                           <p className="text-xs text-muted-foreground">
                             Select a product to automatically update its inventory when purchase is created
@@ -988,20 +997,12 @@ export default function PurchaseManage() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Unit</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-unit">
-                                  <SelectValue placeholder="Select unit" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {UNIT_OPTIONS.map((unit) => (
-                                  <SelectItem key={unit} value={unit}>
-                                    {unit}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <UnitSelect
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Select unit"
+                              data-testid="select-unit"
+                            />
                             <FormMessage />
                           </FormItem>
                         )}
@@ -1021,6 +1022,54 @@ export default function PurchaseManage() {
                         </FormItem>
                       )}
                     />
+
+                    {showPiecesFields && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={purchaseForm.control}
+                          name="piecesPerUnit"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Pieces per {selectedUnit} *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  type="number" 
+                                  step="1" 
+                                  placeholder="e.g., 12" 
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                                  data-testid="input-pieces-per-unit" 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={purchaseForm.control}
+                          name="pricePerPiece"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Price per Piece ($) *</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  type="number" 
+                                  step="0.01" 
+                                  placeholder="e.g., 0.50" 
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                                  data-testid="input-price-per-piece" 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     <FormField
                       control={purchaseForm.control}
@@ -1133,6 +1182,9 @@ export default function PurchaseManage() {
                         const category = categories.find(c => c.id === purchase.categoryId);
                         const purchaseCost = parseFloat(purchase.quantity) * parseFloat(purchase.price);
                         const totalPrice = purchaseCost;
+                        const hasPiecesInfo = purchase.piecesPerUnit && purchase.pricePerPiece;
+                        const containerUnits = ["box", "packet", "bottle", "can", "bag"];
+                        const isContainerUnit = containerUnits.includes(purchase.unit);
                         
                         return (
                           <TableRow key={purchase.id} data-testid={`row-purchase-${purchase.id}`}>
@@ -1160,10 +1212,24 @@ export default function PurchaseManage() {
                               {category?.name || 'N/A'}
                             </TableCell>
                             <TableCell className="text-right" data-testid={`text-quantity-${purchase.id}`}>
-                              {purchase.quantity} {purchase.unit}
+                              <div>
+                                <div>{purchase.quantity} {purchase.unit}</div>
+                                {purchase.piecesPerUnit && purchase.pricePerPiece && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {purchase.piecesPerUnit} pieces × ${purchase.pricePerPiece}/piece
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-right" data-testid={`text-price-${purchase.id}`}>
-                              ${purchase.price}
+                              <div>
+                                <div>${purchase.price}</div>
+                                {purchase.piecesPerUnit && purchase.pricePerPiece && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    ${(parseFloat(purchase.piecesPerUnit) * parseFloat(purchase.pricePerPiece)).toFixed(2)}/{purchase.unit}
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-right" data-testid={`text-purchase-cost-${purchase.id}`}>
                               ${purchaseCost.toFixed(2)}

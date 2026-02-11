@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -11,6 +11,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertUserSchema, type User, type InsertUser } from "@shared/schema";
 import { z } from "zod";
+
+interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+}
 
 const userFormSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -33,6 +39,11 @@ interface AddEditUserDialogProps {
 export function AddEditUserDialog({ open, onClose, user }: AddEditUserDialogProps) {
   const { toast } = useToast();
   const isEdit = !!user;
+
+  // Fetch roles from API
+  const { data: roles = [], isLoading: rolesLoading } = useQuery<Role[]>({
+    queryKey: ["/api/roles"],
+  });
 
   const form = useForm<UserFormData>({
     resolver: zodResolver(userFormSchema),
@@ -207,17 +218,30 @@ export function AddEditUserDialog({ open, onClose, user }: AddEditUserDialogProp
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Role</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={rolesLoading}>
                     <FormControl>
                       <SelectTrigger data-testid="select-user-role">
-                        <SelectValue placeholder="Select role" />
+                        <SelectValue placeholder={rolesLoading ? "Loading roles..." : "Select role"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="cashier">Cashier</SelectItem>
-                      <SelectItem value="staff">Staff</SelectItem>
+                      {roles.length > 0 ? (
+                        roles.map((role) => (
+                          <SelectItem key={role.id} value={role.name}>
+                            {role.name}
+                            {role.description && ` - ${role.description}`}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        !rolesLoading && (
+                          <>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="cashier">Cashier</SelectItem>
+                            <SelectItem value="staff">Staff</SelectItem>
+                          </>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
