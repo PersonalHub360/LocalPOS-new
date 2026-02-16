@@ -1735,29 +1735,6 @@ export default function ItemManage() {
                     ))}
                   </SelectContent>
                 </Select>
-
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start font-normal">
-                      {selectedMonths.length === 0 ? "All months" : selectedMonths.length <= 2 ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ") : `${selectedMonths.length} months`}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[280px] p-0" align="start">
-                    <div className="max-h-[300px] overflow-y-auto p-2">
-                      {Array.from({ length: 24 }, (_, i) => {
-                        const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
-                        const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                        const checked = selectedMonths.includes(value);
-                        return (
-                          <div key={value} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer" onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}>
-                            <Checkbox checked={checked} onCheckedChange={() => {}} />
-                            <span className="text-sm">{format(d, "MMMM yyyy")}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
               </div>
             </div>
 
