@@ -1378,9 +1378,9 @@ export class DatabaseStorage implements IStorage {
       for (const item of existingItems) {
         const product = await tx.select().from(products).where(eq(products.id, item.productId)).limit(1);
         if (product && product[0]) {
-          const currentStock = parseFloat(product[0].stock || "0");
-          const newStock = currentStock + item.quantity;
-          await tx.update(products).set({ stock: newStock.toString() }).where(eq(products.id, item.productId));
+          const currentQty = parseFloat(product[0].quantity || "0");
+          const restoredQty = currentQty + item.quantity;
+          await tx.update(products).set({ quantity: restoredQty.toString() }).where(eq(products.id, item.productId));
         }
       }
       
@@ -1468,9 +1468,9 @@ export class DatabaseStorage implements IStorage {
         for (const item of items) {
           const product = await tx.select().from(products).where(eq(products.id, item.productId)).limit(1);
           if (product && product[0]) {
-            const currentStock = parseFloat(product[0].stock || "0");
-            const newStock = Math.max(0, currentStock - item.quantity);
-            await tx.update(products).set({ stock: newStock.toString() }).where(eq(products.id, item.productId));
+            const currentQty = parseFloat(product[0].quantity || "0");
+            const newQty = Math.max(0, currentQty - item.quantity);
+            await tx.update(products).set({ quantity: newQty.toString() }).where(eq(products.id, item.productId));
           }
         }
       }
