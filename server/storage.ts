@@ -1439,9 +1439,15 @@ export class DatabaseStorage implements IStorage {
         updates.customerName = customerName;
       }
       
-      // Update the order
-      const result = await tx.update(orders).set(updates).where(eq(orders.id, id)).returning();
-      const updatedOrder = result[0];
+      // Update the order (only if there are fields to update)
+      let updatedOrder;
+      const updateKeys = Object.keys(updates).filter(k => k !== 'items');
+      if (updateKeys.length > 0) {
+        const result = await tx.update(orders).set(updates).where(eq(orders.id, id)).returning();
+        updatedOrder = result[0];
+      } else {
+        updatedOrder = existingOrder[0];
+      }
       
       if (!updatedOrder) {
         return undefined;
