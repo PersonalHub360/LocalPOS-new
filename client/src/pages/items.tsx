@@ -1085,17 +1085,43 @@ export default function ItemManage() {
     <div className="h-full overflow-auto">
       <div className="p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
-            <p className="text-sm md:text-base text-muted-foreground mt-1">Manage inventory and menu items</p>
+            <p className="text-sm text-muted-foreground mt-1">Manage inventory and menu items</p>
+            {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
+              <div className="flex items-center gap-4 mt-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedItems.length === filteredProducts.length && filteredProducts.length > 0}
+                    onCheckedChange={handleSelectAll}
+                    data-testid="checkbox-select-all"
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                    Select All ({selectedItems.length}/{filteredProducts.length})
+                  </label>
+                </div>
+                {selectedItems.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    data-testid="button-bulk-delete"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete Selected ({selectedItems.length})
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
-                  <FolderPlus className="w-4 h-4 mr-1" />
-                  Categories
+                <Button variant="outline" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
+                  <FolderPlus className="w-4 h-4 mr-2" />
+                  Manage Categories
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-category">
@@ -1184,31 +1210,38 @@ export default function ItemManage() {
             />
             <Button 
               variant="outline"
-              size="sm"
               onClick={() => document.getElementById('import-file')?.click()}
               data-testid="button-import"
             >
-              <Upload className="w-4 h-4 mr-1" />
-              Import
+              <Upload className="w-4 h-4 mr-2" />
+              Import Items
             </Button>
 
-            <Button variant="outline" size="sm" onClick={handleDownloadSample} data-testid="button-download-sample">
-              <FileSpreadsheet className="w-4 h-4 mr-1" />
-              Sample
+            <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+              <Checkbox
+                checked={createMissingCategoriesOnImport}
+                onCheckedChange={(v) => setCreateMissingCategoriesOnImport(!!v)}
+              />
+              Create missing categories
+            </label>
+
+            <Button variant="outline" onClick={handleDownloadSample} data-testid="button-download-sample">
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Download Sample Excel
             </Button>
 
             {hasPermission("reports.export") && (
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} data-testid="button-export">
-                <Download className="w-4 h-4 mr-1" />
-                {exporting ? "..." : "Export"}
+              <Button variant="outline" onClick={handleExport} disabled={exporting} data-testid="button-export">
+                <Download className="w-4 h-4 mr-2" />
+                {exporting ? "Exporting..." : "Export Items"}
               </Button>
             )}
 
             <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
               <DialogTrigger asChild>
                 {hasPermission("inventory.create") && (
-                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600" onClick={handleAddItemClick} data-testid="button-add-item">
-                    <Plus className="w-4 h-4 mr-1" />
+                  <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAddItemClick} data-testid="button-add-item">
+                    <Plus className="w-4 h-4 mr-2" />
                     Add Item
                   </Button>
                 )}
@@ -1753,50 +1786,45 @@ export default function ItemManage() {
         </Card>
 
         {/* Items Grid */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-muted-foreground">
-              {filteredProducts.length} {filteredProducts.length === 1 ? "Item" : "Items"}
-            </h2>
+            <h2 className="text-xl font-semibold">Items ({filteredProducts.length})</h2>
           </div>
 
-          <div ref={scrollContainerRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          <div ref={scrollContainerRef} className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
             {filteredProducts.map((product) => {
               const category = categories.find(c => c.id === product.categoryId);
-              const stockLevel = parseFloat(product.quantity);
-              const stockColor = stockLevel <= 0 ? "text-red-500" : stockLevel <= 10 ? "text-amber-500" : "text-emerald-500";
               return (
-                <Card key={product.id} className="overflow-hidden group hover:shadow-md transition-shadow" data-testid={`card-item-${product.id}`}>
-                  <div className="aspect-[4/3] bg-muted relative overflow-hidden">
+                <Card key={product.id} className="overflow-hidden" data-testid={`card-item-${product.id}`}>
+                  <div className="aspect-square bg-muted relative overflow-hidden">
                     {product.imageUrl ? (
                       <img
                         src={product.imageUrl}
                         alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
-                        <Utensils className="w-8 h-8 text-orange-300" />
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-accent">
+                        <Utensils className="w-10 h-10 text-muted-foreground" />
                       </div>
                     )}
                     {hasPermission("inventory.delete") && (
-                      <div className="absolute top-1.5 left-1.5">
+                      <div className="absolute top-2 right-2 bg-background rounded-md p-1 shadow-md">
                         <Checkbox
                           checked={selectedItems.includes(product.id)}
                           onCheckedChange={(checked) => handleSelectItem(product.id, checked as boolean)}
-                          className="bg-white/90 border-gray-300"
                           data-testid={`checkbox-item-${product.id}`}
                         />
                       </div>
                     )}
-                    {category && (
-                      <Badge className="absolute top-1.5 right-1.5 text-[10px] bg-white/90 text-foreground hover:bg-white/90 border-0 shadow-sm" variant="secondary">
-                        {category.name}
-                      </Badge>
-                    )}
                   </div>
-                  <CardContent className="p-2.5 space-y-1.5">
-                    <h3 className="font-semibold text-sm truncate" data-testid={`text-item-name-${product.id}`}>{product.name}</h3>
+                  <CardContent className="p-3 space-y-2">
+                    <div>
+                      <h3 className="font-semibold truncate" data-testid={`text-item-name-${product.id}`}>{product.name}</h3>
+                      {category && (
+                        <p className="text-xs text-muted-foreground" data-testid={`text-item-category-${product.id}`}>{category.name}</p>
+                      )}
+                    </div>
                     
                     {product.sizePrices && (() => {
                       const sp = product.sizePrices as Record<string, string> | null | undefined;
@@ -1805,7 +1833,7 @@ export default function ItemManage() {
                         return (
                           <div className="flex flex-wrap gap-1">
                             {entries.map(([size, price]) => (
-                              <Badge key={size} variant="outline" className="text-[10px] font-mono">
+                              <Badge key={size} variant="secondary" className="text-xs">
                                 {size}: ${parseFloat(price).toFixed(2)}
                               </Badge>
                             ))}
@@ -1816,57 +1844,58 @@ export default function ItemManage() {
                     })()}
                     {(!product.sizePrices || Object.keys((product.sizePrices as Record<string, string>) || {}).length === 0) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-base font-bold text-orange-600 font-mono" data-testid={`text-item-price-${product.id}`}>
+                        <span className="text-lg font-bold text-teal-600 font-mono" data-testid={`text-item-price-${product.id}`}>
                           ${parseFloat(product.price).toFixed(2)}
                         </span>
-                        <span className="text-[11px] text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
-                          /{product.unit}
+                        <span className="text-sm text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
+                          per {product.unit}
                         </span>
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Stock</span>
-                      <span className={cn("font-semibold", stockColor)} data-testid={`text-item-quantity-${product.id}`}>
-                        {stockLevel} {product.unit}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Stock:</span>
+                      <span className="font-medium" data-testid={`text-item-quantity-${product.id}`}>
+                        {parseFloat(product.quantity)} {product.unit}
                       </span>
                     </div>
 
                     {product.description && (
-                      <p className="text-[11px] text-muted-foreground line-clamp-1" data-testid={`text-item-description-${product.id}`}>
+                      <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-item-description-${product.id}`}>
                         {product.description}
                       </p>
                     )}
 
-                    <div className="flex gap-1 pt-1 border-t">
+                    <div className="flex gap-1 pt-2">
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="flex-1 h-7 text-xs text-muted-foreground hover:text-orange-600"
+                        variant="outline"
+                        className="flex-1 text-xs"
                         onClick={() => {
                           setSelectedProductForQR(product);
                           setQrCodeDialogOpen(true);
                         }}
                         data-testid={`button-qr-${product.id}`}
                       >
-                        <QrCode className="w-3 h-3" />
+                        <QrCode className="w-3 h-3 mr-1" />
+                        QR
                       </Button>
                       {hasPermission("inventory.edit") && (
                         <Button
                           size="sm"
-                          variant="ghost"
-                          className="flex-1 h-7 text-xs text-muted-foreground hover:text-blue-600"
+                          variant="outline"
+                          className="flex-1 text-xs"
                           onClick={() => handleEditItem(product)}
                           data-testid={`button-edit-item-${product.id}`}
                         >
-                          <Edit className="w-3 h-3" />
+                          <Edit className="w-3 h-3 mr-1" />
+                          Edit
                         </Button>
                       )}
                       {hasPermission("inventory.delete") && (
                         <Button
                           size="sm"
-                          variant="ghost"
-                          className="flex-1 h-7 text-xs text-muted-foreground hover:text-red-600"
+                          variant="outline"
                           onClick={() => deleteItemMutation.mutate(product.id)}
                           disabled={deleteItemMutation.isPending}
                           data-testid={`button-delete-item-${product.id}`}
@@ -1888,19 +1917,17 @@ export default function ItemManage() {
           <div ref={observerTarget} className="h-4" />
 
           {filteredProducts.length === 0 && !productsLoading && (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mb-4">
-                  <PackagePlus className="w-8 h-8 text-orange-400" />
-                </div>
-                <h3 className="text-lg font-semibold mb-1">No items found</h3>
-                <p className="text-muted-foreground text-center text-sm mb-4">
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
+                <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No items found</h3>
+                <p className="text-muted-foreground text-center mb-4">
                   {searchQuery || selectedCategoryIds.length > 0 || dateFilter !== "all"
                     ? "Try adjusting your search filters"
                     : "Get started by adding your first item"}
                 </p>
                 {!searchQuery && selectedCategoryIds.length === 0 && dateFilter === "all" && (
-                  <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleAddItemClick} data-testid="button-add-first-item">
+                  <Button onClick={handleAddItemClick} data-testid="button-add-first-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Your First Item
                   </Button>
