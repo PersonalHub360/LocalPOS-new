@@ -25,6 +25,7 @@ import {
 import { 
   CreditCard, 
   User, 
+  Users,
   DollarSign, 
   Eye, 
   UserPlus, 
@@ -39,7 +40,11 @@ import {
   Calendar,
   Filter,
   X,
-  Upload
+  Upload,
+  Clock,
+  TrendingUp,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1316,36 +1321,60 @@ export default function DueManagement() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Customers</CardTitle>
+          <Card className="border-none shadow-md bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-blue-100">Total Customers</CardTitle>
+              <div className="p-2 bg-white/20 rounded-lg">
+                <Users className="w-5 h-5 text-white" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalCustomers}</div>
+              <div className="text-3xl font-bold">{totalCustomers}</div>
+              <p className="text-xs text-blue-100 mt-1">
+                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Dues</CardTitle>
+          <Card className="border-none shadow-md bg-gradient-to-br from-amber-500 to-orange-500 text-white">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-amber-100">Pending Dues</CardTitle>
+              <div className="p-2 bg-white/20 rounded-lg">
+                <Clock className="w-5 h-5 text-white" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{pendingDues}</div>
+              <div className="text-3xl font-bold">{pendingDues}</div>
+              <p className="text-xs text-amber-100 mt-1">
+                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Outstanding</CardTitle>
+          <Card className="border-none shadow-md bg-gradient-to-br from-red-500 to-rose-600 text-white">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-red-100">Total Outstanding</CardTitle>
+              <div className="p-2 bg-white/20 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-white" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${totalOutstanding.toFixed(2)}</div>
+              <div className="text-3xl font-bold">${totalOutstanding.toFixed(2)}</div>
+              <p className="text-xs text-red-100 mt-1">
+                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Collected</CardTitle>
+          <Card className="border-none shadow-md bg-gradient-to-br from-emerald-500 to-green-600 text-white">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-emerald-100">Total Collected</CardTitle>
+              <div className="p-2 bg-white/20 rounded-lg">
+                <CheckCircle2 className="w-5 h-5 text-white" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${totalCollected.toFixed(2)}</div>
+              <div className="text-3xl font-bold">${totalCollected.toFixed(2)}</div>
+              <p className="text-xs text-emerald-100 mt-1">
+                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
+              </p>
             </CardContent>
           </Card>
         </div>
