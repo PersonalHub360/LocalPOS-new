@@ -1288,7 +1288,7 @@ export default function SalesManage() {
                 </Button>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Payment Method Filter */}
                 <div className="space-y-2">
                   <Label>Payment Method</Label>
@@ -1324,86 +1324,6 @@ export default function SalesManage() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Min Amount */}
-                <div className="space-y-2">
-                  <Label>Min Amount ($)</Label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={minAmount}
-                    onChange={(e) => setMinAmount(e.target.value)}
-                  />
-                </div>
-
-                {/* Max Amount */}
-                <div className="space-y-2">
-                  <Label>Max Amount ($)</Label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={maxAmount}
-                    onChange={(e) => setMaxAmount(e.target.value)}
-                  />
-                </div>
-
-                {/* Months (multi-select) */}
-                <div className="space-y-2">
-                  <Label>Months</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
-                        {selectedMonths.length === 0
-                          ? "All months"
-                          : selectedMonths.length <= 2
-                            ? selectedMonths.map((m) => {
-                                const [y, mo] = m.split("-").map(Number);
-                                return format(new Date(y, mo - 1, 1), "MMM yyyy");
-                              }).join(", ")
-                            : `${selectedMonths.length} months selected`}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[280px] p-0" align="start">
-                      <div className="max-h-[300px] overflow-y-auto p-2">
-                        {Array.from({ length: 24 }, (_, i) => {
-                          const d = new Date();
-                          d.setMonth(d.getMonth() - (23 - i));
-                          const y = d.getFullYear();
-                          const mo = String(d.getMonth() + 1).padStart(2, "0");
-                          const value = `${y}-${mo}`;
-                          const label = format(d, "MMMM yyyy");
-                          const checked = selectedMonths.includes(value);
-                          return (
-                            <div
-                              key={value}
-                              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
-                              onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
-                            >
-                              <Checkbox checked={checked} onCheckedChange={() => {}} />
-                              <span className="text-sm">{label}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* Order Items Filter (Optional) */}
-              <div className="space-y-2">
-                <Label>Search by Product/Item (Optional)</Label>
-                <Input
-                  placeholder="Enter product name to filter sales..."
-                  value={orderItemSearch}
-                  onChange={(e) => setOrderItemSearch(e.target.value)}
-                  className="max-w-md"
-                />
-                {orderItemSearch && (
-                  <p className="text-xs text-muted-foreground">
-                    Searching for products in order items...
-                  </p>
-                )}
               </div>
             </div>
 
