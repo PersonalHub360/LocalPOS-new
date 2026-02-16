@@ -1265,6 +1265,39 @@ export class DatabaseStorage implements IStorage {
         };
       }
       
+      // For due/partial orders without customer, create a "Walk-in Customer" record
+      if ((insertOrder.paymentStatus === 'due' || insertOrder.paymentStatus === 'partial') && !orderData.customerId) {
+        const walkInName = insertOrder.customerName?.trim() || 'Walk-in Customer';
+        let existingWalkin = await tx
+          .select()
+          .from(customers)
+          .where(eq(customers.name, walkInName))
+          .limit(1);
+        
+        let customerId: string;
+        if (existingWalkin.length > 0) {
+          customerId = existingWalkin[0].id;
+        } else {
+          const newCustomer = await tx
+            .insert(customers)
+            .values({
+              name: walkInName,
+              phone: insertOrder.customerPhone || null,
+              email: null,
+              branchId: insertOrder.branchId || null,
+              notes: null,
+            })
+            .returning();
+          customerId = newCustomer[0].id;
+        }
+        
+        orderData = {
+          ...orderData,
+          customerId,
+          customerName: walkInName,
+        };
+      }
+
       // If payment status is "due" or "partial", set due/paid amounts
       if (insertOrder.paymentStatus === 'due' || insertOrder.paymentStatus === 'partial') {
         orderData = {
