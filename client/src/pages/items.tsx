@@ -1615,14 +1615,18 @@ export default function ItemManage() {
           </div>
         </div>
 
-        {/* Search & Filter Bar */}
-        <Card className="shadow-sm">
-          <CardContent className="py-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
+        {/* Search & Filter */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Search & Filter</CardTitle>
+            <CardDescription>Find items by name, category, or date</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search items by name..."
+                  placeholder="Search items..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -1635,7 +1639,7 @@ export default function ItemManage() {
                   <Button
                     variant="outline"
                     role="combobox"
-                    className="w-full sm:w-[180px] justify-between font-normal"
+                    className="w-full justify-between font-normal"
                     data-testid="select-filter-category"
                   >
                     {selectedCategoryIds.length === 0
@@ -1686,23 +1690,50 @@ export default function ItemManage() {
                 </PopoverContent>
               </Popover>
 
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger data-testid="select-date-filter" className="w-full sm:w-[150px]">
-                  <SelectValue placeholder="All Dates" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DATE_FILTER_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col gap-2">
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger data-testid="select-date-filter">
+                    <SelectValue placeholder="All Time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DATE_FILTER_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {dateFilter === "custom" && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" data-testid="button-custom-date" className="w-full sm:w-auto">
+                    <Button variant="outline" className="w-full justify-start font-normal">
+                      {selectedMonths.length === 0 ? "All months" : selectedMonths.length <= 2 ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ") : `${selectedMonths.length} months`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      {Array.from({ length: 24 }, (_, i) => {
+                        const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
+                        const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                        const checked = selectedMonths.includes(value);
+                        return (
+                          <div key={value} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer" onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}>
+                            <Checkbox checked={checked} onCheckedChange={() => {}} />
+                            <span className="text-sm">{format(d, "MMMM yyyy")}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+
+            {dateFilter === "custom" && (
+              <div className="mt-3">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" data-testid="button-custom-date">
                       <Calendar className="w-4 h-4 mr-2" />
                       {customDate ? format(customDate, "MMM dd, yyyy") : "Pick date"}
                     </Button>
@@ -1716,34 +1747,6 @@ export default function ItemManage() {
                     />
                   </PopoverContent>
                 </Popover>
-              )}
-            </div>
-
-            {/* Bulk Selection Bar */}
-            {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
-              <div className="flex items-center gap-3 mt-3 pt-3 border-t">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="select-all"
-                    checked={selectedItems.length === filteredProducts.length && filteredProducts.length > 0}
-                    onCheckedChange={handleSelectAll}
-                    data-testid="checkbox-select-all"
-                  />
-                  <label htmlFor="select-all" className="text-sm cursor-pointer text-muted-foreground">
-                    Select All ({selectedItems.length}/{filteredProducts.length})
-                  </label>
-                </div>
-                {selectedItems.length > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    data-testid="button-bulk-delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1" />
-                    Delete ({selectedItems.length})
-                  </Button>
-                )}
               </div>
             )}
           </CardContent>
