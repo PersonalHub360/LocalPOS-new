@@ -1391,18 +1391,18 @@ export default function DueManagement() {
             <Card>
               <CardContent className="pt-6">
                 <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                       <Input
-                        placeholder="Search by name, email, phone, or invoice number (e.g., INV-44)..."
+                        placeholder="Search by name, email, phone, or invoice number..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10"
                       />
                     </div>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectTrigger className="w-full sm:w-[160px]">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1413,103 +1413,77 @@ export default function DueManagement() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <Label>Date Range</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            <Calendar className="mr-2 h-4 w-4" />
-                            {dateRange.from && dateRange.to ? (
-                              `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd")}`
-                            ) : (
-                              "Pick a date range"
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarComponent
-                            mode="range"
-                            selected={{ from: dateRange.from, to: dateRange.to }}
-                            onSelect={(range) => setDateRange({ from: range?.from, to: range?.to })}
-                            numberOfMonths={2}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Months</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start text-left font-normal">
-                            {selectedMonths.length === 0
-                              ? "All months"
-                              : selectedMonths.length <= 2
-                                ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ")
-                                : `${selectedMonths.length} months`}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[280px] p-0" align="start">
-                          <div className="max-h-[300px] overflow-y-auto p-2">
-                            {Array.from({ length: 24 }, (_, i) => {
-                              const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
-                              const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                              const checked = selectedMonths.includes(value);
-                              return (
-                                <div
-                                  key={value}
-                                  className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
-                                  onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
-                                >
-                                  <Checkbox checked={checked} onCheckedChange={() => {}} />
-                                  <span className="text-sm">{format(d, "MMMM yyyy")}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Min Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={minAmount}
-                        onChange={(e) => setMinAmount(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Max Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={maxAmount}
-                        onChange={(e) => setMaxAmount(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2 flex items-end">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setDateRange({
-                            from: startOfMonth(new Date()),
-                            to: endOfMonth(new Date()),
-                          });
-                          setSelectedMonths([]);
-                          setStatusFilter("pending");
-                          setMinAmount("");
-                          setMaxAmount("");
-                          setSearchTerm("");
-                        }}
-                        className="w-full"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Clear Filters
-                      </Button>
-                    </div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {dateRange.from && dateRange.to ? (
+                            `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd")}`
+                          ) : (
+                            "Pick a date range"
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="range"
+                          selected={{ from: dateRange.from, to: dateRange.to }}
+                          onSelect={(range) => setDateRange({ from: range?.from, to: range?.to })}
+                          numberOfMonths={2}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {selectedMonths.length === 0
+                            ? "All months"
+                            : selectedMonths.length <= 2
+                              ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ")
+                              : `${selectedMonths.length} months`}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[280px] p-0" align="start">
+                        <div className="max-h-[300px] overflow-y-auto p-2">
+                          {Array.from({ length: 24 }, (_, i) => {
+                            const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
+                            const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                            const checked = selectedMonths.includes(value);
+                            return (
+                              <div
+                                key={value}
+                                className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
+                                onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
+                              >
+                                <Checkbox checked={checked} onCheckedChange={() => {}} />
+                                <span className="text-sm">{format(d, "MMMM yyyy")}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDateRange({
+                          from: startOfMonth(new Date()),
+                          to: endOfMonth(new Date()),
+                        });
+                        setSelectedMonths([]);
+                        setStatusFilter("pending");
+                        setMinAmount("");
+                        setMaxAmount("");
+                        setSearchTerm("");
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Clear
+                    </Button>
                   </div>
                 </div>
               </CardContent>
