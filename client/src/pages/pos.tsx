@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart, Filter, X, Scan } from "lucide-react";
+import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart, Filter, X, Scan, LayoutGrid, List } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -55,6 +55,7 @@ export default function POS() {
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [stockFilter, setStockFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const isDesktop = useIsDesktop();
   const { toast } = useToast();
@@ -1316,10 +1317,32 @@ export default function POS() {
 
         <div className="flex-1 overflow-hidden flex flex-col min-w-0">
           <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 border-b border-border bg-background flex-shrink-0">
-            <div className="flex items-center gap-2 mb-3 sm:mb-4 overflow-x-auto pb-1">
-              <Badge variant="secondary" className="text-xs sm:text-sm shrink-0">Dashboard</Badge>
-              <span className="text-muted-foreground shrink-0">/</span>
-              <span className="text-xs sm:text-sm shrink-0">POS</span>
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <Badge variant="secondary" className="text-xs sm:text-sm shrink-0">Dashboard</Badge>
+                <span className="text-muted-foreground shrink-0">/</span>
+                <span className="text-xs sm:text-sm shrink-0">POS</span>
+              </div>
+              <div className="flex items-center border rounded-md overflow-hidden shrink-0">
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="rounded-none h-8 px-3"
+                  onClick={() => setViewMode('list')}
+                >
+                  <List className="w-4 h-4 mr-1" />
+                  List
+                </Button>
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="rounded-none h-8 px-3"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <LayoutGrid className="w-4 h-4 mr-1" />
+                  Grid
+                </Button>
+              </div>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -1445,23 +1468,60 @@ export default function POS() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-                  {allProducts.map((product) => {
-                    // Calculate available stock (quantity - sold)
-                    const quantity = parseFloat(product.quantity || "0");
-                    const sold = soldQuantities[product.id] || 0;
-                    const availableStock = Math.max(0, quantity - sold);
-                    
-                    return (
-                      <ProductCard
-                        key={product.id}
-                        product={product}
-                        onAddToOrder={handleAddToOrder}
-                        availableStock={availableStock}
-                      />
-                    );
-                  })}
-                </div>
+                {viewMode === 'grid' ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+                    {allProducts.map((product) => {
+                      const quantity = parseFloat(product.quantity || "0");
+                      const sold = soldQuantities[product.id] || 0;
+                      const availableStock = Math.max(0, quantity - sold);
+                      return (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          onAddToOrder={handleAddToOrder}
+                          availableStock={availableStock}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {allProducts.map((product) => {
+                      const quantity = parseFloat(product.quantity || "0");
+                      const sold = soldQuantities[product.id] || 0;
+                      const availableStock = Math.max(0, quantity - sold);
+                      const category = categories.find(c => c.id === product.categoryId);
+                      return (
+                        <div
+                          key={product.id}
+                          className="flex items-center gap-3 p-2 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => handleAddToOrder(product)}
+                        >
+                          <div className="w-14 h-14 rounded-md overflow-hidden bg-muted shrink-0">
+                            {product.imageUrl ? (
+                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Utensils className="w-5 h-5 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-sm truncate">{product.name}</h4>
+                            {category && <p className="text-xs text-muted-foreground">{category.name}</p>}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-semibold text-sm">${parseFloat(product.price).toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">Stock: {availableStock}</p>
+                          </div>
+                          <Button size="sm" variant="ghost" className="shrink-0 h-8 w-8 p-0">
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {/* Infinite scroll trigger */}
                 <div ref={observerTarget} className="h-4 flex items-center justify-center py-4">
                   {isFetchingNextPage && (
