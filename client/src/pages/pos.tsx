@@ -623,6 +623,16 @@ export default function POS() {
       }),
     };
 
+    const clearCartAfterDraft = () => {
+      setOrderItems([]);
+      setSelectedTable(null);
+      setDiningOption("dine-in");
+      setCurrentOrderNumber("");
+      setCurrentDraftId(null);
+      setManualDiscount(0);
+      setDiscountType("amount");
+    };
+
     if (currentDraftId) {
       updateOrderMutation.mutate(
         { orderId: currentDraftId, orderData },
@@ -631,11 +641,19 @@ export default function POS() {
             queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
             queryClient.invalidateQueries({ queryKey: ["/api/products"] });
             toast({ title: "Success", description: "Draft saved successfully" });
+            clearCartAfterDraft();
           },
         }
       );
     } else {
-      createOrderMutation.mutate(orderData);
+      createOrderMutation.mutate(orderData, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+          toast({ title: "Success", description: "Draft saved successfully" });
+          clearCartAfterDraft();
+        },
+      });
     }
   };
 
