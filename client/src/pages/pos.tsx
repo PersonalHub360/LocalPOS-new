@@ -34,19 +34,6 @@ export default function POS() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [diningOption, setDiningOption] = useState("dine-in");
   
-  // Debug: Log when orderItems changes
-  useEffect(() => {
-    console.log("=== orderItems state changed ===");
-    console.log("orderItems:", orderItems);
-    console.log("orderItems length:", orderItems.length);
-    console.log("orderItems type:", typeof orderItems);
-    console.log("orderItems is array:", Array.isArray(orderItems));
-    if (orderItems.length > 0) {
-      console.log("First item:", orderItems[0]);
-      console.log("First item product:", orderItems[0].product);
-    }
-    console.log("================================");
-  }, [orderItems]);
   const [searchInPacking, setSearchInPacking] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [draftListModalOpen, setDraftListModalOpen] = useState(false);
@@ -199,19 +186,9 @@ export default function POS() {
         }
       });
       
-      // Only clear cart if it's a new draft, not when updating
-      if (!currentDraftId) {
-        setOrderItems([]);
-        setSelectedTable(null);
-        setCurrentOrderNumber("");
-        setCurrentDraftId(null);
-        setManualDiscount(0);
-        setDiscountType('amount');
-      }
-      
       toast({
         title: "Success",
-        description: currentDraftId ? "Draft saved successfully" : "Order processed successfully",
+        description: "Order created successfully",
       });
     },
   });
@@ -220,24 +197,6 @@ export default function POS() {
     mutationFn: async ({ orderId, orderData }: { orderId: string; orderData: any }) => {
       const response = await apiRequest("PATCH", `/api/orders/${orderId}`, orderData);
       return await response.json();
-    },
-    onSuccess: (updatedOrder) => {
-      // Invalidate orders and products
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/due/customers-summary"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
-      
-      // Update order number if it changed (shouldn't happen, but just in case)
-      if (updatedOrder?.orderNumber) {
-        setCurrentOrderNumber(updatedOrder.orderNumber);
-      }
-      
-      toast({
-        title: "Success",
-        description: "Draft order updated successfully",
-      });
     },
     onError: (error: any) => {
       toast({
@@ -664,12 +623,17 @@ export default function POS() {
       }),
     };
 
-    // If editing an existing draft, update it instead of creating a new one
     if (currentDraftId) {
-      updateOrderMutation.mutate({
-        orderId: currentDraftId,
-        orderData,
-      });
+      updateOrderMutation.mutate(
+        { orderId: currentDraftId, orderData },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+            toast({ title: "Success", description: "Draft saved successfully" });
+          },
+        }
+      );
     } else {
       createOrderMutation.mutate(orderData);
     }
@@ -695,10 +659,6 @@ export default function POS() {
       const itemsResponse = await apiRequest("GET", `/api/orders/${orderId}/items`);
       const items = await itemsResponse.json() as Array<OrderItem & { product?: Product; productName?: string }>;
       
-      console.log("API Response - Items:", items);
-      console.log("First item:", items[0]);
-      console.log("First item product:", items[0]?.product);
-      
       if (!items || items.length === 0) {
         toast({
           title: "No Items",
@@ -708,27 +668,30 @@ export default function POS() {
         return;
       }
 
-      // Map items to OrderItemData format
       const restoredItems: OrderItemData[] = [];
       
       for (const item of items) {
-        // Use product directly from API response if available
         let product: Product | undefined = item.product as Product | undefined;
         
-        // If product is missing from API response, try to find it in allProducts
         if (!product || !product.id) {
-          console.warn("Product missing from API response, looking in allProducts:", item.productId);
           product = allProducts.find(p => p.id === item.productId);
         }
         
         if (!product) {
-          console.error(`Product ${item.productId} not found. Item:`, item);
-          console.error("Available products count:", allProducts.length);
+          try {
+            const productRes = await fetch(`/api/products/${item.productId}`, { credentials: "include" });
+            if (productRes.ok) {
+              product = await productRes.json() as Product;
+            }
+          } catch (e) {
+            console.error(`Failed to fetch product ${item.productId}:`, e);
+          }
+        }
+        
+        if (!product) {
           continue;
         }
         
-        // Use the product directly - it should already have all required fields from the API
-        // Get the correct price based on selected size (for any unit type)
         let itemPrice = parseFloat(item.price);
         const selectedSize = (item as any).selectedSize;
         if (selectedSize) {
@@ -738,13 +701,12 @@ export default function POS() {
           }
         }
         
-        // Create product with correct price
         const productWithPrice = {
           ...product,
           price: itemPrice.toString(),
         };
         
-        const restoredItem: OrderItemData = {
+        restoredItems.push({
           product: productWithPrice as Product,
           quantity: item.quantity,
           itemDiscount: item.itemDiscount && parseFloat(item.itemDiscount) > 0 
@@ -752,14 +714,8 @@ export default function POS() {
             : undefined,
           itemDiscountType: (item.itemDiscountType as 'amount' | 'percentage') || undefined,
           selectedSize: selectedSize || undefined,
-        };
-        
-        console.log("Created restored item:", restoredItem);
-        restoredItems.push(restoredItem);
+        });
       }
-
-      console.log("Restored items:", restoredItems);
-      console.log("Restored items count:", restoredItems.length);
 
       if (restoredItems.length === 0) {
         toast({
@@ -770,18 +726,7 @@ export default function POS() {
         return;
       }
 
-      // Set all state at once to avoid race conditions
-      console.log("About to set order items:", restoredItems);
-      console.log("Restored items count:", restoredItems.length);
-      console.log("First restored item:", restoredItems[0]);
-      console.log("First restored item product:", restoredItems[0]?.product);
-      
-      // Use React's batching to set all state together
-      // Create a new array reference to ensure React detects the change
-      const itemsToSet = [...restoredItems];
-      console.log("Items to set (new array):", itemsToSet);
-      
-      setOrderItems(itemsToSet);
+      setOrderItems([...restoredItems]);
       setSelectedTable(order.tableId);
       setDiningOption(order.diningOption);
       setCurrentOrderNumber(order.orderNumber);
@@ -921,39 +866,46 @@ export default function POS() {
 
       try {
         const response = await apiRequest("GET", `/api/orders/${orderId}/items`);
-        const orderItemsData = await response.json() as OrderItem[];
+        const orderItemsData = await response.json() as Array<OrderItem & { product?: Product }>;
         
-        const productsMap = new Map(allProducts.map((p) => [p.id, p]));
-        const restoredItems: OrderItemData[] = orderItemsData
-          .map((item) => {
-            const product = productsMap.get(item.productId);
-            if (!product) return null;
-            
-            // Get the correct price based on selected size (for any unit type)
-            let itemPrice = parseFloat(item.price);
-            const selectedSize = (item as any).selectedSize;
-            if (selectedSize) {
-              const sizePrices = product.sizePrices as Record<string, string> | null | undefined;
-              if (sizePrices && sizePrices[selectedSize]) {
-                itemPrice = parseFloat(sizePrices[selectedSize]);
+        const restoredItems: OrderItemData[] = [];
+        for (const item of orderItemsData) {
+          let product: Product | undefined = item.product as Product | undefined;
+          
+          if (!product || !product.id) {
+            product = allProducts.find(p => p.id === item.productId);
+          }
+          
+          if (!product) {
+            try {
+              const productRes = await fetch(`/api/products/${item.productId}`, { credentials: "include" });
+              if (productRes.ok) {
+                product = await productRes.json() as Product;
               }
+            } catch (e) {
+              continue;
             }
-            
-            // Create product with correct price
-            const productWithPrice = {
-              ...product,
-              price: itemPrice.toString(),
-            };
-            
-            return {
-              product: productWithPrice,
-              quantity: item.quantity,
-              itemDiscount: item.itemDiscount ? parseFloat(item.itemDiscount) : undefined,
-              itemDiscountType: item.itemDiscountType as 'amount' | 'percentage' | undefined,
-              selectedSize: selectedSize || undefined,
-            };
-          })
-          .filter((item): item is OrderItemData => item !== null);
+          }
+          
+          if (!product) continue;
+          
+          let itemPrice = parseFloat(item.price);
+          const selectedSize = (item as any).selectedSize;
+          if (selectedSize) {
+            const sizePrices = product.sizePrices as Record<string, string> | null | undefined;
+            if (sizePrices && sizePrices[selectedSize]) {
+              itemPrice = parseFloat(sizePrices[selectedSize]);
+            }
+          }
+          
+          restoredItems.push({
+            product: { ...product, price: itemPrice.toString() } as Product,
+            quantity: item.quantity,
+            itemDiscount: item.itemDiscount ? parseFloat(item.itemDiscount) : undefined,
+            itemDiscountType: item.itemDiscountType as 'amount' | 'percentage' | undefined,
+            selectedSize: selectedSize || undefined,
+          });
+        }
 
         setOrderItems(restoredItems);
         setSelectedTable(order.tableId);
