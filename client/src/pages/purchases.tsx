@@ -1159,12 +1159,12 @@ export default function PurchaseManage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead className="w-[100px]">Image</TableHead>
+                      <TableHead className="w-[100px] hidden sm:table-cell">Image</TableHead>
                       <TableHead>Item Name</TableHead>
-                      <TableHead>Category</TableHead>
+                      <TableHead className="hidden md:table-cell">Category</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Purchase Cost</TableHead>
+                      <TableHead className="text-right hidden lg:table-cell">Unit Price</TableHead>
+                      <TableHead className="text-right hidden lg:table-cell">Purchase Cost</TableHead>
                       <TableHead className="text-right">Total Price</TableHead>
                       <TableHead className="text-center w-[200px]">Actions</TableHead>
                     </TableRow>
@@ -1191,7 +1191,7 @@ export default function PurchaseManage() {
                             <TableCell data-testid={`text-date-${purchase.id}`}>
                               {format(new Date(purchase.purchaseDate), 'PP')}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               {purchase.imageUrl ? (
                                 <img
                                   src={purchase.imageUrl}
@@ -1208,7 +1208,7 @@ export default function PurchaseManage() {
                             <TableCell className="font-medium" data-testid={`text-item-name-${purchase.id}`}>
                               {purchase.itemName}
                             </TableCell>
-                            <TableCell data-testid={`text-category-${purchase.id}`}>
+                            <TableCell className="hidden md:table-cell" data-testid={`text-category-${purchase.id}`}>
                               {category?.name || 'N/A'}
                             </TableCell>
                             <TableCell className="text-right" data-testid={`text-quantity-${purchase.id}`}>
@@ -1221,7 +1221,7 @@ export default function PurchaseManage() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-right" data-testid={`text-price-${purchase.id}`}>
+                            <TableCell className="text-right hidden lg:table-cell" data-testid={`text-price-${purchase.id}`}>
                               <div>
                                 <div>${purchase.price}</div>
                                 {purchase.piecesPerUnit && purchase.pricePerPiece && (
@@ -1231,7 +1231,7 @@ export default function PurchaseManage() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-right" data-testid={`text-purchase-cost-${purchase.id}`}>
+                            <TableCell className="text-right hidden lg:table-cell" data-testid={`text-purchase-cost-${purchase.id}`}>
                               ${purchaseCost.toFixed(2)}
                             </TableCell>
                             <TableCell className="text-right font-semibold" data-testid={`text-total-${purchase.id}`}>

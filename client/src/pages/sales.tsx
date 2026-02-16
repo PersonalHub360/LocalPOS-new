@@ -1052,9 +1052,11 @@ export default function SalesManage() {
               <Button
                 onClick={() => setAddSaleOpen(true)}
                 data-testid="button-add-sales"
+                size="sm"
+                className="sm:size-default"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Sales
+                <Plus className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Sales</span>
               </Button>
             )}
             <input
@@ -1069,24 +1071,28 @@ export default function SalesManage() {
               variant="outline"
               onClick={() => document.getElementById('import-sales-file')?.click()}
               data-testid="button-import-sales"
+              size="sm"
+              className="sm:size-default"
             >
-              <Upload className="w-4 h-4 mr-2" />
-              Import Sales
+              <Upload className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Import Sales</span>
             </Button>
             <Button
               variant="outline"
               onClick={handleDownloadSample}
               data-testid="button-download-sample"
+              size="sm"
+              className="sm:size-default"
             >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Download Sample
+              <FileSpreadsheet className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Download Sample</span>
             </Button>
             {hasPermission("reports.export") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button data-testid="button-export" disabled={exporting}>
-                    <Download className="w-4 h-4 mr-2" />
-                    {exporting ? "Exporting…" : "Export"}
+                  <Button data-testid="button-export" disabled={exporting} size="sm" className="sm:size-default">
+                    <Download className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export"}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -1105,53 +1111,53 @@ export default function SalesManage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
+            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{salesStats?.totalSales || 0}</div>
+            <CardContent className="p-3 sm:p-6 pt-0">
+              <div className="text-lg sm:text-2xl font-bold">{salesStats?.totalSales || 0}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${(salesStats?.totalRevenue || 0).toFixed(2)}</div>
+            <CardContent className="p-3 sm:p-6 pt-0">
+              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.totalRevenue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Due</CardTitle>
+            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Due</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${(salesStats?.totalDue || 0).toFixed(2)}</div>
+            <CardContent className="p-3 sm:p-6 pt-0">
+              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.totalDue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
+            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${(salesStats?.totalPaid || 0).toFixed(2)}</div>
+            <CardContent className="p-3 sm:p-6 pt-0">
+              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.totalPaid || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Average Order</CardTitle>
+            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Average Order</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${(salesStats?.averageOrderValue || 0).toFixed(2)}</div>
+            <CardContent className="p-3 sm:p-6 pt-0">
+              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.averageOrderValue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="detailed" data-testid="tab-detailed-sales">Detailed Sales Report</TabsTrigger>
-            <TabsTrigger value="summary" data-testid="tab-sales-summary">Sales Summary Report</TabsTrigger>
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="detailed" data-testid="tab-detailed-sales" className="text-xs sm:text-sm">Detailed Sales Report</TabsTrigger>
+            <TabsTrigger value="summary" data-testid="tab-sales-summary" className="text-xs sm:text-sm">Sales Summary Report</TabsTrigger>
           </TabsList>
 
           <TabsContent value="detailed" className="space-y-4">
@@ -1160,12 +1166,12 @@ export default function SalesManage() {
             <CardTitle>Sales List</CardTitle>
             <CardDescription>Comprehensive list of all sales transactions</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="p-3 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by invoice number, customer name, sale ID..."
+                  placeholder="Search by invoice, customer..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9"
@@ -1178,9 +1184,12 @@ export default function SalesManage() {
                   variant="destructive"
                   onClick={() => setShowBulkDeleteDialog(true)}
                   data-testid="button-bulk-delete"
+                  size="sm"
+                  className="sm:size-default"
                 >
-                  <Trash className="w-4 h-4 mr-2" />
-                  Delete Selected ({selectedSales.size})
+                  <Trash className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Delete Selected ({selectedSales.size})</span>
+                  <span className="sm:hidden">({selectedSales.size})</span>
                 </Button>
               )}
               
@@ -1252,7 +1261,7 @@ export default function SalesManage() {
             </div>
 
             {/* Advanced Filters */}
-            <div className="border rounded-lg p-4 space-y-4">
+            <div className="border rounded-lg p-2 sm:p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4" />
@@ -1490,7 +1499,7 @@ export default function SalesManage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-0.5 sm:gap-2">
                             {hasPermission("sales.view") && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1565,13 +1574,13 @@ export default function SalesManage() {
             
             {/* Pagination */}
             {salesTotal > 0 && (
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex items-center gap-4">
-                  <div className="text-sm text-muted-foreground">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                  <div className="text-xs sm:text-sm text-muted-foreground">
                     Showing {((salesPage - 1) * salesPageSize) + 1} to {Math.min(salesPage * salesPageSize, salesTotal)} of {salesTotal} sales
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Per page:</span>
+                    <span className="text-xs sm:text-sm text-muted-foreground">Per page:</span>
                     <Select
                       value={salesPageSize.toString()}
                       onValueChange={(value) => {
@@ -1662,7 +1671,7 @@ export default function SalesManage() {
                 <CardTitle>Sales Summary Report</CardTitle>
                 <CardDescription>Individual item sales summary</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-3 sm:p-6 space-y-4">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap gap-2">
                     <Select value={summaryDateFilter} onValueChange={(value: DateFilterType) => setSummaryDateFilter(value)}>
@@ -1797,13 +1806,13 @@ export default function SalesManage() {
                     
                     {/* Pagination for Summary */}
                     {summaryTotal > 0 && (
-                      <div className="flex items-center justify-between pt-4 border-t">
-                        <div className="flex items-center gap-4">
-                          <div className="text-sm text-muted-foreground">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                          <div className="text-xs sm:text-sm text-muted-foreground">
                             Showing {((summaryPage - 1) * summaryPageSize) + 1} to {Math.min(summaryPage * summaryPageSize, summaryTotal)} of {summaryTotal} products
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Per page:</span>
+                            <span className="text-xs sm:text-sm text-muted-foreground">Per page:</span>
                             <Select
                               value={summaryPageSize.toString()}
                               onValueChange={(value) => {
@@ -1964,13 +1973,13 @@ export default function SalesManage() {
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Order Items</Label>
                 {orderItems.length > 0 ? (
-                  <div className="border rounded-md">
+                  <div className="border rounded-md w-full overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Product Name</TableHead>
                           <TableHead className="text-right">Quantity</TableHead>
-                          <TableHead className="text-right">Price</TableHead>
+                          <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
                           <TableHead className="text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1979,7 +1988,7 @@ export default function SalesManage() {
                           <TableRow key={item.id} data-testid={`view-item-${item.id}`}>
                             <TableCell data-testid={`view-item-name-${item.id}`}>{item.productName}</TableCell>
                             <TableCell className="text-right" data-testid={`view-item-qty-${item.id}`}>{item.quantity}</TableCell>
-                            <TableCell className="text-right" data-testid={`view-item-price-${item.id}`}>${item.price}</TableCell>
+                            <TableCell className="text-right hidden sm:table-cell" data-testid={`view-item-price-${item.id}`}>${item.price}</TableCell>
                             <TableCell className="text-right" data-testid={`view-item-total-${item.id}`}>${item.total}</TableCell>
                           </TableRow>
                         ))}
@@ -2224,13 +2233,13 @@ export default function SalesManage() {
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Order Items</Label>
                 {orderItems.length > 0 ? (
-                  <div className="border rounded-md bg-muted/30">
+                  <div className="border rounded-md bg-muted/30 w-full overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Product Name</TableHead>
                           <TableHead className="text-right">Quantity</TableHead>
-                          <TableHead className="text-right">Price</TableHead>
+                          <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
                           <TableHead className="text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2239,7 +2248,7 @@ export default function SalesManage() {
                           <TableRow key={item.id} data-testid={`edit-item-${item.id}`}>
                             <TableCell data-testid={`edit-item-name-${item.id}`}>{item.productName}</TableCell>
                             <TableCell className="text-right" data-testid={`edit-item-qty-${item.id}`}>{item.quantity}</TableCell>
-                            <TableCell className="text-right" data-testid={`edit-item-price-${item.id}`}>${item.price}</TableCell>
+                            <TableCell className="text-right hidden sm:table-cell" data-testid={`edit-item-price-${item.id}`}>${item.price}</TableCell>
                             <TableCell className="text-right" data-testid={`edit-item-total-${item.id}`}>${item.total}</TableCell>
                           </TableRow>
                         ))}
@@ -2661,13 +2670,13 @@ export default function SalesManage() {
 
               {/* Items List */}
               {newSaleItems.length > 0 && (
-                <div className="border rounded-md">
+                <div className="border rounded-md w-full overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product</TableHead>
-                        <TableHead className="text-right">Quantity</TableHead>
-                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="text-right">Qty</TableHead>
+                        <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
@@ -2679,7 +2688,7 @@ export default function SalesManage() {
                           <TableRow key={index}>
                             <TableCell>{item.productName}</TableCell>
                             <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell className="text-right">${item.price}</TableCell>
+                            <TableCell className="text-right hidden sm:table-cell">${item.price}</TableCell>
                             <TableCell className="text-right">${itemTotal.toFixed(2)}</TableCell>
                             <TableCell>
                               <Button

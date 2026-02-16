@@ -1515,6 +1515,7 @@ export default function DueManagement() {
                     </Button>
                   </div>
                 )}
+                <div className="w-full overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1531,10 +1532,10 @@ export default function DueManagement() {
                         />
                       </TableHead>
                       <TableHead>Customer</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="hidden md:table-cell">Contact</TableHead>
+                      <TableHead className="text-right hidden sm:table-cell">Paid</TableHead>
                       <TableHead className="text-right">Pending</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden sm:table-cell">Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1568,7 +1569,7 @@ export default function DueManagement() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {summary.customer.phone || summary.customer.email ? (
                           <div className="text-sm">
                             {summary.customer.phone && <div>{summary.customer.phone}</div>}
@@ -1578,13 +1579,13 @@ export default function DueManagement() {
                           <span className="text-sm text-muted-foreground">No contact</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right font-mono">
+                      <TableCell className="text-right font-mono hidden sm:table-cell">
                         ${summary.totalPaid.toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold">
                         ${summary.balance.toFixed(2)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         {getStatusBadge(summary.balance, summary.ordersCount, summary.totalPaid)}
                       </TableCell>
                       <TableCell>
@@ -1638,6 +1639,7 @@ export default function DueManagement() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
               </>
             )}
           </CardContent>
@@ -1758,6 +1760,7 @@ export default function DueManagement() {
                   <div className="text-center py-8 text-muted-foreground">No due payment records found.</div>
                 ) : (
                   <>
+                    <div className="w-full overflow-x-auto">
                     <Table>
                   <TableHeader>
                     <TableRow>
@@ -1776,8 +1779,8 @@ export default function DueManagement() {
                       <TableHead>Customer</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead>Payment Method</TableHead>
-                      <TableHead>Reference</TableHead>
+                      <TableHead className="hidden sm:table-cell">Payment Method</TableHead>
+                      <TableHead className="hidden md:table-cell">Reference</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1809,10 +1812,10 @@ export default function DueManagement() {
                           <TableCell className="font-mono">
                             ${parseFloat(payment.amount).toFixed(2)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden sm:table-cell">
                             {PAYMENT_METHODS.find(m => m.value === payment.paymentMethod)?.label || payment.paymentMethod}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {payment.reference || "-"}
                           </TableCell>
                           <TableCell className="text-right">
@@ -1852,6 +1855,7 @@ export default function DueManagement() {
                     })}
                     </TableBody>
                   </Table>
+                  </div>
                   {/* Pagination for Due Payments */}
                   {paymentsTotal > 0 && (
                     <div className="mt-4 flex items-center justify-between">

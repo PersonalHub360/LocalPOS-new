@@ -500,7 +500,7 @@ export function OrderPanel({
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[50vw] max-w-none sm:max-w-none md:max-w-none p-0 [&>button]:hidden"
+        className="w-[92vw] sm:w-[75vw] md:w-[60vw] lg:w-[45vw] max-w-[500px] p-0 [&>button]:hidden"
       >
         {orderPanelContent}
       </SheetContent>

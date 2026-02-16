@@ -692,22 +692,26 @@ export default function StaffSalaryPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="staff">
-              <Users className="w-4 h-4 mr-2" />
-              Staff
+          <TabsList className="w-full flex flex-wrap h-auto">
+            <TabsTrigger value="staff" className="flex-1 sm:flex-none">
+              <Users className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Staff</span>
+              <span className="sm:hidden">Staff</span>
             </TabsTrigger>
-            <TabsTrigger value="salary">
-              <DollarSign className="w-4 h-4 mr-2" />
-              Salary Management
+            <TabsTrigger value="salary" className="flex-1 sm:flex-none">
+              <DollarSign className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Salary Management</span>
+              <span className="sm:hidden">Salary</span>
             </TabsTrigger>
-            <TabsTrigger value="positions">
-              <Briefcase className="w-4 h-4 mr-2" />
-              Position Management
+            <TabsTrigger value="positions" className="flex-1 sm:flex-none">
+              <Briefcase className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Position Management</span>
+              <span className="sm:hidden">Positions</span>
             </TabsTrigger>
-            <TabsTrigger value="departments">
-              <Building2 className="w-4 h-4 mr-2" />
-              Department Management
+            <TabsTrigger value="departments" className="flex-1 sm:flex-none">
+              <Building2 className="w-4 h-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Department Management</span>
+              <span className="sm:hidden">Depts</span>
             </TabsTrigger>
           </TabsList>
 
@@ -763,12 +767,12 @@ export default function StaffSalaryPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>ID</TableHead>
+                        <TableHead className="hidden sm:table-cell">ID</TableHead>
                         <TableHead>Name</TableHead>
-                        <TableHead>Position</TableHead>
-                        <TableHead>Department</TableHead>
+                        <TableHead className="hidden md:table-cell">Position</TableHead>
+                        <TableHead className="hidden lg:table-cell">Department</TableHead>
                         <TableHead>Salary</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead className="hidden sm:table-cell">Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -780,7 +784,7 @@ export default function StaffSalaryPage() {
                       ) : (
                         filteredStaff.map((emp) => (
                           <TableRow key={emp.id}>
-                            <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
+                            <TableCell className="font-mono text-xs hidden sm:table-cell">{emp.employeeId}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden border bg-muted flex items-center justify-center">
@@ -793,10 +797,10 @@ export default function StaffSalaryPage() {
                                 <span>{emp.name}</span>
                               </div>
                             </TableCell>
-                            <TableCell>{emp.position}</TableCell>
-                            <TableCell>{emp.department}</TableCell>
+                            <TableCell className="hidden md:table-cell">{emp.position}</TableCell>
+                            <TableCell className="hidden lg:table-cell">{emp.department}</TableCell>
                             <TableCell>{formatCurrency(emp.salary)}</TableCell>
-                            <TableCell>{emp.status}</TableCell>
+                            <TableCell className="hidden sm:table-cell">{emp.status}</TableCell>
                             <TableCell className="text-right">
                               <Button variant="ghost" size="icon" onClick={() => setViewEmployee(emp)} title="View profile">
                                 <Eye className="h-4 w-4" />

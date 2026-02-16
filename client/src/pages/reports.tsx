@@ -1217,15 +1217,16 @@ export default function Reports() {
                     No item sales found for the selected date range
                   </div>
                 ) : (
+                  <div className="w-full overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product Name</TableHead>
                         <TableHead className="text-right">Quantity Sold</TableHead>
                         <TableHead className="text-right">Total Revenue (USD)</TableHead>
-                        <TableHead className="text-right">Total Revenue (KHR)</TableHead>
-                        <TableHead className="text-right">Avg Price (USD)</TableHead>
-                        <TableHead className="text-right">% of Total</TableHead>
+                        <TableHead className="text-right hidden md:table-cell">Total Revenue (KHR)</TableHead>
+                        <TableHead className="text-right hidden lg:table-cell">Avg Price (USD)</TableHead>
+                        <TableHead className="text-right hidden sm:table-cell">% of Total</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1243,13 +1244,13 @@ export default function Reports() {
                               <TableCell className="text-right font-mono font-medium">
                                 ${item.revenue.toFixed(2)}
                               </TableCell>
-                              <TableCell className="text-right font-mono text-muted-foreground">
+                              <TableCell className="text-right font-mono text-muted-foreground hidden md:table-cell">
                                 ៛{(item.revenue * 4100).toFixed(0)}
                               </TableCell>
-                              <TableCell className="text-right font-mono">
+                              <TableCell className="text-right font-mono hidden lg:table-cell">
                                 ${avgPrice.toFixed(2)}
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right hidden sm:table-cell">
                                 <Badge variant="outline">{percentage.toFixed(1)}%</Badge>
                               </TableCell>
                             </TableRow>
@@ -1257,10 +1258,11 @@ export default function Reports() {
                         })}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </div>
             ) : reportType === "sales" ? (
-              <div className="space-y-4">
+              <div className="w-full overflow-x-auto space-y-4">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1268,9 +1270,9 @@ export default function Reports() {
                       <TableHead>Date & Time</TableHead>
                       <TableHead>Payment Method</TableHead>
                       <TableHead className="text-right">Amount (USD)</TableHead>
-                      <TableHead className="text-right">Amount (KHR)</TableHead>
-                      <TableHead>Payment Status</TableHead>
-                      <TableHead>Payer Info</TableHead>
+                      <TableHead className="text-right hidden md:table-cell">Amount (KHR)</TableHead>
+                      <TableHead className="hidden sm:table-cell">Payment Status</TableHead>
+                      <TableHead className="hidden lg:table-cell">Payer Info</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1306,16 +1308,16 @@ export default function Reports() {
                             <TableCell className="text-right font-mono font-medium">
                               ${usdAmount.toFixed(2)}
                             </TableCell>
-                            <TableCell className="text-right font-mono">
+                            <TableCell className="text-right font-mono hidden md:table-cell">
                               ៛{khrAmount.toFixed(0)}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               <Badge variant={getStatusBadgeVariant(sale.paymentStatus)} className="gap-1">
                                 <StatusIcon className="w-3 h-3" />
                                 {sale.paymentStatus}
                               </Badge>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden lg:table-cell">
                               <div className="space-y-0.5">
                                 <div className="font-medium">{sale.customerName || "Walk-in"}</div>
                                 {sale.customerPhone && (
@@ -1421,16 +1423,17 @@ export default function Reports() {
                 </Table>
               </div>
             ) : (
+              <div className="w-full overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date/Time</TableHead>
                     <TableHead>Order ID</TableHead>
-                    <TableHead>Customer</TableHead>
+                    <TableHead className="hidden md:table-cell">Customer</TableHead>
                     <TableHead>Total Amount</TableHead>
-                    <TableHead>Payment Method</TableHead>
-                    <TableHead>Payment Status</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="hidden sm:table-cell">Payment Method</TableHead>
+                    <TableHead className="hidden lg:table-cell">Payment Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1446,14 +1449,14 @@ export default function Reports() {
                       <TableRow key={sale.id} data-testid={`row-sale-${sale.id}`}>
                         <TableCell>{format(new Date(sale.createdAt), "MMM dd, yyyy HH:mm")}</TableCell>
                         <TableCell className="font-mono">#{sale.orderNumber}</TableCell>
-                        <TableCell>{sale.customerName || "Walk-in"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{sale.customerName || "Walk-in"}</TableCell>
                         <TableCell className="font-mono">${sale.total}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <Badge variant="outline" className="capitalize">
                             {sale.paymentMethod || "N/A"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           <Badge variant={
                             sale.paymentStatus === "paid" ? "default" : 
                             sale.paymentStatus === "pending" ? "secondary" : 
@@ -1462,7 +1465,7 @@ export default function Reports() {
                             {sale.paymentStatus || "N/A"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           <Badge variant={sale.status === "completed" ? "default" : "secondary"}>
                             {sale.status}
                           </Badge>
@@ -1507,6 +1510,7 @@ export default function Reports() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             )}
           </CardContent>
         </Card>

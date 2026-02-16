@@ -1108,8 +1108,8 @@ export default function ItemManage() {
                     onClick={handleBulkDelete}
                     data-testid="button-bulk-delete"
                   >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Selected ({selectedItems.length})
+                    <Trash2 className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Delete Selected</span> ({selectedItems.length})
                   </Button>
                 )}
               </div>
@@ -1119,8 +1119,8 @@ export default function ItemManage() {
             <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
-                  <FolderPlus className="w-4 h-4 mr-2" />
-                  Manage Categories
+                  <FolderPlus className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Manage Categories</span>
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-category">
@@ -1213,10 +1213,10 @@ export default function ItemManage() {
                 onClick={() => document.getElementById('import-file')?.click()}
                 data-testid="button-import"
               >
-                <Upload className="w-4 h-4 mr-2" />
-                Import Items
+                <Upload className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Import Items</span>
               </Button>
-              <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+              <label className="hidden sm:flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
                 <Checkbox
                   checked={createMissingCategoriesOnImport}
                   onCheckedChange={(v) => setCreateMissingCategoriesOnImport(!!v)}
@@ -1226,14 +1226,14 @@ export default function ItemManage() {
             </div>
 
             <Button variant="outline" onClick={handleDownloadSample} data-testid="button-download-sample">
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Download Sample Excel
+              <FileSpreadsheet className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Download Sample Excel</span>
             </Button>
 
             {hasPermission("reports.export") && (
               <Button variant="outline" onClick={handleExport} disabled={exporting} data-testid="button-export">
-                <Download className="w-4 h-4 mr-2" />
-                {exporting ? "Exporting…" : "Export Items"}
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export Items"}</span>
               </Button>
             )}
 
@@ -1241,8 +1241,8 @@ export default function ItemManage() {
               <DialogTrigger asChild>
                 {hasPermission("inventory.create") && (
                   <Button onClick={handleAddItemClick} data-testid="button-add-item">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Item
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add Item</span>
                   </Button>
                 )}
               </DialogTrigger>
@@ -1654,7 +1654,7 @@ export default function ItemManage() {
             <CardDescription>Find items by name, category, or date</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -1722,9 +1722,9 @@ export default function ItemManage() {
                 </PopoverContent>
               </Popover>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger data-testid="select-date-filter">
+                  <SelectTrigger data-testid="select-date-filter" className="min-w-[120px]">
                     <SelectValue placeholder="Date Filter" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1756,7 +1756,7 @@ export default function ItemManage() {
                 )}
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="min-w-[140px] justify-start">
+                    <Button variant="outline" className="min-w-[100px] sm:min-w-[140px] justify-start">
                       {selectedMonths.length === 0 ? "All months" : selectedMonths.length <= 2 ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ") : `${selectedMonths.length} months`}
                     </Button>
                   </PopoverTrigger>
@@ -1786,7 +1786,7 @@ export default function ItemManage() {
             <h2 className="text-xl font-semibold">Items ({filteredProducts.length})</h2>
           </div>
 
-          <div ref={scrollContainerRef} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+          <div ref={scrollContainerRef} className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3">
             {filteredProducts.map((product) => {
               const category = categories.find(c => c.id === product.categoryId);
               return (
@@ -1813,7 +1813,7 @@ export default function ItemManage() {
                       </div>
                     )}
                   </div>
-                  <CardContent className="p-3 space-y-2">
+                  <CardContent className="p-2 sm:p-3 space-y-2">
                     <div>
                       <h3 className="font-semibold truncate" data-testid={`text-item-name-${product.id}`}>{product.name}</h3>
                       {category && (
@@ -1872,8 +1872,8 @@ export default function ItemManage() {
                         }}
                         data-testid={`button-qr-${product.id}`}
                       >
-                        <QrCode className="w-3 h-3 mr-1" />
-                        QR
+                        <QrCode className="w-3 h-3 sm:mr-1" />
+                        <span className="hidden sm:inline">QR</span>
                       </Button>
                       {hasPermission("inventory.edit") && (
                         <Button
@@ -1883,8 +1883,8 @@ export default function ItemManage() {
                           onClick={() => handleEditItem(product)}
                           data-testid={`button-edit-item-${product.id}`}
                         >
-                          <Edit className="w-3 h-3 mr-1" />
-                          Edit
+                          <Edit className="w-3 h-3 sm:mr-1" />
+                          <span className="hidden sm:inline">Edit</span>
                         </Button>
                       )}
                       {hasPermission("inventory.delete") && (
@@ -1913,7 +1913,7 @@ export default function ItemManage() {
 
           {filteredProducts.length === 0 && !productsLoading && (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
+              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
                 <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No items found</h3>
                 <p className="text-muted-foreground text-center mb-4">

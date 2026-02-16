@@ -288,38 +288,41 @@ export default function SettingsPage() {
         </div>
 
         <Tabs value={settingsTab} onValueChange={setSettingsTab} className="space-y-4 md:space-y-6">
-          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 h-auto p-1">
-            <TabsTrigger value="metadata" className="flex items-center gap-2" data-testid="tab-metadata">
-              <Globe className="w-4 h-4" />
-              <span>Metadata</span>
+          <TabsList className="flex flex-wrap sm:grid sm:grid-cols-3 lg:grid-cols-8 gap-1 sm:gap-2 h-auto p-1">
+            <TabsTrigger value="metadata" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-metadata">
+              <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Metadata</span>
+              <span className="sm:hidden">Meta</span>
             </TabsTrigger>
-            <TabsTrigger value="currency" className="flex items-center gap-2" data-testid="tab-currency">
-              <DollarSign className="w-4 h-4" />
-              <span>$ Currency</span>
+            <TabsTrigger value="currency" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-currency">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Currency</span>
             </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-2" data-testid="tab-users">
-              <Users className="w-4 h-4" />
+            <TabsTrigger value="users" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-users">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Users</span>
             </TabsTrigger>
-            <TabsTrigger value="permissions" className="flex items-center gap-2" data-testid="tab-permissions">
-              <UserCog className="w-4 h-4" />
-              <span>Permissions</span>
+            <TabsTrigger value="permissions" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-permissions">
+              <UserCog className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Permissions</span>
+              <span className="sm:hidden">Perms</span>
             </TabsTrigger>
-            <TabsTrigger value="financial" className="flex items-center gap-2" data-testid="tab-financial">
-              <CreditCard className="w-4 h-4" />
+            <TabsTrigger value="financial" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-financial">
+              <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Financial</span>
             </TabsTrigger>
-            <TabsTrigger value="theme" className="flex items-center gap-2" data-testid="tab-theme">
-              <Palette className="w-4 h-4" />
+            <TabsTrigger value="theme" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-theme">
+              <Palette className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Theme</span>
             </TabsTrigger>
-            <TabsTrigger value="receipt" className="flex items-center gap-2" data-testid="tab-receipt">
-              <Receipt className="w-4 h-4" />
+            <TabsTrigger value="receipt" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-receipt">
+              <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Receipt</span>
             </TabsTrigger>
-            <TabsTrigger value="activity-logs" className="flex items-center gap-2" data-testid="tab-activity-logs">
-              <Bell className="w-4 h-4" />
-              <span>Activity Logs</span>
+            <TabsTrigger value="activity-logs" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-activity-logs">
+              <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Activity Logs</span>
+              <span className="sm:hidden">Logs</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1062,73 +1065,77 @@ export default function SettingsPage() {
             {/* User Management Section */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div>
                     <CardTitle>User Management</CardTitle>
                     <CardDescription>Manage users and assign roles</CardDescription>
                   </div>
                   {hasPermission("settings.users") && (
-                    <Button onClick={handleAddUser} data-testid="button-create-user">
+                    <Button onClick={handleAddUser} size="sm" className="sm:size-default" data-testid="button-create-user">
                       <Plus className="w-4 h-4 mr-2" />
                       Create User
                     </Button>
                   )}
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-2 sm:p-4 md:p-6">
                 {usersLoading ? (
                   <div className="text-center py-8 text-muted-foreground">Loading users...</div>
                 ) : users.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No users found. Create a user to get started.</div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Full Name</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user) => {
-                        const userRole = (roles && roles.find(r => r && r.id === user.roleId)) || { name: user.role };
-                        return (
-                          <TableRow key={user.id}>
-                            <TableCell>{user.email || user.username}</TableCell>
-                            <TableCell>{user.fullName}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{userRole.name}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {hasPermission("settings.users") && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleEditUser(user)}
-                                      data-testid={`button-edit-user-${user.id}`}
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteUser(user.id)}
-                                      data-testid={`button-delete-user-${user.id}`}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                  <div className="w-full overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Email</TableHead>
+                          <TableHead className="hidden sm:table-cell">Full Name</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map((user) => {
+                          const userRole = (roles && roles.find(r => r && r.id === user.roleId)) || { name: user.role };
+                          return (
+                            <TableRow key={user.id}>
+                              <TableCell>{user.email || user.username}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{user.fullName}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{userRole.name}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1 sm:gap-2">
+                                  {hasPermission("settings.users") && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 sm:h-8 sm:w-8"
+                                        onClick={() => handleEditUser(user)}
+                                        data-testid={`button-edit-user-${user.id}`}
+                                      >
+                                        <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 sm:h-8 sm:w-8"
+                                        onClick={() => handleDeleteUser(user.id)}
+                                        data-testid={`button-delete-user-${user.id}`}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1136,13 +1143,15 @@ export default function SettingsPage() {
             {/* Roles Management Section */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div>
                     <CardTitle>Roles Management</CardTitle>
                     <CardDescription>Create and manage user roles</CardDescription>
                   </div>
                   {hasPermission("settings.roles") && (
-                    <Button 
+                    <Button
+                      size="sm"
+                      className="sm:size-default"
                       onClick={() => {
                         setSelectedRole(null);
                         setNewRoleName("");
@@ -1157,7 +1166,7 @@ export default function SettingsPage() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-2 sm:p-4 md:p-6 space-y-4">
                 {/* Create/Edit Role Form */}
                 {roleDialogOpen && (
                   <Card>
@@ -1279,55 +1288,59 @@ export default function SettingsPage() {
                 ) : !roles || roles.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No roles found. Create a role to get started.</div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Role Name</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {roles.filter(role => role && role.id).map((role) => (
-                        <TableRow key={role.id}>
-                          <TableCell className="font-medium">{role.name}</TableCell>
-                          <TableCell>{role.description || "-"}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {hasPermission("settings.roles") && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedRole(role);
-                                      setNewRoleName(role.name);
-                                      setNewRoleDescription(role.description || "");
-                                      setRoleDialogOpen(true);
-                                    }}
-                                    data-testid={`button-edit-role-${role.id}`}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setRoleToDelete(role.id);
-                                      setDeleteRoleDialogOpen(true);
-                                    }}
-                                    data-testid={`button-delete-role-${role.id}`}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
+                  <div className="w-full overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Role Name</TableHead>
+                          <TableHead className="hidden sm:table-cell">Description</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {roles.filter(role => role && role.id).map((role) => (
+                          <TableRow key={role.id}>
+                            <TableCell className="font-medium">{role.name}</TableCell>
+                            <TableCell className="hidden sm:table-cell">{role.description || "-"}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 sm:gap-2">
+                                {hasPermission("settings.roles") && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 sm:h-8 sm:w-8"
+                                      onClick={() => {
+                                        setSelectedRole(role);
+                                        setNewRoleName(role.name);
+                                        setNewRoleDescription(role.description || "");
+                                        setRoleDialogOpen(true);
+                                      }}
+                                      data-testid={`button-edit-role-${role.id}`}
+                                    >
+                                      <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 sm:h-8 sm:w-8"
+                                      onClick={() => {
+                                        setRoleToDelete(role.id);
+                                        setDeleteRoleDialogOpen(true);
+                                      }}
+                                      data-testid={`button-delete-role-${role.id}`}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1551,7 +1564,7 @@ export default function SettingsPage() {
 
                   <div>
                     <h4 className="font-medium mb-3">Manual Backup & Recovery</h4>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Button variant="outline" className="flex-1" data-testid="button-backup-now">
                         <Database className="w-4 h-4 mr-2" />
                         Backup Now
@@ -1763,9 +1776,9 @@ export default function SettingsPage() {
                 <CardTitle>Activity Logs</CardTitle>
                 <CardDescription>View system activity and user actions</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-2 sm:p-4 md:p-6 space-y-4">
                 {/* Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
                   <div>
                     <Label>User</Label>
                     <Select value={activityLogsFilters.userId} onValueChange={(value) => setActivityLogsFilters(prev => ({ ...prev, userId: value }))}>
@@ -2015,7 +2028,7 @@ export default function SettingsPage() {
                         value={formData.primaryColor || ""}
                         onChange={(e) => updateField("primaryColor", e.target.value)}
                         placeholder="#ea580c"
-                        className="font-mono max-w-[140px]"
+                        className="font-mono w-full sm:max-w-[140px]"
                       />
                     </div>
                   </div>
@@ -2273,44 +2286,46 @@ function ActivityLogsList({ filters, observerTarget }: { filters: any; observerT
   return (
     <div className="space-y-4">
       <div className="border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Timestamp</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Entity Type</TableHead>
-              <TableHead>Entity</TableHead>
-              <TableHead>Description</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {allLogs.length === 0 ? (
+        <div className="w-full overflow-x-auto">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No activity logs found
-                </TableCell>
+                <TableHead>Timestamp</TableHead>
+                <TableHead className="hidden sm:table-cell">User</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead className="hidden md:table-cell">Entity Type</TableHead>
+                <TableHead className="hidden md:table-cell">Entity</TableHead>
+                <TableHead className="hidden lg:table-cell">Description</TableHead>
               </TableRow>
-            ) : (
-              allLogs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="text-sm">
-                    {log.createdAt ? format(new Date(log.createdAt), "PPpp") : "—"}
+            </TableHeader>
+            <TableBody>
+              {allLogs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    No activity logs found
                   </TableCell>
-                  <TableCell>{log.username || "System"}</TableCell>
-                  <TableCell>
-                    <Badge variant={getActionBadgeVariant(log.action || "")}>
-                      {log.action || "—"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{log.entityType || "—"}</TableCell>
-                  <TableCell>{log.entityName || log.entityId || "—"}</TableCell>
-                  <TableCell className="max-w-md truncate">{log.description || "—"}</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                allLogs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-xs sm:text-sm">
+                      {log.createdAt ? format(new Date(log.createdAt), "PPpp") : "—"}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">{log.username || "System"}</TableCell>
+                    <TableCell>
+                      <Badge variant={getActionBadgeVariant(log.action || "")}>
+                        {log.action || "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">{log.entityType || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell">{log.entityName || log.entityId || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell max-w-md truncate">{log.description || "—"}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
       
       {isFetchingNextPage && (

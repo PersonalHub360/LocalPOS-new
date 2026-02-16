@@ -708,17 +708,17 @@ export default function BankStatement() {
           </CardHeader>
           <CardContent className="pt-6">
             {transactionsForSelectedMethod.length > 0 ? (
-              <div className="rounded-md border">
+              <div className="w-full overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order #</TableHead>
                       <TableHead>Date & Time</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Dining</TableHead>
-                      <TableHead>Payment Method</TableHead>
+                      <TableHead className="hidden md:table-cell">Customer</TableHead>
+                      <TableHead className="hidden lg:table-cell">Dining</TableHead>
+                      <TableHead className="hidden sm:table-cell">Payment Method</TableHead>
                       <TableHead className="text-right">Amount Paid</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right hidden sm:table-cell">Total</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -751,19 +751,19 @@ export default function BankStatement() {
                           <TableCell>
                             {format(new Date(order.createdAt), "MMM dd, yyyy HH:mm")}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             {order.customerName || "Walk-in"}
                           </TableCell>
-                          <TableCell className="capitalize">
+                          <TableCell className="capitalize hidden lg:table-cell">
                             {order.diningOption}
                           </TableCell>
-                          <TableCell className="text-sm">
+                          <TableCell className="text-sm hidden sm:table-cell">
                             {paymentDisplay}
                           </TableCell>
                           <TableCell className="text-right font-mono font-bold text-green-600 dark:text-green-400">
                             ${amountPaid.toFixed(2)}
                           </TableCell>
-                          <TableCell className="text-right font-mono font-medium">
+                          <TableCell className="text-right font-mono font-medium hidden sm:table-cell">
                             ${parseFloat(order.total).toFixed(2)}
                           </TableCell>
                           <TableCell>
