@@ -1315,7 +1315,6 @@ export default function ItemManage() {
                               onDragOver={handleImageDragOver}
                               onDragLeave={handleImageDragLeave}
                               onDrop={handleImageDrop}
-                              onClick={() => document.getElementById('item-image-upload')?.click()}
                             >
                               <ImagePlus className="w-8 h-8 text-muted-foreground" />
                               <div className="text-center">
