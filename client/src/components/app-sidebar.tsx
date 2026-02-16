@@ -5,7 +5,6 @@ import {
   TrendingUp,
   Wallet,
   Package,
-  ShoppingBag,
   UserCog,
   BarChart3,
   Settings,
@@ -99,12 +98,6 @@ const operationsMenuItems: MenuItem[] = [
     url: "/items",
     icon: Package,
     permission: "inventory.view", // Items are part of inventory
-  },
-  {
-    title: "Purchases",
-    url: "/purchases",
-    icon: ShoppingBag,
-    permission: "purchases.view",
   },
   {
     title: "Inventory",
