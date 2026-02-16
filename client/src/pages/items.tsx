@@ -1084,43 +1084,18 @@ export default function ItemManage() {
   return (
     <div className="h-full overflow-auto">
       <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+        {/* Page Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="w-full sm:w-auto">
+          <div>
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
             <p className="text-sm md:text-base text-muted-foreground mt-1">Manage inventory and menu items</p>
-            {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
-              <div className="flex items-center gap-4 mt-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="select-all"
-                    checked={selectedItems.length === filteredProducts.length && filteredProducts.length > 0}
-                    onCheckedChange={handleSelectAll}
-                    data-testid="checkbox-select-all"
-                  />
-                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                    Select All ({selectedItems.length}/{filteredProducts.length})
-                  </label>
-                </div>
-                {selectedItems.length > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    data-testid="button-bulk-delete"
-                  >
-                    <Trash2 className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Delete Selected</span> ({selectedItems.length})
-                  </Button>
-                )}
-              </div>
-            )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2">
             <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
-                  <FolderPlus className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Manage Categories</span>
+                <Button variant="outline" size="sm" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
+                  <FolderPlus className="w-4 h-4 mr-1" />
+                  Categories
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-category">
@@ -1199,50 +1174,42 @@ export default function ItemManage() {
               </DialogContent>
             </Dialog>
 
-            <div className="flex items-center gap-3">
-              <input
-                id="import-file"
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                className="hidden"
-                onChange={handleImport}
-                data-testid="input-import-file"
-              />
-              <Button 
-                variant="outline" 
-                onClick={() => document.getElementById('import-file')?.click()}
-                data-testid="button-import"
-              >
-                <Upload className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Import Items</span>
-              </Button>
-              <label className="hidden sm:flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
-                <Checkbox
-                  checked={createMissingCategoriesOnImport}
-                  onCheckedChange={(v) => setCreateMissingCategoriesOnImport(!!v)}
-                />
-                Create missing categories
-              </label>
-            </div>
+            <input
+              id="import-file"
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={handleImport}
+              data-testid="input-import-file"
+            />
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('import-file')?.click()}
+              data-testid="button-import"
+            >
+              <Upload className="w-4 h-4 mr-1" />
+              Import
+            </Button>
 
-            <Button variant="outline" onClick={handleDownloadSample} data-testid="button-download-sample">
-              <FileSpreadsheet className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Download Sample Excel</span>
+            <Button variant="outline" size="sm" onClick={handleDownloadSample} data-testid="button-download-sample">
+              <FileSpreadsheet className="w-4 h-4 mr-1" />
+              Sample
             </Button>
 
             {hasPermission("reports.export") && (
-              <Button variant="outline" onClick={handleExport} disabled={exporting} data-testid="button-export">
-                <Download className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export Items"}</span>
+              <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting} data-testid="button-export">
+                <Download className="w-4 h-4 mr-1" />
+                {exporting ? "..." : "Export"}
               </Button>
             )}
 
             <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
               <DialogTrigger asChild>
                 {hasPermission("inventory.create") && (
-                  <Button onClick={handleAddItemClick} data-testid="button-add-item">
-                    <Plus className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Add Item</span>
+                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600" onClick={handleAddItemClick} data-testid="button-add-item">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Item
                   </Button>
                 )}
               </DialogTrigger>
@@ -1648,17 +1615,14 @@ export default function ItemManage() {
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Search & Filter</CardTitle>
-            <CardDescription>Find items by name, category, or date</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-              <div className="relative">
+        {/* Search & Filter Bar */}
+        <Card className="shadow-sm">
+          <CardContent className="py-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search items..."
+                  placeholder="Search items by name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -1671,7 +1635,7 @@ export default function ItemManage() {
                   <Button
                     variant="outline"
                     role="combobox"
-                    className="w-full justify-between font-normal"
+                    className="w-full sm:w-[180px] justify-between font-normal"
                     data-testid="select-filter-category"
                   >
                     {selectedCategoryIds.length === 0
@@ -1722,114 +1686,124 @@ export default function ItemManage() {
                 </PopoverContent>
               </Popover>
 
-              <div className="flex flex-wrap gap-2">
-                <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger data-testid="select-date-filter" className="min-w-[120px]">
-                    <SelectValue placeholder="Date Filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DATE_FILTER_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger data-testid="select-date-filter" className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="All Dates" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATE_FILTER_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-                {dateFilter === "custom" && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" data-testid="button-custom-date">
-                        <Calendar className="w-4 h-4 mr-2" />
-                        {customDate ? format(customDate, "MMM dd, yyyy") : "Pick date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={customDate}
-                        onSelect={setCustomDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                )}
+              {dateFilter === "custom" && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="min-w-[100px] sm:min-w-[140px] justify-start">
-                      {selectedMonths.length === 0 ? "All months" : selectedMonths.length <= 2 ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ") : `${selectedMonths.length} months`}
+                    <Button variant="outline" data-testid="button-custom-date" className="w-full sm:w-auto">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      {customDate ? format(customDate, "MMM dd, yyyy") : "Pick date"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[280px] p-0" align="start">
-                    <div className="max-h-[300px] overflow-y-auto p-2">
-                      {Array.from({ length: 24 }, (_, i) => {
-                        const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
-                        const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                        const checked = selectedMonths.includes(value);
-                        return (
-                          <div key={value} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer" onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}>
-                            <Checkbox checked={checked} onCheckedChange={() => {}} />
-                            <span className="text-sm">{format(d, "MMMM yyyy")}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={customDate}
+                      onSelect={setCustomDate}
+                      initialFocus
+                    />
                   </PopoverContent>
                 </Popover>
-              </div>
+              )}
             </div>
+
+            {/* Bulk Selection Bar */}
+            {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
+              <div className="flex items-center gap-3 mt-3 pt-3 border-t">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedItems.length === filteredProducts.length && filteredProducts.length > 0}
+                    onCheckedChange={handleSelectAll}
+                    data-testid="checkbox-select-all"
+                  />
+                  <label htmlFor="select-all" className="text-sm cursor-pointer text-muted-foreground">
+                    Select All ({selectedItems.length}/{filteredProducts.length})
+                  </label>
+                </div>
+                {selectedItems.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    data-testid="button-bulk-delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    Delete ({selectedItems.length})
+                  </Button>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        {/* Items Grid */}
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Items ({filteredProducts.length})</h2>
+            <h2 className="text-lg font-semibold text-muted-foreground">
+              {filteredProducts.length} {filteredProducts.length === 1 ? "Item" : "Items"}
+            </h2>
           </div>
 
-          <div ref={scrollContainerRef} className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3">
+          <div ref={scrollContainerRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {filteredProducts.map((product) => {
               const category = categories.find(c => c.id === product.categoryId);
+              const stockLevel = parseFloat(product.quantity);
+              const stockColor = stockLevel <= 0 ? "text-red-500" : stockLevel <= 10 ? "text-amber-500" : "text-emerald-500";
               return (
-                <Card key={product.id} className="overflow-hidden" data-testid={`card-item-${product.id}`}>
-                  <div className="aspect-square bg-muted relative overflow-hidden">
+                <Card key={product.id} className="overflow-hidden group hover:shadow-md transition-shadow" data-testid={`card-item-${product.id}`}>
+                  <div className="aspect-[4/3] bg-muted relative overflow-hidden">
                     {product.imageUrl ? (
                       <img
                         src={product.imageUrl}
                         alt={product.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-accent">
-                        <Utensils className="w-10 h-10 text-muted-foreground" />
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+                        <Utensils className="w-8 h-8 text-orange-300" />
                       </div>
                     )}
                     {hasPermission("inventory.delete") && (
-                      <div className="absolute top-2 right-2 bg-background rounded-md p-1 shadow-md">
+                      <div className="absolute top-1.5 left-1.5">
                         <Checkbox
                           checked={selectedItems.includes(product.id)}
                           onCheckedChange={(checked) => handleSelectItem(product.id, checked as boolean)}
+                          className="bg-white/90 border-gray-300"
                           data-testid={`checkbox-item-${product.id}`}
                         />
                       </div>
                     )}
+                    {category && (
+                      <Badge className="absolute top-1.5 right-1.5 text-[10px] bg-white/90 text-foreground hover:bg-white/90 border-0 shadow-sm" variant="secondary">
+                        {category.name}
+                      </Badge>
+                    )}
                   </div>
-                  <CardContent className="p-2 sm:p-3 space-y-2">
-                    <div>
-                      <h3 className="font-semibold truncate" data-testid={`text-item-name-${product.id}`}>{product.name}</h3>
-                      {category && (
-                        <p className="text-xs text-muted-foreground" data-testid={`text-item-category-${product.id}`}>{category.name}</p>
-                      )}
-                    </div>
+                  <CardContent className="p-2.5 space-y-1.5">
+                    <h3 className="font-semibold text-sm truncate" data-testid={`text-item-name-${product.id}`}>{product.name}</h3>
                     
-                    {/* For size-priced items show only size labels; otherwise show main price */}
                     {product.sizePrices && (() => {
                       const sp = product.sizePrices as Record<string, string> | null | undefined;
                       if (sp && Object.keys(sp).length > 0) {
+                        const entries: [string, string][] = Object.keys(sp).map(k => [k, sp[k]]);
                         return (
                           <div className="flex flex-wrap gap-1">
-                            {Object.keys(sp).map((size) => (
-                              <Badge key={size} variant="secondary" className="text-xs">
-                                {size}
+                            {entries.map(([size, price]) => (
+                              <Badge key={size} variant="outline" className="text-[10px] font-mono">
+                                {size}: ${parseFloat(price).toFixed(2)}
                               </Badge>
                             ))}
                           </div>
@@ -1839,58 +1813,57 @@ export default function ItemManage() {
                     })()}
                     {(!product.sizePrices || Object.keys((product.sizePrices as Record<string, string>) || {}).length === 0) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-lg font-bold text-primary font-mono" data-testid={`text-item-price-${product.id}`}>
+                        <span className="text-base font-bold text-orange-600 font-mono" data-testid={`text-item-price-${product.id}`}>
                           ${parseFloat(product.price).toFixed(2)}
                         </span>
-                        <span className="text-sm text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
-                          per {product.unit}
+                        <span className="text-[11px] text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
+                          /{product.unit}
                         </span>
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Stock:</span>
-                      <span className="font-medium" data-testid={`text-item-quantity-${product.id}`}>
-                        {parseFloat(product.quantity)} {product.unit}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Stock</span>
+                      <span className={cn("font-semibold", stockColor)} data-testid={`text-item-quantity-${product.id}`}>
+                        {stockLevel} {product.unit}
                       </span>
                     </div>
 
                     {product.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2" data-testid={`text-item-description-${product.id}`}>
+                      <p className="text-[11px] text-muted-foreground line-clamp-1" data-testid={`text-item-description-${product.id}`}>
                         {product.description}
                       </p>
                     )}
 
-                    <div className="flex gap-1 pt-2">
+                    <div className="flex gap-1 pt-1 border-t">
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="flex-1 text-xs"
+                        variant="ghost"
+                        className="flex-1 h-7 text-xs text-muted-foreground hover:text-orange-600"
                         onClick={() => {
                           setSelectedProductForQR(product);
                           setQrCodeDialogOpen(true);
                         }}
                         data-testid={`button-qr-${product.id}`}
                       >
-                        <QrCode className="w-3 h-3 sm:mr-1" />
-                        <span className="hidden sm:inline">QR</span>
+                        <QrCode className="w-3 h-3" />
                       </Button>
                       {hasPermission("inventory.edit") && (
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="flex-1 text-xs"
+                          variant="ghost"
+                          className="flex-1 h-7 text-xs text-muted-foreground hover:text-blue-600"
                           onClick={() => handleEditItem(product)}
                           data-testid={`button-edit-item-${product.id}`}
                         >
-                          <Edit className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Edit</span>
+                          <Edit className="w-3 h-3" />
                         </Button>
                       )}
                       {hasPermission("inventory.delete") && (
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
+                          className="flex-1 h-7 text-xs text-muted-foreground hover:text-red-600"
                           onClick={() => deleteItemMutation.mutate(product.id)}
                           disabled={deleteItemMutation.isPending}
                           data-testid={`button-delete-item-${product.id}`}
@@ -1906,23 +1879,25 @@ export default function ItemManage() {
           </div>
 
           {isFetchingNextPage && (
-            <div className="text-center py-4 text-muted-foreground">Loading more items...</div>
+            <div className="text-center py-4 text-muted-foreground text-sm">Loading more items...</div>
           )}
 
           <div ref={observerTarget} className="h-4" />
 
           {filteredProducts.length === 0 && !productsLoading && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
-                <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No items found</h3>
-                <p className="text-muted-foreground text-center mb-4">
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mb-4">
+                  <PackagePlus className="w-8 h-8 text-orange-400" />
+                </div>
+                <h3 className="text-lg font-semibold mb-1">No items found</h3>
+                <p className="text-muted-foreground text-center text-sm mb-4">
                   {searchQuery || selectedCategoryIds.length > 0 || dateFilter !== "all"
                     ? "Try adjusting your search filters"
                     : "Get started by adding your first item"}
                 </p>
                 {!searchQuery && selectedCategoryIds.length === 0 && dateFilter === "all" && (
-                  <Button onClick={handleAddItemClick} data-testid="button-add-first-item">
+                  <Button className="bg-orange-500 hover:bg-orange-600" onClick={handleAddItemClick} data-testid="button-add-first-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Your First Item
                   </Button>
