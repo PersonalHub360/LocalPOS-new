@@ -74,7 +74,6 @@ function BarcodeDisplay({ barcode, productName, price, settings }: { barcode: st
 }
 
 const DATE_FILTER_OPTIONS = [
-  { label: "All Time", value: "all" },
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
   { label: "This Month", value: "thisMonth" },
@@ -103,7 +102,7 @@ export default function ItemManage() {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   /** Multiple category filter: empty = all categories; otherwise show items in any of the selected categories. */
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("today");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
@@ -1922,11 +1921,11 @@ export default function ItemManage() {
                 <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No items found</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  {searchQuery || selectedCategoryIds.length > 0 || dateFilter !== "all"
+                  {searchQuery || selectedCategoryIds.length > 0
                     ? "Try adjusting your search filters"
                     : "Get started by adding your first item"}
                 </p>
-                {!searchQuery && selectedCategoryIds.length === 0 && dateFilter === "all" && (
+                {!searchQuery && selectedCategoryIds.length === 0 && (
                   <Button onClick={handleAddItemClick} data-testid="button-add-first-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Your First Item
