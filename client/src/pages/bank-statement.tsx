@@ -49,10 +49,12 @@ import {
   Download,
   Banknote,
   Plus,
-  ArrowLeft,
   Eye,
   Pencil,
   Trash2,
+  ChevronDown,
+  ChevronUp,
+  X,
 } from "lucide-react";
 import {
   Table,
@@ -353,10 +355,6 @@ export default function BankStatement() {
     });
   };
 
-  const transactionsForSelectedMethod = selectedPaymentMethod 
-    ? getTransactionsByPaymentMethod(selectedPaymentMethod)
-    : [];
-
   return (
     <div className="h-full overflow-y-auto">
       <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
@@ -638,40 +636,212 @@ export default function BankStatement() {
               };
               const colorScheme = colorMap[method.color];
               const totalWithAdjustments = data.total + data.adjustments;
+              const isExpanded = selectedPaymentMethod === method.key;
+              const methodTransactions = isExpanded ? getTransactionsByPaymentMethod(method.key) : [];
               return (
-                <Card 
-                  key={method.key} 
-                  className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer ${selectedPaymentMethod === method.key ? 'ring-2 ring-primary' : ''}`} 
-                  data-testid={`card-${method.key}`}
-                  onClick={() => setSelectedPaymentMethod(method.key)}
-                >
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="capitalize font-semibold">
-                        {method.name}
-                      </Badge>
-                      <div className={`p-2 rounded-lg ${colorScheme.iconBg}`}>
-                        <Icon className={`w-4 h-4 ${colorScheme.icon}`} />
+                <div key={method.key} className={isExpanded ? "col-span-1 md:col-span-2 lg:col-span-3 xl:col-span-4" : ""}>
+                  <Card 
+                    className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer ${isExpanded ? 'ring-2 ring-primary' : 'hover:scale-105'}`} 
+                    data-testid={`card-${method.key}`}
+                    onClick={() => setSelectedPaymentMethod(isExpanded ? null : method.key)}
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="outline" className="capitalize font-semibold">
+                          {method.name}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <div className={`p-2 rounded-lg ${colorScheme.iconBg}`}>
+                            <Icon className={`w-4 h-4 ${colorScheme.icon}`} />
+                          </div>
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className={`text-2xl font-bold ${colorScheme.icon}`} data-testid={`text-${method.key}-total`}>
+                          ${totalWithAdjustments.toFixed(2)}
+                        </div>
+                        <div className="text-sm text-muted-foreground font-medium">
+                          ៛{(totalWithAdjustments * 4100).toFixed(0)}
+                        </div>
+                        {data.adjustments > 0 && (
+                          <div className="text-xs text-green-600 dark:text-green-400 font-medium mt-1">
+                            +${data.adjustments.toFixed(2)} manual adjustment
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-muted-foreground font-medium">
+                          {data.count} {data.count === 1 ? "transaction" : "transactions"}
+                        </div>
+                        <div className={`text-xs font-medium ${colorScheme.icon}`}>
+                          {isExpanded ? "Click to collapse" : "Click to view"}
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className={`text-2xl font-bold ${colorScheme.icon}`} data-testid={`text-${method.key}-total`}>
-                        ${totalWithAdjustments.toFixed(2)}
+                  </Card>
+
+                  {isExpanded && (
+                    <div className="mt-3 rounded-lg border bg-background shadow-md overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b">
+                        <div>
+                          <h3 className="font-semibold text-sm">
+                            {method.name} Transactions
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {methodTransactions.length} {methodTransactions.length === 1 ? "transaction" : "transactions"} found
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedPaymentMethod(null);
+                          }}
+                          data-testid="button-close-transactions"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <div className="text-sm text-muted-foreground font-medium">
-                        ៛{(totalWithAdjustments * 4100).toFixed(0)}
-                      </div>
-                      {data.adjustments > 0 && (
-                        <div className="text-xs text-green-600 dark:text-green-400 font-medium mt-1">
-                          +${data.adjustments.toFixed(2)} manual adjustment
+                      {methodTransactions.length > 0 ? (
+                        <div className="w-full overflow-x-auto max-h-[400px] overflow-y-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Order #</TableHead>
+                                <TableHead>Date & Time</TableHead>
+                                <TableHead className="hidden md:table-cell">Customer</TableHead>
+                                <TableHead className="hidden lg:table-cell">Dining</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead className="text-right hidden sm:table-cell">Total</TableHead>
+                                <TableHead>Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {methodTransactions.map((order) => {
+                                let amountPaid = parseFloat(order.total);
+
+                                if (order.paymentSplits) {
+                                  try {
+                                    const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+                                    const matchingSplit = splits.find(
+                                      split => normalizePaymentMethod(split.method) === method.key
+                                    );
+                                    if (matchingSplit) {
+                                      amountPaid = matchingSplit.amount;
+                                    }
+                                  } catch (error) {
+                                    console.error("Failed to parse payment splits:", error);
+                                  }
+                                }
+
+                                return (
+                                  <TableRow key={order.id} data-testid={`row-transaction-${order.id}`} onClick={(e) => e.stopPropagation()}>
+                                    <TableCell className="font-mono font-medium text-sm">
+                                      #{order.orderNumber}
+                                    </TableCell>
+                                    <TableCell className="text-sm">
+                                      {format(new Date(order.createdAt), "MMM dd, HH:mm")}
+                                    </TableCell>
+                                    <TableCell className="hidden md:table-cell text-sm">
+                                      {order.customerName || "Walk-in"}
+                                    </TableCell>
+                                    <TableCell className="capitalize hidden lg:table-cell text-sm">
+                                      {order.diningOption}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono font-bold text-green-600 dark:text-green-400 text-sm">
+                                      ${amountPaid.toFixed(2)}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono font-medium hidden sm:table-cell text-sm">
+                                      ${parseFloat(order.total).toFixed(2)}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-7 w-7"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.location.href = `/sales?orderId=${order.id}`;
+                                          }}
+                                          data-testid={`button-view-${order.id}`}
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                        </Button>
+                                        {hasPermission("sales.edit") && (
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              window.location.href = `/sales?orderId=${order.id}&edit=true`;
+                                            }}
+                                            data-testid={`button-edit-${order.id}`}
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </Button>
+                                        )}
+                                        {hasPermission("sales.delete") && (
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              if (confirm(`Are you sure you want to delete order #${order.orderNumber}? This action cannot be undone.`)) {
+                                                try {
+                                                  const response = await fetch(`/api/orders/${order.id}`, {
+                                                    method: "DELETE",
+                                                    credentials: "include",
+                                                  });
+                                                  if (response.ok) {
+                                                    queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+                                                    queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                                                    queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
+                                                    toast({
+                                                      title: "Success",
+                                                      description: `Order #${order.orderNumber} deleted successfully`,
+                                                    });
+                                                  } else {
+                                                    throw new Error("Failed to delete order");
+                                                  }
+                                                } catch (error) {
+                                                  toast({
+                                                    title: "Error",
+                                                    description: "Failed to delete order",
+                                                    variant: "destructive",
+                                                  });
+                                                }
+                                              }
+                                            }}
+                                            data-testid={`button-delete-${order.id}`}
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center text-muted-foreground py-6 text-sm">
+                          No transactions found for {method.name}
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground font-medium">
-                      {data.count} {data.count === 1 ? "transaction" : "transactions"}
-                    </div>
-                  </div>
-                </Card>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -682,168 +852,6 @@ export default function BankStatement() {
           )}
         </CardContent>
       </Card>
-
-      {/* Transaction History for Selected Payment Method */}
-      {selectedPaymentMethod && (
-        <Card className="border-2 shadow-xl">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-2xl">
-                  Transaction History - {paymentMethodsData.find(m => m.key === selectedPaymentMethod)?.name}
-                </CardTitle>
-                <CardDescription>
-                  All transactions using this payment method
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setSelectedPaymentMethod(null)}
-                data-testid="button-clear-payment-filter"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Dashboard
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {transactionsForSelectedMethod.length > 0 ? (
-              <div className="w-full overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Order #</TableHead>
-                      <TableHead>Date & Time</TableHead>
-                      <TableHead className="hidden md:table-cell">Customer</TableHead>
-                      <TableHead className="hidden lg:table-cell">Dining</TableHead>
-                      <TableHead className="hidden sm:table-cell">Payment Method</TableHead>
-                      <TableHead className="text-right">Amount Paid</TableHead>
-                      <TableHead className="text-right hidden sm:table-cell">Total</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactionsForSelectedMethod.map((order) => {
-                      // Calculate amount paid with this payment method
-                      let amountPaid = parseFloat(order.total);
-                      let paymentDisplay = order.paymentMethod || "Unknown";
-
-                      if (order.paymentSplits) {
-                        try {
-                          const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
-                          const matchingSplit = splits.find(
-                            split => normalizePaymentMethod(split.method) === selectedPaymentMethod
-                          );
-                          if (matchingSplit) {
-                            amountPaid = matchingSplit.amount;
-                            paymentDisplay = splits.map(s => `${s.method}: $${s.amount.toFixed(2)}`).join(', ');
-                          }
-                        } catch (error) {
-                          console.error("Failed to parse payment splits:", error);
-                        }
-                      }
-
-                      return (
-                        <TableRow key={order.id} data-testid={`row-transaction-${order.id}`}>
-                          <TableCell className="font-mono font-medium">
-                            #{order.orderNumber}
-                          </TableCell>
-                          <TableCell>
-                            {format(new Date(order.createdAt), "MMM dd, yyyy HH:mm")}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            {order.customerName || "Walk-in"}
-                          </TableCell>
-                          <TableCell className="capitalize hidden lg:table-cell">
-                            {order.diningOption}
-                          </TableCell>
-                          <TableCell className="text-sm hidden sm:table-cell">
-                            {paymentDisplay}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-bold text-green-600 dark:text-green-400">
-                            ${amountPaid.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-medium hidden sm:table-cell">
-                            ${parseFloat(order.total).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => {
-                                  // Navigate to sales page to view this order
-                                  window.location.href = `/sales?orderId=${order.id}`;
-                                }}
-                                data-testid={`button-view-${order.id}`}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              {hasPermission("sales.edit") && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    // Navigate to sales page to edit this order
-                                    window.location.href = `/sales?orderId=${order.id}&edit=true`;
-                                  }}
-                                  data-testid={`button-edit-${order.id}`}
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {hasPermission("sales.delete") && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={async () => {
-                                    if (confirm(`Are you sure you want to delete order #${order.orderNumber}? This action cannot be undone.`)) {
-                                      try {
-                                        const response = await fetch(`/api/orders/${order.id}`, {
-                                          method: "DELETE",
-                                          credentials: "include",
-                                        });
-                                        if (response.ok) {
-                                          queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
-                                          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-                                          queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
-                                          toast({
-                                            title: "Success",
-                                            description: `Order #${order.orderNumber} deleted successfully`,
-                                          });
-                                        } else {
-                                          throw new Error("Failed to delete order");
-                                        }
-                                      } catch (error) {
-                                        toast({
-                                          title: "Error",
-                                          description: "Failed to delete order",
-                                          variant: "destructive",
-                                        });
-                                      }
-                                    }
-                                  }}
-                                  data-testid={`button-delete-${order.id}`}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="text-center text-muted-foreground py-8 font-medium">
-                No transactions found for this payment method
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
       </div>
     </div>
   );
