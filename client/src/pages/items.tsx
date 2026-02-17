@@ -74,6 +74,7 @@ function BarcodeDisplay({ barcode, productName, price, settings }: { barcode: st
 }
 
 const DATE_FILTER_OPTIONS = [
+  { label: "All Time", value: "all" },
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },
   { label: "This Month", value: "thisMonth" },
@@ -100,9 +101,10 @@ export default function ItemManage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  /** Multiple category filter: empty = all categories; otherwise show items in any of the selected categories. */
+  /** Multiple category filter: empty = all categories; otherwise show items in any of the selected categories. Use NONE_CATEGORY_ID for items without a category. */
+  const NONE_CATEGORY_ID = "__none__";
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState<string>("today");
+  const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
@@ -236,7 +238,10 @@ export default function ItemManage() {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesCategory = selectedCategoryIds.length === 0 || selectedCategoryIds.includes(product.categoryId);
+    const hasNoCategory = !product.categoryId || product.categoryId === "";
+    const matchesCategory = selectedCategoryIds.length === 0
+      || selectedCategoryIds.includes(product.categoryId)
+      || (selectedCategoryIds.includes(NONE_CATEGORY_ID) && hasNoCategory);
     
     let matchesDate = true;
     const productDate = new Date(product.createdAt);
@@ -1083,13 +1088,12 @@ export default function ItemManage() {
   return (
     <div className="h-full overflow-auto">
       <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="w-full sm:w-auto">
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
-            <p className="text-sm text-muted-foreground mt-1">Manage inventory and menu items</p>
+            <p className="text-sm md:text-base text-muted-foreground mt-1">Manage inventory and menu items</p>
             {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
-              <div className="flex items-center gap-4 mt-2">
+              <div className="flex items-center gap-4 mt-3">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="select-all"
@@ -1108,14 +1112,14 @@ export default function ItemManage() {
                     onClick={handleBulkDelete}
                     data-testid="button-bulk-delete"
                   >
-                    <Trash2 className="w-4 h-4 mr-1" />
+                    <Trash2 className="w-4 h-4 mr-2" />
                     Delete Selected ({selectedItems.length})
                   </Button>
                 )}
               </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" onClick={handleAddCategoryClick} data-testid="button-manage-categories">
@@ -1199,30 +1203,31 @@ export default function ItemManage() {
               </DialogContent>
             </Dialog>
 
-            <input
-              id="import-file"
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-              onChange={handleImport}
-              data-testid="input-import-file"
-            />
-            <Button 
-              variant="outline"
-              onClick={() => document.getElementById('import-file')?.click()}
-              data-testid="button-import"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Import Items
-            </Button>
-
-            <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
-              <Checkbox
-                checked={createMissingCategoriesOnImport}
-                onCheckedChange={(v) => setCreateMissingCategoriesOnImport(!!v)}
+            <div className="flex items-center gap-3">
+              <input
+                id="import-file"
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                className="hidden"
+                onChange={handleImport}
+                data-testid="input-import-file"
               />
-              Create missing categories
-            </label>
+              <Button 
+                variant="outline" 
+                onClick={() => document.getElementById('import-file')?.click()}
+                data-testid="button-import"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import Items
+              </Button>
+              <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+                <Checkbox
+                  checked={createMissingCategoriesOnImport}
+                  onCheckedChange={(v) => setCreateMissingCategoriesOnImport(!!v)}
+                />
+                Create missing categories
+              </label>
+            </div>
 
             <Button variant="outline" onClick={handleDownloadSample} data-testid="button-download-sample">
               <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -1232,14 +1237,14 @@ export default function ItemManage() {
             {hasPermission("reports.export") && (
               <Button variant="outline" onClick={handleExport} disabled={exporting} data-testid="button-export">
                 <Download className="w-4 h-4 mr-2" />
-                {exporting ? "Exporting..." : "Export Items"}
+                {exporting ? "Exporting…" : "Export Items"}
               </Button>
             )}
 
             <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
               <DialogTrigger asChild>
                 {hasPermission("inventory.create") && (
-                  <Button className="bg-teal-600 hover:bg-teal-700" onClick={handleAddItemClick} data-testid="button-add-item">
+                  <Button onClick={handleAddItemClick} data-testid="button-add-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Item
                   </Button>
@@ -1315,6 +1320,7 @@ export default function ItemManage() {
                               onDragOver={handleImageDragOver}
                               onDragLeave={handleImageDragLeave}
                               onDrop={handleImageDrop}
+                              onClick={() => document.getElementById('item-image-upload')?.click()}
                             >
                               <ImagePlus className="w-8 h-8 text-muted-foreground" />
                               <div className="text-center">
@@ -1646,14 +1652,13 @@ export default function ItemManage() {
           </div>
         </div>
 
-        {/* Search & Filter */}
         <Card>
           <CardHeader>
             <CardTitle>Search & Filter</CardTitle>
             <CardDescription>Find items by name, category, or date</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -1676,7 +1681,9 @@ export default function ItemManage() {
                     {selectedCategoryIds.length === 0
                       ? "All Categories"
                       : selectedCategoryIds.length === 1
-                        ? categories.find((c) => c.id === selectedCategoryIds[0])?.name ?? "1 category"
+                        ? selectedCategoryIds[0] === NONE_CATEGORY_ID
+                          ? "No category"
+                          : categories.find((c) => c.id === selectedCategoryIds[0])?.name ?? "1 category"
                         : `${selectedCategoryIds.length} categories`}
                   </Button>
                 </PopoverTrigger>
@@ -1691,6 +1698,26 @@ export default function ItemManage() {
                         onCheckedChange={(checked) => checked && setSelectedCategoryIds([])}
                       />
                       <span className="text-sm font-medium">All Categories</span>
+                    </div>
+                    <div
+                      className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => {
+                        setSelectedCategoryIds((prev) =>
+                          prev.includes(NONE_CATEGORY_ID)
+                            ? prev.filter((id) => id !== NONE_CATEGORY_ID)
+                            : [...prev, NONE_CATEGORY_ID]
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        checked={selectedCategoryIds.includes(NONE_CATEGORY_ID)}
+                        onCheckedChange={(checked) => {
+                          setSelectedCategoryIds((prev) =>
+                            checked ? [...prev, NONE_CATEGORY_ID] : prev.filter((id) => id !== NONE_CATEGORY_ID)
+                          );
+                        }}
+                      />
+                      <span className="text-sm">No category</span>
                     </div>
                     {categories.map((category) => (
                       <div
@@ -1721,10 +1748,10 @@ export default function ItemManage() {
                 </PopoverContent>
               </Popover>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
                 <Select value={dateFilter} onValueChange={setDateFilter}>
                   <SelectTrigger data-testid="select-date-filter">
-                    <SelectValue placeholder="All Time" />
+                    <SelectValue placeholder="Date Filter" />
                   </SelectTrigger>
                   <SelectContent>
                     {DATE_FILTER_OPTIONS.map((option) => (
@@ -1734,39 +1761,58 @@ export default function ItemManage() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
 
-            {dateFilter === "custom" && (
-              <div className="mt-3">
+                {dateFilter === "custom" && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" data-testid="button-custom-date">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        {customDate ? format(customDate, "MMM dd, yyyy") : "Pick date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={customDate}
+                        onSelect={setCustomDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" data-testid="button-custom-date">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      {customDate ? format(customDate, "MMM dd, yyyy") : "Pick date"}
+                    <Button variant="outline" className="min-w-[140px] justify-start">
+                      {selectedMonths.length === 0 ? "All months" : selectedMonths.length <= 2 ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ") : `${selectedMonths.length} months`}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <CalendarComponent
-                      mode="single"
-                      selected={customDate}
-                      onSelect={setCustomDate}
-                      initialFocus
-                    />
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      {Array.from({ length: 24 }, (_, i) => {
+                        const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
+                        const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                        const checked = selectedMonths.includes(value);
+                        return (
+                          <div key={value} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer" onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}>
+                            <Checkbox checked={checked} onCheckedChange={() => {}} />
+                            <span className="text-sm">{format(d, "MMMM yyyy")}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </PopoverContent>
                 </Popover>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Items Grid */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Items ({filteredProducts.length})</h2>
           </div>
 
-          <div ref={scrollContainerRef} className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+          <div ref={scrollContainerRef} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
             {filteredProducts.map((product) => {
               const category = categories.find(c => c.id === product.categoryId);
               return (
@@ -1801,15 +1847,15 @@ export default function ItemManage() {
                       )}
                     </div>
                     
+                    {/* For size-priced items show only size labels; otherwise show main price */}
                     {product.sizePrices && (() => {
                       const sp = product.sizePrices as Record<string, string> | null | undefined;
                       if (sp && Object.keys(sp).length > 0) {
-                        const entries: [string, string][] = Object.keys(sp).map(k => [k, sp[k]]);
                         return (
                           <div className="flex flex-wrap gap-1">
-                            {entries.map(([size, price]) => (
+                            {Object.keys(sp).map((size) => (
                               <Badge key={size} variant="secondary" className="text-xs">
-                                {size}: ${parseFloat(price).toFixed(2)}
+                                {size}
                               </Badge>
                             ))}
                           </div>
@@ -1819,7 +1865,7 @@ export default function ItemManage() {
                     })()}
                     {(!product.sizePrices || Object.keys((product.sizePrices as Record<string, string>) || {}).length === 0) && (
                       <div className="flex items-center justify-between">
-                        <span className="text-lg font-bold text-teal-600 font-mono" data-testid={`text-item-price-${product.id}`}>
+                        <span className="text-lg font-bold text-primary font-mono" data-testid={`text-item-price-${product.id}`}>
                           ${parseFloat(product.price).toFixed(2)}
                         </span>
                         <span className="text-sm text-muted-foreground" data-testid={`text-item-unit-${product.id}`}>
@@ -1886,22 +1932,22 @@ export default function ItemManage() {
           </div>
 
           {isFetchingNextPage && (
-            <div className="text-center py-4 text-muted-foreground text-sm">Loading more items...</div>
+            <div className="text-center py-4 text-muted-foreground">Loading more items...</div>
           )}
 
           <div ref={observerTarget} className="h-4" />
 
           {filteredProducts.length === 0 && !productsLoading && (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
+              <CardContent className="flex flex-col items-center justify-center py-12">
                 <PackagePlus className="w-12 h-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No items found</h3>
                 <p className="text-muted-foreground text-center mb-4">
-                  {searchQuery || selectedCategoryIds.length > 0
+                  {searchQuery || selectedCategoryIds.length > 0 || dateFilter !== "all"
                     ? "Try adjusting your search filters"
                     : "Get started by adding your first item"}
                 </p>
-                {!searchQuery && selectedCategoryIds.length === 0 && (
+                {!searchQuery && selectedCategoryIds.length === 0 && dateFilter === "all" && (
                   <Button onClick={handleAddItemClick} data-testid="button-add-first-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Your First Item

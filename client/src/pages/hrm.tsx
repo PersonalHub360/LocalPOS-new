@@ -640,15 +640,14 @@ export default function HRM() {
                 ) : filteredEmployees.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No employees found</div>
                 ) : (
-                  <div className="w-full overflow-x-auto">
                   <Table data-testid="table-employees">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Employee ID</TableHead>
                         <TableHead>Name</TableHead>
-                        <TableHead className="hidden md:table-cell">Position</TableHead>
-                        <TableHead className="hidden lg:table-cell">Department</TableHead>
-                        <TableHead className="hidden lg:table-cell">Contact</TableHead>
+                        <TableHead>Position</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>Contact</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -656,11 +655,11 @@ export default function HRM() {
                     <TableBody>
                       {filteredEmployees.map((employee) => (
                         <TableRow key={employee.id} data-testid={`row-employee-${employee.id}`}>
-                          <TableCell className="font-medium hidden sm:table-cell">{employee.employeeId}</TableCell>
+                          <TableCell className="font-medium">{employee.employeeId}</TableCell>
                           <TableCell>{employee.name}</TableCell>
-                          <TableCell className="hidden md:table-cell">{employee.position}</TableCell>
-                          <TableCell className="hidden lg:table-cell">{employee.department}</TableCell>
-                          <TableCell className="hidden lg:table-cell">
+                          <TableCell>{employee.position}</TableCell>
+                          <TableCell>{employee.department}</TableCell>
+                          <TableCell>
                             <div className="text-sm">
                               {employee.email && <div>{employee.email}</div>}
                               {employee.phone && <div className="text-muted-foreground">{employee.phone}</div>}
@@ -753,14 +752,13 @@ export default function HRM() {
                   <div className="space-y-4">
                     <div className="bg-muted/50 p-4 rounded-lg">
                       <h3 className="font-semibold mb-3">Today's Schedule - {format(new Date(), "MMMM dd, yyyy")}</h3>
-                      <div className="w-full overflow-x-auto">
                       <Table data-testid="table-staff-schedule">
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="hidden sm:table-cell">Employee ID</TableHead>
+                            <TableHead>Employee ID</TableHead>
                             <TableHead>Name</TableHead>
-                            <TableHead className="hidden md:table-cell">Position</TableHead>
-                            <TableHead className="hidden md:table-cell">Department</TableHead>
+                            <TableHead>Position</TableHead>
+                            <TableHead>Department</TableHead>
                             <TableHead>Shift Time</TableHead>
                             <TableHead>Status</TableHead>
                           </TableRow>
@@ -768,10 +766,10 @@ export default function HRM() {
                         <TableBody>
                           {employees.filter(emp => emp.status === "active").map((employee) => (
                             <TableRow key={employee.id} data-testid={`row-schedule-${employee.id}`}>
-                              <TableCell className="font-medium hidden sm:table-cell">{employee.employeeId}</TableCell>
+                              <TableCell className="font-medium">{employee.employeeId}</TableCell>
                               <TableCell>{employee.name}</TableCell>
-                              <TableCell className="hidden md:table-cell">{employee.position}</TableCell>
-                              <TableCell className="hidden md:table-cell">{employee.department}</TableCell>
+                              <TableCell>{employee.position}</TableCell>
+                              <TableCell>{employee.department}</TableCell>
                               <TableCell>
                                 <div className="text-sm">
                                   {employee.department === "Kitchen" ? "08:00 AM - 04:00 PM" : 
@@ -789,7 +787,6 @@ export default function HRM() {
                           ))}
                         </TableBody>
                       </Table>
-                      </div>
                     </div>
                     
                     <div className="bg-muted/30 p-4 rounded-lg space-y-3">

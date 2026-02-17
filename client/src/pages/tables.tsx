@@ -578,7 +578,7 @@ export default function Tables() {
                     <TableRow>
                       <TableHead>Table Number</TableHead>
                       <TableHead>Capacity</TableHead>
-                      <TableHead className="hidden md:table-cell">Description</TableHead>
+                      <TableHead>Description</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-center w-[200px]">Actions</TableHead>
                     </TableRow>
@@ -600,7 +600,7 @@ export default function Tables() {
                           <TableCell data-testid={`text-capacity-${table.id}`}>
                             {table.capacity || '-'}
                           </TableCell>
-                          <TableCell className="hidden md:table-cell" data-testid={`text-description-${table.id}`}>
+                          <TableCell data-testid={`text-description-${table.id}`}>
                             {table.description || '-'}
                           </TableCell>
                           <TableCell data-testid={`text-status-${table.id}`}>

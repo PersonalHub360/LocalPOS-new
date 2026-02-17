@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart, Filter, X, Scan, LayoutGrid, List } from "lucide-react";
+import { Search, Bell, Plus, Grid3x3, FileText, Utensils, ShoppingCart, Filter, X, Scan } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -34,6 +34,19 @@ export default function POS() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [diningOption, setDiningOption] = useState("dine-in");
   
+  // Debug: Log when orderItems changes
+  useEffect(() => {
+    console.log("=== orderItems state changed ===");
+    console.log("orderItems:", orderItems);
+    console.log("orderItems length:", orderItems.length);
+    console.log("orderItems type:", typeof orderItems);
+    console.log("orderItems is array:", Array.isArray(orderItems));
+    if (orderItems.length > 0) {
+      console.log("First item:", orderItems[0]);
+      console.log("First item product:", orderItems[0].product);
+    }
+    console.log("================================");
+  }, [orderItems]);
   const [searchInPacking, setSearchInPacking] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [draftListModalOpen, setDraftListModalOpen] = useState(false);
@@ -55,7 +68,6 @@ export default function POS() {
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [stockFilter, setStockFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const isDesktop = useIsDesktop();
   const { toast } = useToast();
@@ -187,9 +199,19 @@ export default function POS() {
         }
       });
       
+      // Only clear cart if it's a new draft, not when updating
+      if (!currentDraftId) {
+        setOrderItems([]);
+        setSelectedTable(null);
+        setCurrentOrderNumber("");
+        setCurrentDraftId(null);
+        setManualDiscount(0);
+        setDiscountType('amount');
+      }
+      
       toast({
         title: "Success",
-        description: "Order created successfully",
+        description: currentDraftId ? "Draft saved successfully" : "Order processed successfully",
       });
     },
   });
@@ -198,6 +220,24 @@ export default function POS() {
     mutationFn: async ({ orderId, orderData }: { orderId: string; orderData: any }) => {
       const response = await apiRequest("PATCH", `/api/orders/${orderId}`, orderData);
       return await response.json();
+    },
+    onSuccess: (updatedOrder) => {
+      // Invalidate orders and products
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/due/customers-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory/adjustments"] });
+      
+      // Update order number if it changed (shouldn't happen, but just in case)
+      if (updatedOrder?.orderNumber) {
+        setCurrentOrderNumber(updatedOrder.orderNumber);
+      }
+      
+      toast({
+        title: "Success",
+        description: "Draft order updated successfully",
+      });
     },
     onError: (error: any) => {
       toast({
@@ -624,37 +664,14 @@ export default function POS() {
       }),
     };
 
-    const clearCartAfterDraft = () => {
-      setOrderItems([]);
-      setSelectedTable(null);
-      setDiningOption("dine-in");
-      setCurrentOrderNumber("");
-      setCurrentDraftId(null);
-      setManualDiscount(0);
-      setDiscountType("amount");
-    };
-
+    // If editing an existing draft, update it instead of creating a new one
     if (currentDraftId) {
-      updateOrderMutation.mutate(
-        { orderId: currentDraftId, orderData },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-            toast({ title: "Success", description: "Draft saved successfully" });
-            clearCartAfterDraft();
-          },
-        }
-      );
-    } else {
-      createOrderMutation.mutate(orderData, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-          toast({ title: "Success", description: "Draft saved successfully" });
-          clearCartAfterDraft();
-        },
+      updateOrderMutation.mutate({
+        orderId: currentDraftId,
+        orderData,
       });
+    } else {
+      createOrderMutation.mutate(orderData);
     }
   };
 
@@ -678,6 +695,10 @@ export default function POS() {
       const itemsResponse = await apiRequest("GET", `/api/orders/${orderId}/items`);
       const items = await itemsResponse.json() as Array<OrderItem & { product?: Product; productName?: string }>;
       
+      console.log("API Response - Items:", items);
+      console.log("First item:", items[0]);
+      console.log("First item product:", items[0]?.product);
+      
       if (!items || items.length === 0) {
         toast({
           title: "No Items",
@@ -687,30 +708,27 @@ export default function POS() {
         return;
       }
 
+      // Map items to OrderItemData format
       const restoredItems: OrderItemData[] = [];
       
       for (const item of items) {
+        // Use product directly from API response if available
         let product: Product | undefined = item.product as Product | undefined;
         
+        // If product is missing from API response, try to find it in allProducts
         if (!product || !product.id) {
+          console.warn("Product missing from API response, looking in allProducts:", item.productId);
           product = allProducts.find(p => p.id === item.productId);
         }
         
         if (!product) {
-          try {
-            const productRes = await fetch(`/api/products/${item.productId}`, { credentials: "include" });
-            if (productRes.ok) {
-              product = await productRes.json() as Product;
-            }
-          } catch (e) {
-            console.error(`Failed to fetch product ${item.productId}:`, e);
-          }
-        }
-        
-        if (!product) {
+          console.error(`Product ${item.productId} not found. Item:`, item);
+          console.error("Available products count:", allProducts.length);
           continue;
         }
         
+        // Use the product directly - it should already have all required fields from the API
+        // Get the correct price based on selected size (for any unit type)
         let itemPrice = parseFloat(item.price);
         const selectedSize = (item as any).selectedSize;
         if (selectedSize) {
@@ -720,12 +738,13 @@ export default function POS() {
           }
         }
         
+        // Create product with correct price
         const productWithPrice = {
           ...product,
           price: itemPrice.toString(),
         };
         
-        restoredItems.push({
+        const restoredItem: OrderItemData = {
           product: productWithPrice as Product,
           quantity: item.quantity,
           itemDiscount: item.itemDiscount && parseFloat(item.itemDiscount) > 0 
@@ -733,8 +752,14 @@ export default function POS() {
             : undefined,
           itemDiscountType: (item.itemDiscountType as 'amount' | 'percentage') || undefined,
           selectedSize: selectedSize || undefined,
-        });
+        };
+        
+        console.log("Created restored item:", restoredItem);
+        restoredItems.push(restoredItem);
       }
+
+      console.log("Restored items:", restoredItems);
+      console.log("Restored items count:", restoredItems.length);
 
       if (restoredItems.length === 0) {
         toast({
@@ -745,7 +770,18 @@ export default function POS() {
         return;
       }
 
-      setOrderItems([...restoredItems]);
+      // Set all state at once to avoid race conditions
+      console.log("About to set order items:", restoredItems);
+      console.log("Restored items count:", restoredItems.length);
+      console.log("First restored item:", restoredItems[0]);
+      console.log("First restored item product:", restoredItems[0]?.product);
+      
+      // Use React's batching to set all state together
+      // Create a new array reference to ensure React detects the change
+      const itemsToSet = [...restoredItems];
+      console.log("Items to set (new array):", itemsToSet);
+      
+      setOrderItems(itemsToSet);
       setSelectedTable(order.tableId);
       setDiningOption(order.diningOption);
       setCurrentOrderNumber(order.orderNumber);
@@ -885,46 +921,39 @@ export default function POS() {
 
       try {
         const response = await apiRequest("GET", `/api/orders/${orderId}/items`);
-        const orderItemsData = await response.json() as Array<OrderItem & { product?: Product }>;
+        const orderItemsData = await response.json() as OrderItem[];
         
-        const restoredItems: OrderItemData[] = [];
-        for (const item of orderItemsData) {
-          let product: Product | undefined = item.product as Product | undefined;
-          
-          if (!product || !product.id) {
-            product = allProducts.find(p => p.id === item.productId);
-          }
-          
-          if (!product) {
-            try {
-              const productRes = await fetch(`/api/products/${item.productId}`, { credentials: "include" });
-              if (productRes.ok) {
-                product = await productRes.json() as Product;
+        const productsMap = new Map(allProducts.map((p) => [p.id, p]));
+        const restoredItems: OrderItemData[] = orderItemsData
+          .map((item) => {
+            const product = productsMap.get(item.productId);
+            if (!product) return null;
+            
+            // Get the correct price based on selected size (for any unit type)
+            let itemPrice = parseFloat(item.price);
+            const selectedSize = (item as any).selectedSize;
+            if (selectedSize) {
+              const sizePrices = product.sizePrices as Record<string, string> | null | undefined;
+              if (sizePrices && sizePrices[selectedSize]) {
+                itemPrice = parseFloat(sizePrices[selectedSize]);
               }
-            } catch (e) {
-              continue;
             }
-          }
-          
-          if (!product) continue;
-          
-          let itemPrice = parseFloat(item.price);
-          const selectedSize = (item as any).selectedSize;
-          if (selectedSize) {
-            const sizePrices = product.sizePrices as Record<string, string> | null | undefined;
-            if (sizePrices && sizePrices[selectedSize]) {
-              itemPrice = parseFloat(sizePrices[selectedSize]);
-            }
-          }
-          
-          restoredItems.push({
-            product: { ...product, price: itemPrice.toString() } as Product,
-            quantity: item.quantity,
-            itemDiscount: item.itemDiscount ? parseFloat(item.itemDiscount) : undefined,
-            itemDiscountType: item.itemDiscountType as 'amount' | 'percentage' | undefined,
-            selectedSize: selectedSize || undefined,
-          });
-        }
+            
+            // Create product with correct price
+            const productWithPrice = {
+              ...product,
+              price: itemPrice.toString(),
+            };
+            
+            return {
+              product: productWithPrice,
+              quantity: item.quantity,
+              itemDiscount: item.itemDiscount ? parseFloat(item.itemDiscount) : undefined,
+              itemDiscountType: item.itemDiscountType as 'amount' | 'percentage' | undefined,
+              selectedSize: selectedSize || undefined,
+            };
+          })
+          .filter((item): item is OrderItemData => item !== null);
 
         setOrderItems(restoredItems);
         setSelectedTable(order.tableId);
@@ -993,6 +1022,8 @@ export default function POS() {
         itemDiscounts: totalItemDiscounts,
         subtotal,
         discount: globalDiscountAmount,
+        discountType,
+        discountRaw: manualDiscount,
         totalDiscount,
         total: subtotal - globalDiscountAmount,
         tableId: selectedTable,
@@ -1317,32 +1348,10 @@ export default function POS() {
 
         <div className="flex-1 overflow-hidden flex flex-col min-w-0">
           <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 border-b border-border bg-background flex-shrink-0">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <Badge variant="secondary" className="text-xs sm:text-sm shrink-0">Dashboard</Badge>
-                <span className="text-muted-foreground shrink-0">/</span>
-                <span className="text-xs sm:text-sm shrink-0">POS</span>
-              </div>
-              <div className="flex items-center border rounded-md overflow-hidden shrink-0">
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="rounded-none h-8 px-3"
-                  onClick={() => setViewMode('list')}
-                >
-                  <List className="w-4 h-4 mr-1" />
-                  List
-                </Button>
-                <Button
-                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="rounded-none h-8 px-3"
-                  onClick={() => setViewMode('grid')}
-                >
-                  <LayoutGrid className="w-4 h-4 mr-1" />
-                  Grid
-                </Button>
-              </div>
+            <div className="flex items-center gap-2 mb-3 sm:mb-4 overflow-x-auto pb-1">
+              <Badge variant="secondary" className="text-xs sm:text-sm shrink-0">Dashboard</Badge>
+              <span className="text-muted-foreground shrink-0">/</span>
+              <span className="text-xs sm:text-sm shrink-0">POS</span>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -1355,6 +1364,15 @@ export default function POS() {
                   data-testid="button-category-all"
                 >
                   Show All
+                </Button>
+                <Button
+                  variant={selectedCategory === "__none__" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory("__none__")}
+                  className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
+                  data-testid="button-category-none"
+                >
+                  None
                 </Button>
                 {categories.map((category) => (
                   <Button
@@ -1468,60 +1486,23 @@ export default function POS() {
               </div>
             ) : (
               <>
-                {viewMode === 'grid' ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-                    {allProducts.map((product) => {
-                      const quantity = parseFloat(product.quantity || "0");
-                      const sold = soldQuantities[product.id] || 0;
-                      const availableStock = Math.max(0, quantity - sold);
-                      return (
-                        <ProductCard
-                          key={product.id}
-                          product={product}
-                          onAddToOrder={handleAddToOrder}
-                          availableStock={availableStock}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {allProducts.map((product) => {
-                      const quantity = parseFloat(product.quantity || "0");
-                      const sold = soldQuantities[product.id] || 0;
-                      const availableStock = Math.max(0, quantity - sold);
-                      const category = categories.find(c => c.id === product.categoryId);
-                      return (
-                        <div
-                          key={product.id}
-                          className="flex items-center gap-3 p-2 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                          onClick={() => handleAddToOrder(product)}
-                        >
-                          <div className="w-14 h-14 rounded-md overflow-hidden bg-muted shrink-0">
-                            {product.imageUrl ? (
-                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Utensils className="w-5 h-5 text-muted-foreground" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-sm truncate">{product.name}</h4>
-                            {category && <p className="text-xs text-muted-foreground">{category.name}</p>}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="font-semibold text-sm">${parseFloat(product.price).toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">Stock: {availableStock}</p>
-                          </div>
-                          <Button size="sm" variant="ghost" className="shrink-0 h-8 w-8 p-0">
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+                  {allProducts.map((product) => {
+                    // Calculate available stock (quantity - sold)
+                    const quantity = parseFloat(product.quantity || "0");
+                    const sold = soldQuantities[product.id] || 0;
+                    const availableStock = Math.max(0, quantity - sold);
+                    
+                    return (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        onAddToOrder={handleAddToOrder}
+                        availableStock={availableStock}
+                      />
+                    );
+                  })}
+                </div>
                 {/* Infinite scroll trigger */}
                 <div ref={observerTarget} className="h-4 flex items-center justify-center py-4">
                   {isFetchingNextPage && (

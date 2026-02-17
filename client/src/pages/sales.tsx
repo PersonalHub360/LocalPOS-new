@@ -560,7 +560,7 @@ export default function SalesManage() {
       fetchOrderItems(viewSale.id);
     } else if (editSale) {
       fetchOrderItems(editSale.id);
-      // Load existing payment splits if any
+      // Load existing payment splits if any; otherwise derive one from paymentMethod so "Pay by" is editable
       if (editSale.paymentSplits) {
         try {
           const splits = JSON.parse(editSale.paymentSplits);
@@ -568,6 +568,13 @@ export default function SalesManage() {
         } catch {
           setPaymentSplits([]);
         }
+      } else if (editSale.paymentMethod && editSale.paymentMethod !== "split") {
+        // Single payment method stored without splits: show as one editable split
+        const method = (editSale.paymentMethod || "").toLowerCase().replace(/\s+/g, "_");
+        const validMethods = ["aba", "acleda", "cash", "due", "card", "cash_aba", "cash_acleda"];
+        const normalizedMethod = validMethods.includes(method) ? method : "cash";
+        const amount = parseFloat(editSale.total) || 0;
+        setPaymentSplits(amount > 0 ? [{ method: normalizedMethod, amount }] : []);
       } else {
         setPaymentSplits([]);
       }
@@ -727,6 +734,14 @@ export default function SalesManage() {
     setPaymentSplits(paymentSplits.filter((_, i) => i !== index));
   };
 
+  const updatePaymentSplitMethod = (index: number, method: string) => {
+    setPaymentSplits(prev => prev.map((s, i) => i === index ? { ...s, method } : s));
+  };
+
+  const updatePaymentSplitAmount = (index: number, amount: number) => {
+    setPaymentSplits(prev => prev.map((s, i) => i === index ? { ...s, amount } : s));
+  };
+
   const getPaymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
       "aba": "ABA",
@@ -751,12 +766,21 @@ export default function SalesManage() {
       primaryPaymentMethod = methods.length === 1 ? paymentSplits[0].method : "split";
     }
 
+    const subtotalNum = parseFloat(editSale.subtotal) || 0;
+    const discountNum = parseFloat(editSale.discount) || 0;
+    const discountType = (editSale.discountType as "amount" | "percentage") || "amount";
+    const discountAmount = discountType === "percentage" ? (subtotalNum * discountNum) / 100 : discountNum;
+    const newTotal = Math.max(0, subtotalNum - discountAmount);
+
     const updateData: any = {
       customerName: editSale.customerName,
       paymentStatus: editSale.paymentStatus,
       paymentMethod: primaryPaymentMethod,
       paymentSplits: paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : null,
       status: editSale.status,
+      discount: String(discountNum),
+      discountType: editSale.discountType || "amount",
+      total: newTotal.toFixed(2),
     };
 
     // Add createdAt if it was modified
@@ -1052,11 +1076,9 @@ export default function SalesManage() {
               <Button
                 onClick={() => setAddSaleOpen(true)}
                 data-testid="button-add-sales"
-                size="sm"
-                className="sm:size-default"
               >
-                <Plus className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Add Sales</span>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Sales
               </Button>
             )}
             <input
@@ -1071,28 +1093,24 @@ export default function SalesManage() {
               variant="outline"
               onClick={() => document.getElementById('import-sales-file')?.click()}
               data-testid="button-import-sales"
-              size="sm"
-              className="sm:size-default"
             >
-              <Upload className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Import Sales</span>
+              <Upload className="w-4 h-4 mr-2" />
+              Import Sales
             </Button>
             <Button
               variant="outline"
               onClick={handleDownloadSample}
               data-testid="button-download-sample"
-              size="sm"
-              className="sm:size-default"
             >
-              <FileSpreadsheet className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Download Sample</span>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Download Sample
             </Button>
             {hasPermission("reports.export") && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button data-testid="button-export" disabled={exporting} size="sm" className="sm:size-default">
-                    <Download className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export"}</span>
+                  <Button data-testid="button-export" disabled={exporting}>
+                    <Download className="w-4 h-4 mr-2" />
+                    {exporting ? "Exporting…" : "Export"}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -1111,53 +1129,53 @@ export default function SalesManage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
-            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              <div className="text-lg sm:text-2xl font-bold">{salesStats?.totalSales || 0}</div>
+            <CardContent>
+              <div className="text-2xl font-bold">{salesStats?.totalSales || 0}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.totalRevenue || 0).toFixed(2)}</div>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.totalRevenue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Due</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Due</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.totalDue || 0).toFixed(2)}</div>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.totalDue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.totalPaid || 0).toFixed(2)}</div>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.totalPaid || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Average Order</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Average Order</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 sm:p-6 pt-0">
-              <div className="text-lg sm:text-2xl font-bold">${(salesStats?.averageOrderValue || 0).toFixed(2)}</div>
+            <CardContent>
+              <div className="text-2xl font-bold">${(salesStats?.averageOrderValue || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="detailed" data-testid="tab-detailed-sales" className="text-xs sm:text-sm">Detailed Sales Report</TabsTrigger>
-            <TabsTrigger value="summary" data-testid="tab-sales-summary" className="text-xs sm:text-sm">Sales Summary Report</TabsTrigger>
+          <TabsList>
+            <TabsTrigger value="detailed" data-testid="tab-detailed-sales">Detailed Sales Report</TabsTrigger>
+            <TabsTrigger value="summary" data-testid="tab-sales-summary">Sales Summary Report</TabsTrigger>
           </TabsList>
 
           <TabsContent value="detailed" className="space-y-4">
@@ -1166,12 +1184,12 @@ export default function SalesManage() {
             <CardTitle>Sales List</CardTitle>
             <CardDescription>Comprehensive list of all sales transactions</CardDescription>
           </CardHeader>
-          <CardContent className="p-3 sm:p-6 space-y-4">
+          <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by invoice, customer..."
+                  placeholder="Search by invoice number, customer name, sale ID..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9"
@@ -1184,12 +1202,9 @@ export default function SalesManage() {
                   variant="destructive"
                   onClick={() => setShowBulkDeleteDialog(true)}
                   data-testid="button-bulk-delete"
-                  size="sm"
-                  className="sm:size-default"
                 >
-                  <Trash className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Delete Selected ({selectedSales.size})</span>
-                  <span className="sm:hidden">({selectedSales.size})</span>
+                  <Trash className="w-4 h-4 mr-2" />
+                  Delete Selected ({selectedSales.size})
                 </Button>
               )}
               
@@ -1261,7 +1276,7 @@ export default function SalesManage() {
             </div>
 
             {/* Advanced Filters */}
-            <div className="border rounded-lg p-2 sm:p-4 space-y-4">
+            <div className="border rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4" />
@@ -1288,7 +1303,7 @@ export default function SalesManage() {
                 </Button>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Payment Method Filter */}
                 <div className="space-y-2">
                   <Label>Payment Method</Label>
@@ -1324,6 +1339,86 @@ export default function SalesManage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Min Amount */}
+                <div className="space-y-2">
+                  <Label>Min Amount ($)</Label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                  />
+                </div>
+
+                {/* Max Amount */}
+                <div className="space-y-2">
+                  <Label>Max Amount ($)</Label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={maxAmount}
+                    onChange={(e) => setMaxAmount(e.target.value)}
+                  />
+                </div>
+
+                {/* Months (multi-select) */}
+                <div className="space-y-2">
+                  <Label>Months</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        {selectedMonths.length === 0
+                          ? "All months"
+                          : selectedMonths.length <= 2
+                            ? selectedMonths.map((m) => {
+                                const [y, mo] = m.split("-").map(Number);
+                                return format(new Date(y, mo - 1, 1), "MMM yyyy");
+                              }).join(", ")
+                            : `${selectedMonths.length} months selected`}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[280px] p-0" align="start">
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {Array.from({ length: 24 }, (_, i) => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() - (23 - i));
+                          const y = d.getFullYear();
+                          const mo = String(d.getMonth() + 1).padStart(2, "0");
+                          const value = `${y}-${mo}`;
+                          const label = format(d, "MMMM yyyy");
+                          const checked = selectedMonths.includes(value);
+                          return (
+                            <div
+                              key={value}
+                              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
+                              onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
+                            >
+                              <Checkbox checked={checked} onCheckedChange={() => {}} />
+                              <span className="text-sm">{label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Order Items Filter (Optional) */}
+              <div className="space-y-2">
+                <Label>Search by Product/Item (Optional)</Label>
+                <Input
+                  placeholder="Enter product name to filter sales..."
+                  value={orderItemSearch}
+                  onChange={(e) => setOrderItemSearch(e.target.value)}
+                  className="max-w-md"
+                />
+                {orderItemSearch && (
+                  <p className="text-xs text-muted-foreground">
+                    Searching for products in order items...
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1376,7 +1471,11 @@ export default function SalesManage() {
                         <TableCell data-testid={`text-customer-${sale.id}`}>
                           {sale.customerName || "Walk-in Customer"}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell" data-testid={`text-discount-${sale.id}`}>${sale.discount}</TableCell>
+                        <TableCell className="hidden lg:table-cell" data-testid={`text-discount-${sale.id}`}>
+                        {(sale.discountType as string) === "percentage"
+                          ? `${sale.discount}%`
+                          : `$${parseFloat(sale.discount || "0").toFixed(2)}`}
+                      </TableCell>
                         <TableCell data-testid={`text-total-${sale.id}`}>${sale.total}</TableCell>
                         <TableCell className="hidden sm:table-cell" data-testid={`text-pay-by-${sale.id}`}>
                           {sale.paymentSplits ? (() => {
@@ -1419,7 +1518,7 @@ export default function SalesManage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-0.5 sm:gap-2">
+                          <div className="flex items-center gap-2">
                             {hasPermission("sales.view") && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1494,13 +1593,13 @@ export default function SalesManage() {
             
             {/* Pagination */}
             {salesTotal > 0 && (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                  <div className="text-xs sm:text-sm text-muted-foreground">
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
                     Showing {((salesPage - 1) * salesPageSize) + 1} to {Math.min(salesPage * salesPageSize, salesTotal)} of {salesTotal} sales
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs sm:text-sm text-muted-foreground">Per page:</span>
+                    <span className="text-sm text-muted-foreground">Per page:</span>
                     <Select
                       value={salesPageSize.toString()}
                       onValueChange={(value) => {
@@ -1591,7 +1690,7 @@ export default function SalesManage() {
                 <CardTitle>Sales Summary Report</CardTitle>
                 <CardDescription>Individual item sales summary</CardDescription>
               </CardHeader>
-              <CardContent className="p-3 sm:p-6 space-y-4">
+              <CardContent className="space-y-4">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap gap-2">
                     <Select value={summaryDateFilter} onValueChange={(value: DateFilterType) => setSummaryDateFilter(value)}>
@@ -1726,13 +1825,13 @@ export default function SalesManage() {
                     
                     {/* Pagination for Summary */}
                     {summaryTotal > 0 && (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                          <div className="text-xs sm:text-sm text-muted-foreground">
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="flex items-center gap-4">
+                          <div className="text-sm text-muted-foreground">
                             Showing {((summaryPage - 1) * summaryPageSize) + 1} to {Math.min(summaryPage * summaryPageSize, summaryTotal)} of {summaryTotal} products
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs sm:text-sm text-muted-foreground">Per page:</span>
+                            <span className="text-sm text-muted-foreground">Per page:</span>
                             <Select
                               value={summaryPageSize.toString()}
                               onValueChange={(value) => {
@@ -1893,13 +1992,13 @@ export default function SalesManage() {
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Order Items</Label>
                 {orderItems.length > 0 ? (
-                  <div className="border rounded-md w-full overflow-x-auto">
+                  <div className="border rounded-md">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Product Name</TableHead>
                           <TableHead className="text-right">Quantity</TableHead>
-                          <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
+                          <TableHead className="text-right">Price</TableHead>
                           <TableHead className="text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1908,7 +2007,7 @@ export default function SalesManage() {
                           <TableRow key={item.id} data-testid={`view-item-${item.id}`}>
                             <TableCell data-testid={`view-item-name-${item.id}`}>{item.productName}</TableCell>
                             <TableCell className="text-right" data-testid={`view-item-qty-${item.id}`}>{item.quantity}</TableCell>
-                            <TableCell className="text-right hidden sm:table-cell" data-testid={`view-item-price-${item.id}`}>${item.price}</TableCell>
+                            <TableCell className="text-right" data-testid={`view-item-price-${item.id}`}>${item.price}</TableCell>
                             <TableCell className="text-right" data-testid={`view-item-total-${item.id}`}>${item.total}</TableCell>
                           </TableRow>
                         ))}
@@ -1934,7 +2033,11 @@ export default function SalesManage() {
                 </div>
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Discount</Label>
-                  <p className="font-medium" data-testid="view-discount">${viewSale.discount}</p>
+                  <p className="font-medium" data-testid="view-discount">
+                    {(viewSale.discountType as string) === "percentage"
+                      ? `${viewSale.discount}%`
+                      : `$${parseFloat(viewSale.discount || "0").toFixed(2)}`}
+                  </p>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <Label className="text-lg font-semibold">Total</Label>
@@ -2033,6 +2136,57 @@ export default function SalesManage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="edit-discount-type">Discount Type</Label>
+                    <Select
+                      value={(editSale.discountType as string) || "amount"}
+                      onValueChange={(value: "amount" | "percentage") => {
+                        setEditSale((prev) => {
+                          if (!prev) return prev;
+                          const next = { ...prev, discountType: value };
+                          const sub = parseFloat(prev.subtotal);
+                          const disc = parseFloat(prev.discount || "0") || 0;
+                          const amount = value === "percentage" ? (sub * disc) / 100 : disc;
+                          next.total = Math.max(0, sub - amount).toFixed(2);
+                          return next;
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="edit-discount-type" data-testid="select-edit-discount-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="amount">Amount ($)</SelectItem>
+                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-discount">Discount</Label>
+                    <Input
+                      id="edit-discount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      data-testid="input-edit-discount"
+                      value={editSale.discount ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditSale((prev) => {
+                          if (!prev) return prev;
+                          const next = { ...prev, discount: val };
+                          const sub = parseFloat(prev.subtotal);
+                          const disc = parseFloat(val) || 0;
+                          const type = (prev.discountType as "amount" | "percentage") || "amount";
+                          const amount = type === "percentage" ? (sub * disc) / 100 : disc;
+                          next.total = Math.max(0, sub - amount).toFixed(2);
+                          return next;
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Process Payment Section */}
@@ -2042,22 +2196,39 @@ export default function SalesManage() {
                 {/* Payment Splits List */}
                 {paymentSplits.length > 0 && (
                   <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Current Payments:</Label>
+                    <Label className="text-sm text-muted-foreground">Current Payments (editable):</Label>
                     <div className="border rounded-md divide-y">
                       {paymentSplits.map((split, index) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between p-3 bg-muted/30"
+                          className="flex flex-wrap items-center gap-2 p-3 bg-muted/30"
                           data-testid={`payment-split-${index}`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium capitalize">
-                              {getPaymentMethodLabel(split.method)}
-                            </span>
-                            <span className="text-lg font-bold text-primary">
-                              ${split.amount.toFixed(2)}
-                            </span>
-                          </div>
+                          <Select
+                            value={split.method}
+                            onValueChange={(value) => updatePaymentSplitMethod(index, value)}
+                          >
+                            <SelectTrigger className="w-[140px] h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="aba">ABA</SelectItem>
+                              <SelectItem value="acleda">Acleda</SelectItem>
+                              <SelectItem value="cash">Cash</SelectItem>
+                              <SelectItem value="due">Due</SelectItem>
+                              <SelectItem value="card">Card</SelectItem>
+                              <SelectItem value="cash_aba">Cash And ABA</SelectItem>
+                              <SelectItem value="cash_acleda">Cash And Acleda</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-28 h-9 font-mono"
+                            value={split.amount}
+                            onChange={(e) => updatePaymentSplitAmount(index, parseFloat(e.target.value) || 0)}
+                          />
                           <Button
                             size="sm"
                             variant="ghost"
@@ -2153,13 +2324,13 @@ export default function SalesManage() {
               <div className="space-y-2">
                 <Label className="text-base font-semibold">Order Items</Label>
                 {orderItems.length > 0 ? (
-                  <div className="border rounded-md bg-muted/30 w-full overflow-x-auto">
+                  <div className="border rounded-md bg-muted/30">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Product Name</TableHead>
                           <TableHead className="text-right">Quantity</TableHead>
-                          <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
+                          <TableHead className="text-right">Price</TableHead>
                           <TableHead className="text-right">Total</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2168,7 +2339,7 @@ export default function SalesManage() {
                           <TableRow key={item.id} data-testid={`edit-item-${item.id}`}>
                             <TableCell data-testid={`edit-item-name-${item.id}`}>{item.productName}</TableCell>
                             <TableCell className="text-right" data-testid={`edit-item-qty-${item.id}`}>{item.quantity}</TableCell>
-                            <TableCell className="text-right hidden sm:table-cell" data-testid={`edit-item-price-${item.id}`}>${item.price}</TableCell>
+                            <TableCell className="text-right" data-testid={`edit-item-price-${item.id}`}>${item.price}</TableCell>
                             <TableCell className="text-right" data-testid={`edit-item-total-${item.id}`}>${item.total}</TableCell>
                           </TableRow>
                         ))}
@@ -2194,7 +2365,11 @@ export default function SalesManage() {
                 </div>
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Discount</Label>
-                  <p className="font-medium">${editSale.discount}</p>
+                  <p className="font-medium">
+                    {(editSale.discountType as string) === "percentage"
+                      ? `${editSale.discount}%`
+                      : `$${parseFloat(editSale.discount || "0").toFixed(2)}`}
+                  </p>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <Label className="text-lg font-semibold">Total</Label>
@@ -2590,13 +2765,13 @@ export default function SalesManage() {
 
               {/* Items List */}
               {newSaleItems.length > 0 && (
-                <div className="border rounded-md w-full overflow-x-auto">
+                <div className="border rounded-md">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right hidden sm:table-cell">Price</TableHead>
+                        <TableHead className="text-right">Quantity</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                         <TableHead className="w-12"></TableHead>
                       </TableRow>
@@ -2608,7 +2783,7 @@ export default function SalesManage() {
                           <TableRow key={index}>
                             <TableCell>{item.productName}</TableCell>
                             <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell className="text-right hidden sm:table-cell">${item.price}</TableCell>
+                            <TableCell className="text-right">${item.price}</TableCell>
                             <TableCell className="text-right">${itemTotal.toFixed(2)}</TableCell>
                             <TableCell>
                               <Button

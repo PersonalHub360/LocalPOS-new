@@ -237,15 +237,6 @@ html.reduce-motion *::after {
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    -webkit-text-size-adjust: 100%;
-    overflow-x: hidden;
-  }
-
-  @media (max-width: 640px) {
-    .dialog-content, [role="dialog"] > div {
-      max-width: calc(100vw - 1.5rem) !important;
-      max-height: calc(100vh - 2rem) !important;
-    }
   }
 
   /* Colorful card variants */

@@ -49,10 +49,10 @@ import {
   Download,
   Banknote,
   Plus,
+  ArrowLeft,
   Eye,
   Pencil,
   Trash2,
-  X,
 } from "lucide-react";
 import {
   Table,
@@ -353,6 +353,10 @@ export default function BankStatement() {
     });
   };
 
+  const transactionsForSelectedMethod = selectedPaymentMethod 
+    ? getTransactionsByPaymentMethod(selectedPaymentMethod)
+    : [];
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
@@ -636,8 +640,8 @@ export default function BankStatement() {
               const totalWithAdjustments = data.total + data.adjustments;
               return (
                 <Card 
-                  key={method.key}
-                  className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-105`} 
+                  key={method.key} 
+                  className={`p-4 ${colorScheme.border} border-l-4 ${colorScheme.bg} shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 cursor-pointer ${selectedPaymentMethod === method.key ? 'ring-2 ring-primary' : ''}`} 
                   data-testid={`card-${method.key}`}
                   onClick={() => setSelectedPaymentMethod(method.key)}
                 >
@@ -671,81 +675,6 @@ export default function BankStatement() {
               );
             })}
           </div>
-
-          {/* Transactions Modal */}
-          <Dialog open={selectedPaymentMethod !== null} onOpenChange={(open) => { if (!open) setSelectedPaymentMethod(null); }}>
-            <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
-              <DialogHeader>
-                <DialogTitle>
-                  {paymentMethodsData.find(m => m.key === selectedPaymentMethod)?.name} — Transactions
-                </DialogTitle>
-              </DialogHeader>
-              <div className="flex-1 overflow-y-auto space-y-3 py-2">
-                {selectedPaymentMethod && (() => {
-                  const methodTransactions = getTransactionsByPaymentMethod(selectedPaymentMethod);
-                  const method = paymentMethodsData.find(m => m.key === selectedPaymentMethod);
-                  if (!method) return null;
-                  const data = paymentTotals[method.key] || { total: 0, count: 0, adjustments: 0 };
-                  const totalWithAdjustments = data.total + data.adjustments;
-
-                  if (methodTransactions.length === 0) {
-                    return (
-                      <div className="text-center text-muted-foreground py-6 text-sm">
-                        No transactions found for {method.name}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <>
-                      {methodTransactions.map((order, idx) => {
-                        let amountPaid = parseFloat(order.total);
-                        if (order.paymentSplits) {
-                          try {
-                            const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
-                            const matchingSplit = splits.find(
-                              split => normalizePaymentMethod(split.method) === method.key
-                            );
-                            if (matchingSplit) {
-                              amountPaid = matchingSplit.amount;
-                            }
-                          } catch (error) {}
-                        }
-
-                        return (
-                          <div key={order.id} className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm">Transaction #{idx + 1}</div>
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                {format(new Date(order.createdAt), "MMM dd, yyyy — hh:mm a")}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Invoice: {order.orderNumber}
-                              </div>
-                            </div>
-                            <div className="text-right ml-4 shrink-0">
-                              <div className="font-bold text-sm">${amountPaid.toFixed(2)}</div>
-                              <div className="text-xs text-muted-foreground">៛{(amountPaid * 4100).toFixed(0)}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      <div className="flex items-center justify-between p-3 rounded-lg border-2 border-primary/20 bg-primary/5 mt-2">
-                        <div className="font-semibold text-sm">Total</div>
-                        <div className="font-bold text-base">${totalWithAdjustments.toFixed(2)}</div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedPaymentMethod(null)}>
-                  Close
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
           {Object.keys(paymentTotals).length === 0 && (
             <div className="text-center text-muted-foreground py-8 font-medium">
               No completed transactions found for the selected date range
@@ -753,6 +682,168 @@ export default function BankStatement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Transaction History for Selected Payment Method */}
+      {selectedPaymentMethod && (
+        <Card className="border-2 shadow-xl">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl">
+                  Transaction History - {paymentMethodsData.find(m => m.key === selectedPaymentMethod)?.name}
+                </CardTitle>
+                <CardDescription>
+                  All transactions using this payment method
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setSelectedPaymentMethod(null)}
+                data-testid="button-clear-payment-filter"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {transactionsForSelectedMethod.length > 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Dining</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead className="text-right">Amount Paid</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactionsForSelectedMethod.map((order) => {
+                      // Calculate amount paid with this payment method
+                      let amountPaid = parseFloat(order.total);
+                      let paymentDisplay = order.paymentMethod || "Unknown";
+
+                      if (order.paymentSplits) {
+                        try {
+                          const splits: { method: string; amount: number }[] = JSON.parse(order.paymentSplits);
+                          const matchingSplit = splits.find(
+                            split => normalizePaymentMethod(split.method) === selectedPaymentMethod
+                          );
+                          if (matchingSplit) {
+                            amountPaid = matchingSplit.amount;
+                            paymentDisplay = splits.map(s => `${s.method}: $${s.amount.toFixed(2)}`).join(', ');
+                          }
+                        } catch (error) {
+                          console.error("Failed to parse payment splits:", error);
+                        }
+                      }
+
+                      return (
+                        <TableRow key={order.id} data-testid={`row-transaction-${order.id}`}>
+                          <TableCell className="font-mono font-medium">
+                            #{order.orderNumber}
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(order.createdAt), "MMM dd, yyyy HH:mm")}
+                          </TableCell>
+                          <TableCell>
+                            {order.customerName || "Walk-in"}
+                          </TableCell>
+                          <TableCell className="capitalize">
+                            {order.diningOption}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {paymentDisplay}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-green-600 dark:text-green-400">
+                            ${amountPaid.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-medium">
+                            ${parseFloat(order.total).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  // Navigate to sales page to view this order
+                                  window.location.href = `/sales?orderId=${order.id}`;
+                                }}
+                                data-testid={`button-view-${order.id}`}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              {hasPermission("sales.edit") && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    // Navigate to sales page to edit this order
+                                    window.location.href = `/sales?orderId=${order.id}&edit=true`;
+                                  }}
+                                  data-testid={`button-edit-${order.id}`}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {hasPermission("sales.delete") && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={async () => {
+                                    if (confirm(`Are you sure you want to delete order #${order.orderNumber}? This action cannot be undone.`)) {
+                                      try {
+                                        const response = await fetch(`/api/orders/${order.id}`, {
+                                          method: "DELETE",
+                                          credentials: "include",
+                                        });
+                                        if (response.ok) {
+                                          queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+                                          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+                                          queryClient.invalidateQueries({ queryKey: ["/api/payment-adjustments"] });
+                                          toast({
+                                            title: "Success",
+                                            description: `Order #${order.orderNumber} deleted successfully`,
+                                          });
+                                        } else {
+                                          throw new Error("Failed to delete order");
+                                        }
+                                      } catch (error) {
+                                        toast({
+                                          title: "Error",
+                                          description: "Failed to delete order",
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }
+                                  }}
+                                  data-testid={`button-delete-${order.id}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8 font-medium">
+                No transactions found for this payment method
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       </div>
     </div>
   );

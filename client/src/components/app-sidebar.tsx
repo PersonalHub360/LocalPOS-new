@@ -43,7 +43,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Settings as SettingsType } from "@shared/schema";
+import type { Settings } from "@shared/schema";
 import { useState, useEffect } from "react";
 
 interface MenuItem {
@@ -173,7 +173,7 @@ export function AppSidebar() {
   const { user } = useAuth();
 
   // Get settings for app name and tagline
-  const { data: settings } = useQuery<SettingsType>({
+  const { data: settings } = useQuery<Settings>({
     queryKey: ["/api/settings"],
   });
 

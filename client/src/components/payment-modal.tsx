@@ -146,21 +146,11 @@ export function PaymentModal({
     }
   }, [paymentMethod, paymentSplits.length]);
 
-  const hasDuePayment = paymentMethod === "due" || paymentSplits.some(s => s.method === "due");
-
   const handleConfirm = () => {
-    if (hasDuePayment && !customerName.trim()) {
-      toast({
-        title: "Customer Name Required",
-        description: "Please enter a customer name for due payments so the order can be tracked in Due Management.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (paymentSplits.length > 0) {
       const totalPaid = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
       
+      // Validate that split payments cover at least the order total
       if (totalPaid < total) {
         toast({
           title: "Incomplete Payment",
@@ -257,9 +247,7 @@ export function PaymentModal({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>
-              Customer Name {hasDuePayment ? <span className="text-red-500">*</span> : "(Optional)"}
-            </Label>
+            <Label>Customer Name (Optional)</Label>
             <div className="flex gap-2">
               <Popover 
                 open={openCombobox} 
@@ -343,11 +331,10 @@ export function PaymentModal({
             </div>
             <Input
               type="text"
-              placeholder={hasDuePayment ? "Required for due payment..." : "Enter new customer name..."}
+              placeholder="Enter new customer name..."
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               data-testid="input-customer-name"
-              className={hasDuePayment && !customerName.trim() ? "border-red-300 focus:border-red-500" : ""}
             />
           </div>
 

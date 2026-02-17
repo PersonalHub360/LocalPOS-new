@@ -25,7 +25,6 @@ import {
 import { 
   CreditCard, 
   User, 
-  Users,
   DollarSign, 
   Eye, 
   UserPlus, 
@@ -40,11 +39,7 @@ import {
   Calendar,
   Filter,
   X,
-  Upload,
-  Clock,
-  TrendingUp,
-  CheckCircle2,
-  AlertCircle
+  Upload
 } from "lucide-react";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1321,60 +1316,36 @@ export default function DueManagement() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-none shadow-md bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-blue-100">Total Customers</CardTitle>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Users className="w-5 h-5 text-white" />
-              </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Customers</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{totalCustomers}</div>
-              <p className="text-xs text-blue-100 mt-1">
-                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
-              </p>
+              <div className="text-2xl font-bold">{totalCustomers}</div>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-md bg-gradient-to-br from-amber-500 to-orange-500 text-white">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-amber-100">Pending Dues</CardTitle>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Clock className="w-5 h-5 text-white" />
-              </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Dues</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{pendingDues}</div>
-              <p className="text-xs text-amber-100 mt-1">
-                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
-              </p>
+              <div className="text-2xl font-bold">{pendingDues}</div>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-md bg-gradient-to-br from-red-500 to-rose-600 text-white">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-red-100">Total Outstanding</CardTitle>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-white" />
-              </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Outstanding</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">${totalOutstanding.toFixed(2)}</div>
-              <p className="text-xs text-red-100 mt-1">
-                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
-              </p>
+              <div className="text-2xl font-bold">${totalOutstanding.toFixed(2)}</div>
             </CardContent>
           </Card>
-          <Card className="border-none shadow-md bg-gradient-to-br from-emerald-500 to-green-600 text-white">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-emerald-100">Total Collected</CardTitle>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <CheckCircle2 className="w-5 h-5 text-white" />
-              </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Collected</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">${totalCollected.toFixed(2)}</div>
-              <p className="text-xs text-emerald-100 mt-1">
-                {dateRange.from && dateRange.to ? `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd, yyyy")}` : "All time"}
-              </p>
+              <div className="text-2xl font-bold">${totalCollected.toFixed(2)}</div>
             </CardContent>
           </Card>
         </div>
@@ -1391,18 +1362,18 @@ export default function DueManagement() {
             <Card>
               <CardContent className="pt-6">
                 <div className="space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col sm:flex-row gap-4">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                       <Input
-                        placeholder="Search by name, email, phone, or invoice number..."
+                        placeholder="Search by name, email, phone, or invoice number (e.g., INV-44)..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10"
                       />
                     </div>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-full sm:w-[160px]">
+                      <SelectTrigger className="w-full sm:w-[180px]">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1413,77 +1384,103 @@ export default function DueManagement() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
-                          <Calendar className="mr-2 h-4 w-4" />
-                          {dateRange.from && dateRange.to ? (
-                            `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd")}`
-                          ) : (
-                            "Pick a date range"
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="range"
-                          selected={{ from: dateRange.from, to: dateRange.to }}
-                          onSelect={(range) => setDateRange({ from: range?.from, to: range?.to })}
-                          numberOfMonths={2}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
-                          <Calendar className="mr-2 h-4 w-4" />
-                          {selectedMonths.length === 0
-                            ? "All months"
-                            : selectedMonths.length <= 2
-                              ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ")
-                              : `${selectedMonths.length} months`}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[280px] p-0" align="start">
-                        <div className="max-h-[300px] overflow-y-auto p-2">
-                          {Array.from({ length: 24 }, (_, i) => {
-                            const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
-                            const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                            const checked = selectedMonths.includes(value);
-                            return (
-                              <div
-                                key={value}
-                                className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
-                                onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
-                              >
-                                <Checkbox checked={checked} onCheckedChange={() => {}} />
-                                <span className="text-sm">{format(d, "MMMM yyyy")}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setDateRange({
-                          from: startOfMonth(new Date()),
-                          to: endOfMonth(new Date()),
-                        });
-                        setSelectedMonths([]);
-                        setStatusFilter("pending");
-                        setMinAmount("");
-                        setMaxAmount("");
-                        setSearchTerm("");
-                      }}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Clear
-                    </Button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label>Date Range</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal">
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {dateRange.from && dateRange.to ? (
+                              `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd")}`
+                            ) : (
+                              "Pick a date range"
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="range"
+                            selected={{ from: dateRange.from, to: dateRange.to }}
+                            onSelect={(range) => setDateRange({ from: range?.from, to: range?.to })}
+                            numberOfMonths={2}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Months</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start text-left font-normal">
+                            {selectedMonths.length === 0
+                              ? "All months"
+                              : selectedMonths.length <= 2
+                                ? selectedMonths.map((m) => { const [y, mo] = m.split("-").map(Number); return format(new Date(y, mo - 1, 1), "MMM yyyy"); }).join(", ")
+                                : `${selectedMonths.length} months`}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[280px] p-0" align="start">
+                          <div className="max-h-[300px] overflow-y-auto p-2">
+                            {Array.from({ length: 24 }, (_, i) => {
+                              const d = new Date(); d.setMonth(d.getMonth() - (23 - i));
+                              const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                              const checked = selectedMonths.includes(value);
+                              return (
+                                <div
+                                  key={value}
+                                  className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
+                                  onClick={() => setSelectedMonths((prev) => (checked ? prev.filter((x) => x !== value) : [...prev, value].sort()))}
+                                >
+                                  <Checkbox checked={checked} onCheckedChange={() => {}} />
+                                  <span className="text-sm">{format(d, "MMMM yyyy")}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Min Amount</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={minAmount}
+                        onChange={(e) => setMinAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Max Amount</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={maxAmount}
+                        onChange={(e) => setMaxAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2 flex items-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setDateRange({
+                            from: startOfMonth(new Date()),
+                            to: endOfMonth(new Date()),
+                          });
+                          setSelectedMonths([]);
+                          setStatusFilter("pending");
+                          setMinAmount("");
+                          setMaxAmount("");
+                          setSearchTerm("");
+                        }}
+                        className="w-full"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Clear Filters
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -1518,7 +1515,6 @@ export default function DueManagement() {
                     </Button>
                   </div>
                 )}
-                <div className="w-full overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1535,10 +1531,10 @@ export default function DueManagement() {
                         />
                       </TableHead>
                       <TableHead>Customer</TableHead>
-                      <TableHead className="hidden md:table-cell">Contact</TableHead>
-                      <TableHead className="text-right hidden sm:table-cell">Paid</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
                       <TableHead className="text-right">Pending</TableHead>
-                      <TableHead className="hidden sm:table-cell">Status</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1572,7 +1568,7 @@ export default function DueManagement() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell>
                         {summary.customer.phone || summary.customer.email ? (
                           <div className="text-sm">
                             {summary.customer.phone && <div>{summary.customer.phone}</div>}
@@ -1582,13 +1578,13 @@ export default function DueManagement() {
                           <span className="text-sm text-muted-foreground">No contact</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right font-mono hidden sm:table-cell">
+                      <TableCell className="text-right font-mono">
                         ${summary.totalPaid.toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold">
                         ${summary.balance.toFixed(2)}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">
+                      <TableCell>
                         {getStatusBadge(summary.balance, summary.ordersCount, summary.totalPaid)}
                       </TableCell>
                       <TableCell>
@@ -1642,7 +1638,6 @@ export default function DueManagement() {
                   ))}
                 </TableBody>
               </Table>
-              </div>
               </>
             )}
           </CardContent>
@@ -1763,7 +1758,6 @@ export default function DueManagement() {
                   <div className="text-center py-8 text-muted-foreground">No due payment records found.</div>
                 ) : (
                   <>
-                    <div className="w-full overflow-x-auto">
                     <Table>
                   <TableHeader>
                     <TableRow>
@@ -1782,8 +1776,8 @@ export default function DueManagement() {
                       <TableHead>Customer</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead className="hidden sm:table-cell">Payment Method</TableHead>
-                      <TableHead className="hidden md:table-cell">Reference</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead>Reference</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1815,10 +1809,10 @@ export default function DueManagement() {
                           <TableCell className="font-mono">
                             ${parseFloat(payment.amount).toFixed(2)}
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell">
+                          <TableCell>
                             {PAYMENT_METHODS.find(m => m.value === payment.paymentMethod)?.label || payment.paymentMethod}
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">
+                          <TableCell>
                             {payment.reference || "-"}
                           </TableCell>
                           <TableCell className="text-right">
@@ -1858,7 +1852,6 @@ export default function DueManagement() {
                     })}
                     </TableBody>
                   </Table>
-                  </div>
                   {/* Pagination for Due Payments */}
                   {paymentsTotal > 0 && (
                     <div className="mt-4 flex items-center justify-between">
