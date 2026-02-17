@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import type { WebSocketServer } from "ws";
 import { storage } from "./storage";
 import { createWebSocketServer, emitWebOrderCreated } from "./websocket";
-import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertPositionSchema, insertDepartmentSchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema, insertCustomerSchema, insertDuePaymentSchema, insertDuePaymentAllocationSchema, insertMainProductSchema, insertMainProductItemSchema, insertUnitSchema, InsertInventoryAdjustment } from "@shared/schema";
+import { insertOrderSchema, insertOrderItemSchema, insertExpenseCategorySchema, insertExpenseSchema, insertCategorySchema, insertProductSchema, insertPurchaseSchema, insertTableSchema, insertEmployeeSchema, insertAttendanceSchema, insertLeaveSchema, insertPayrollSchema, insertStaffSalarySchema, insertStaffDeductionSchema, insertStaffAdvanceSchema, insertStaffPreviousDueSchema, insertStaffLoanSchema, insertStaffUnpaidLeaveSchema, insertPositionSchema, insertDepartmentSchema, insertSettingsSchema, insertUserSchema, insertInventoryAdjustmentSchema, insertBranchSchema, insertPaymentAdjustmentSchema, insertCustomerSchema, insertDuePaymentSchema, insertDuePaymentAllocationSchema, insertMainProductSchema, insertMainProductItemSchema, insertUnitSchema, InsertInventoryAdjustment } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import multer from "multer";
@@ -1962,7 +1962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses", async (req, res) => {
     try {
-      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam } = req.query;
+      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam, categoryId } = req.query;
       let dateFrom: Date | undefined;
       if (dateFromStr && typeof dateFromStr === "string") {
         const d = new Date(dateFromStr);
@@ -1977,7 +1977,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
         months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
       }
-      const expenses = await storage.getExpenses(branchId as string | undefined, dateFrom, dateTo, months);
+      const expenses = await storage.getExpenses(branchId as string | undefined, dateFrom, dateTo, months, categoryId as string | undefined);
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch expenses" });
@@ -1986,7 +1986,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses/export", async (req, res) => {
     try {
-      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam } = req.query;
+      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam, categoryId } = req.query;
       let dateFrom: Date | undefined;
       if (dateFromStr && typeof dateFromStr === "string") {
         const d = new Date(dateFromStr);
@@ -2001,7 +2001,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
         months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
       }
-      const expenses = await storage.getExpenses(branchId as string | undefined, dateFrom, dateTo, months);
+      const expenses = await storage.getExpenses(branchId as string | undefined, dateFrom, dateTo, months, categoryId as string | undefined);
       res.json({ expenses });
     } catch (error) {
       res.status(500).json({ error: "Failed to export expenses" });
@@ -2010,7 +2010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/expenses/stats", async (req, res) => {
     try {
-      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam } = req.query;
+      const { branchId, dateFrom: dateFromStr, dateTo: dateToStr, months: monthsParam, categoryId } = req.query;
       let dateFrom: Date | undefined;
       if (dateFromStr && typeof dateFromStr === "string") {
         const d = new Date(dateFromStr);
@@ -2025,7 +2025,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
         months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
       }
-      const stats = await storage.getExpenseStats(branchId as string | undefined, dateFrom, dateTo, months);
+      const stats = await storage.getExpenseStats(branchId as string | undefined, dateFrom, dateTo, months, categoryId as string | undefined);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching expense stats:", error);
@@ -2437,6 +2437,380 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(employees);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch employees" });
+    }
+  });
+
+  app.get("/api/employees/next-employee-id", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const nextId = await storage.getNextEmployeeId(branchId);
+      res.json({ nextId });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get next employee ID" });
+    }
+  });
+
+  app.get("/api/employees/expected-salaries", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const idsParam = req.query.ids as string;
+      const ids = idsParam ? idsParam.split(",").map((id) => id.trim()).filter(Boolean) : [];
+      if (ids.length === 0) return res.json([]);
+      const [pendingDed, pendingAdv, lastCarried, pendingPrevDue, pendingLoan, pendingUL] = await Promise.all([
+        storage.getPendingDeductionsTotalsByEmployeeIds(ids),
+        storage.getPendingAdvancesTotalsByEmployeeIds(ids),
+        storage.getLastCarriedByEmployeeIds(ids),
+        storage.getPendingPreviousDueTotalsByEmployeeIds(ids),
+        storage.getPendingLoanTotalsByEmployeeIds(ids),
+        storage.getPendingUnpaidLeaveTotalsByEmployeeIds(ids),
+      ]);
+      const result: { employeeId: string; baseSalary: number; expectedSalary: number; payable: number }[] = [];
+      for (const id of ids) {
+        const employee = await storage.getEmployee(id);
+        if (!employee) continue;
+        const base = parseFloat(employee.salary);
+        const payable = base + (lastCarried[id] ?? 0) + (pendingPrevDue[id] ?? 0) - (pendingDed[id] ?? 0) - (pendingAdv[id] ?? 0) - (pendingLoan[id] ?? 0) - (pendingUL[id] ?? 0);
+        result.push({ employeeId: id, baseSalary: base, expectedSalary: payable, payable });
+      }
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expected salaries" });
+    }
+  });
+
+  app.get("/api/employees/paginated", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+      const offset = (page - 1) * limit;
+      const search = (req.query.search as string)?.trim() || undefined;
+      const status = (req.query.status as string) || undefined;
+      const joinDateFrom = req.query.joinDateFrom ? new Date(req.query.joinDateFrom as string) : undefined;
+      const joinDateTo = req.query.joinDateTo ? new Date(req.query.joinDateTo as string) : undefined;
+      const { employees: list, total } = await storage.getEmployeesPaginated({ branchId, limit, offset, search, status, joinDateFrom, joinDateTo });
+      const ids = list.map((e) => e.id);
+      const [pendingDed, pendingAdv, lastCarried, pendingPrevDue, pendingLoan, pendingUL] = await Promise.all([
+        storage.getPendingDeductionsTotalsByEmployeeIds(ids),
+        storage.getPendingAdvancesTotalsByEmployeeIds(ids),
+        storage.getLastCarriedByEmployeeIds(ids),
+        storage.getPendingPreviousDueTotalsByEmployeeIds(ids),
+        storage.getPendingLoanTotalsByEmployeeIds(ids),
+        storage.getPendingUnpaidLeaveTotalsByEmployeeIds(ids),
+      ]);
+      const employeesWithExpected = list.map((e) => {
+        const base = parseFloat(e.salary);
+        const totalDeduction = pendingDed[e.id] ?? 0;
+        const advanceSalary = pendingAdv[e.id] ?? 0;
+        const loanAmount = pendingLoan[e.id] ?? 0;
+        const unpaidLeave = pendingUL[e.id] ?? 0;
+        const payable = base + (lastCarried[e.id] ?? 0) + (pendingPrevDue[e.id] ?? 0) - totalDeduction - advanceSalary - loanAmount - unpaidLeave;
+        return { ...e, payable, totalDeduction, advanceSalary, loanAmount, unpaidLeave };
+      });
+      res.json({ employees: employeesWithExpected, total, page, limit });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch employees" });
+    }
+  });
+
+  app.get("/api/employees/payable-summary", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const branchId = req.query.branchId as string | undefined;
+      const summary = await storage.getEmployeesPayableSummary(branchId);
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch payable summary" });
+    }
+  });
+
+  app.get("/api/employees/:id/salary-details", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      const [salaryHistory, deductions, advances, previousDue, loans, unpaidLeave, pendingDedTotal, pendingAdvTotal, lastCarried, pendingPrevDueTotal, pendingLoanTotal, pendingULTotal] = await Promise.all([
+        storage.getStaffSalariesByEmployee(req.params.id),
+        storage.getDeductionsByEmployee(req.params.id),
+        storage.getAdvancesByEmployee(req.params.id),
+        storage.getPreviousDueByEmployee(req.params.id),
+        storage.getLoansByEmployee(req.params.id),
+        storage.getUnpaidLeaveByEmployee(req.params.id),
+        storage.getPendingDeductionsTotalsByEmployeeIds([req.params.id]).then((r) => r[req.params.id] ?? 0),
+        storage.getPendingAdvancesTotalsByEmployeeIds([req.params.id]).then((r) => r[req.params.id] ?? 0),
+        storage.getLastCarriedByEmployeeIds([req.params.id]).then((r) => r[req.params.id] ?? 0),
+        storage.getPendingPreviousDueTotalsByEmployeeIds([req.params.id]).then((r) => r[req.params.id] ?? 0),
+        storage.getPendingLoanTotalsByEmployeeIds([req.params.id]).then((r) => r[req.params.id] ?? 0),
+        storage.getPendingUnpaidLeaveTotalsByEmployeeIds([req.params.id]).then((r) => r[req.params.id] ?? 0),
+      ]);
+      const base = parseFloat(employee.salary);
+      const expectedSalary = base + lastCarried - pendingDedTotal - pendingAdvTotal - pendingLoanTotal - pendingULTotal;
+      const payable = base + lastCarried + pendingPrevDueTotal - pendingDedTotal - pendingAdvTotal - pendingLoanTotal - pendingULTotal;
+      res.json({
+        employee,
+        salaryHistory,
+        deductions,
+        advances,
+        previousDue,
+        loans,
+        unpaidLeave,
+        expectedSalary,
+        payable,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch employee salary details" });
+    }
+  });
+
+  app.get("/api/employees/:id/deductions", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const status = req.query.status as "pending" | "applied" | undefined;
+      const list = await storage.getDeductionsByEmployee(req.params.id, status);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deductions" });
+    }
+  });
+
+  app.post("/api/employees/:id/deductions", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      const validated = insertStaffDeductionSchema.parse({ ...req.body, employeeId: req.params.id });
+      const deduction = await storage.createStaffDeduction(validated);
+      auditLog(req, { action: "create", entityType: "staff-deduction", entityId: deduction.id, description: `Deduction ${deduction.amount} for ${employee.name}` });
+      res.status(201).json(deduction);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      res.status(500).json({ error: "Failed to create deduction" });
+    }
+  });
+
+  app.patch("/api/employees/:id/deductions/:deductionId", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffDeduction(req.params.deductionId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Deduction not found" });
+      const updates: { amount?: string; reason?: string } = {};
+      if (req.body.amount !== undefined) updates.amount = String(req.body.amount);
+      if (req.body.reason !== undefined) updates.reason = req.body.reason;
+      const deduction = await storage.updateStaffDeduction(req.params.deductionId, updates);
+      if (!deduction) return res.status(404).json({ error: "Deduction not found" });
+      res.json(deduction);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update deduction" });
+    }
+  });
+
+  app.delete("/api/employees/:id/deductions/:deductionId", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffDeduction(req.params.deductionId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Deduction not found" });
+      const deleted = await storage.deleteStaffDeduction(req.params.deductionId);
+      if (!deleted) return res.status(404).json({ error: "Deduction not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete deduction" });
+    }
+  });
+
+  app.get("/api/employees/:id/advances", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const status = req.query.status as "pending" | "deducted" | undefined;
+      const list = await storage.getAdvancesByEmployee(req.params.id, status);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch advances" });
+    }
+  });
+
+  app.post("/api/employees/:id/advances", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      const validated = insertStaffAdvanceSchema.parse({ ...req.body, employeeId: req.params.id });
+      const advance = await storage.createStaffAdvance(validated);
+      auditLog(req, { action: "create", entityType: "staff-advance", entityId: advance.id, description: `Advance ${advance.amount} for ${employee.name}` });
+      res.status(201).json(advance);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      res.status(500).json({ error: "Failed to create advance" });
+    }
+  });
+
+  app.patch("/api/employees/:id/advances/:advanceId", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffAdvance(req.params.advanceId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Advance not found" });
+      const updates: { amount?: string; note?: string | null } = {};
+      if (req.body.amount !== undefined) updates.amount = String(req.body.amount);
+      if (req.body.note !== undefined) updates.note = req.body.note;
+      const advance = await storage.updateStaffAdvance(req.params.advanceId, updates);
+      if (!advance) return res.status(404).json({ error: "Advance not found" });
+      res.json(advance);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update advance" });
+    }
+  });
+
+  app.delete("/api/employees/:id/advances/:advanceId", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffAdvance(req.params.advanceId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Advance not found" });
+      const deleted = await storage.deleteStaffAdvance(req.params.advanceId);
+      if (!deleted) return res.status(404).json({ error: "Advance not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete advance" });
+    }
+  });
+
+  app.get("/api/employees/:id/previous-due", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const status = req.query.status as "pending" | "settled" | undefined;
+      const list = await storage.getPreviousDueByEmployee(req.params.id, status);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch previous due" });
+    }
+  });
+
+  app.post("/api/employees/:id/previous-due", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      const validated = insertStaffPreviousDueSchema.parse({ ...req.body, employeeId: req.params.id });
+      const previousDue = await storage.createStaffPreviousDue(validated);
+      auditLog(req, { action: "create", entityType: "staff-previous-due", entityId: previousDue.id, description: `Previous due ${previousDue.amount} for ${employee.name}` });
+      res.status(201).json(previousDue);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      res.status(500).json({ error: "Failed to create previous due" });
+    }
+  });
+
+  app.patch("/api/employees/:id/previous-due/:previousDueId", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffPreviousDue(req.params.previousDueId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Previous due not found" });
+      const updates: { amount?: string; note?: string | null } = {};
+      if (req.body.amount !== undefined) updates.amount = String(req.body.amount);
+      if (req.body.note !== undefined) updates.note = req.body.note;
+      const previousDue = await storage.updateStaffPreviousDue(req.params.previousDueId, updates);
+      if (!previousDue) return res.status(404).json({ error: "Previous due not found" });
+      res.json(previousDue);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update previous due" });
+    }
+  });
+
+  app.delete("/api/employees/:id/previous-due/:previousDueId", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffPreviousDue(req.params.previousDueId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Previous due not found" });
+      const deleted = await storage.deleteStaffPreviousDue(req.params.previousDueId);
+      if (!deleted) return res.status(404).json({ error: "Previous due not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete previous due" });
+    }
+  });
+
+  app.get("/api/employees/:id/loans", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const status = req.query.status as "pending" | "settled" | undefined;
+      const list = await storage.getLoansByEmployee(req.params.id, status);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch loans" });
+    }
+  });
+
+  app.post("/api/employees/:id/loans", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      const validated = insertStaffLoanSchema.parse({ ...req.body, employeeId: req.params.id });
+      const loan = await storage.createStaffLoan(validated);
+      auditLog(req, { action: "create", entityType: "staff-loan", entityId: loan.id, description: `Loan ${loan.amount} for ${employee.name}` });
+      res.status(201).json(loan);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      res.status(500).json({ error: "Failed to create loan" });
+    }
+  });
+
+  app.patch("/api/employees/:id/loans/:loanId", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffLoan(req.params.loanId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Loan not found" });
+      const updates: { amount?: string; note?: string | null } = {};
+      if (req.body.amount !== undefined) updates.amount = String(req.body.amount);
+      if (req.body.note !== undefined) updates.note = req.body.note;
+      const loan = await storage.updateStaffLoan(req.params.loanId, updates);
+      if (!loan) return res.status(404).json({ error: "Loan not found" });
+      res.json(loan);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update loan" });
+    }
+  });
+
+  app.delete("/api/employees/:id/loans/:loanId", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffLoan(req.params.loanId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Loan not found" });
+      const deleted = await storage.deleteStaffLoan(req.params.loanId);
+      if (!deleted) return res.status(404).json({ error: "Loan not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete loan" });
+    }
+  });
+
+  app.get("/api/employees/:id/unpaid-leave", requirePermission("hrm.view"), async (req, res) => {
+    try {
+      const status = req.query.status as "pending" | "applied" | undefined;
+      const list = await storage.getUnpaidLeaveByEmployee(req.params.id, status);
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unpaid leave" });
+    }
+  });
+
+  app.post("/api/employees/:id/unpaid-leave", requirePermission("hrm.create"), async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
+      const validated = insertStaffUnpaidLeaveSchema.parse({ ...req.body, employeeId: req.params.id });
+      const ul = await storage.createStaffUnpaidLeave(validated);
+      auditLog(req, { action: "create", entityType: "staff-unpaid-leave", entityId: ul.id, description: `Unpaid leave ${ul.amount} for ${employee.name}` });
+      res.status(201).json(ul);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid data", details: error.errors });
+      res.status(500).json({ error: "Failed to create unpaid leave" });
+    }
+  });
+
+  app.patch("/api/employees/:id/unpaid-leave/:ulId", requirePermission("hrm.edit"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffUnpaidLeave(req.params.ulId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Unpaid leave not found" });
+      const updates: { amount?: string; note?: string | null } = {};
+      if (req.body.amount !== undefined) updates.amount = String(req.body.amount);
+      if (req.body.note !== undefined) updates.note = req.body.note;
+      const ul = await storage.updateStaffUnpaidLeave(req.params.ulId, updates);
+      if (!ul) return res.status(404).json({ error: "Unpaid leave not found" });
+      res.json(ul);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update unpaid leave" });
+    }
+  });
+
+  app.delete("/api/employees/:id/unpaid-leave/:ulId", requirePermission("hrm.delete"), async (req, res) => {
+    try {
+      const existing = await storage.getStaffUnpaidLeave(req.params.ulId);
+      if (!existing || existing.employeeId !== req.params.id) return res.status(404).json({ error: "Unpaid leave not found" });
+      const deleted = await storage.deleteStaffUnpaidLeave(req.params.ulId);
+      if (!deleted) return res.status(404).json({ error: "Unpaid leave not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete unpaid leave" });
     }
   });
 

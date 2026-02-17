@@ -47,7 +47,6 @@ import SalesManage from "@/pages/sales";
 import ExpenseManage from "@/pages/expenses";
 import StaffSalary from "@/pages/staff-salary";
 import ItemManage from "@/pages/items";
-import PurchaseManage from "@/pages/purchases";
 import Inventory from "@/pages/inventory";
 import Reports from "@/pages/reports";
 import BankStatement from "@/pages/bank-statement";
@@ -73,7 +72,6 @@ function Router() {
       <Route path="/expenses" component={ExpenseManage} />
       <Route path="/staff-salary" component={StaffSalary} />
       <Route path="/items" component={ItemManage} />
-      <Route path="/purchases" component={PurchaseManage} />
       <Route path="/inventory" component={Inventory} />
       <Route path="/reports" component={Reports} />
       <Route path="/bank-statement" component={BankStatement} />

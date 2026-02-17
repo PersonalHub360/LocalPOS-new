@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useInfiniteQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -101,7 +101,8 @@ export default function ItemManage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  /** Multiple category filter: empty = all categories; otherwise show items in any of the selected categories. */
+  /** Multiple category filter: empty = all categories; otherwise show items in any of the selected categories. Use NONE_CATEGORY_ID for items without a category. */
+  const NONE_CATEGORY_ID = "__none__";
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
@@ -237,7 +238,10 @@ export default function ItemManage() {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesCategory = selectedCategoryIds.length === 0 || selectedCategoryIds.includes(product.categoryId);
+    const hasNoCategory = !product.categoryId || product.categoryId === "";
+    const matchesCategory = selectedCategoryIds.length === 0
+      || selectedCategoryIds.includes(product.categoryId)
+      || (selectedCategoryIds.includes(NONE_CATEGORY_ID) && hasNoCategory);
     
     let matchesDate = true;
     const productDate = new Date(product.createdAt);
@@ -1677,7 +1681,9 @@ export default function ItemManage() {
                     {selectedCategoryIds.length === 0
                       ? "All Categories"
                       : selectedCategoryIds.length === 1
-                        ? categories.find((c) => c.id === selectedCategoryIds[0])?.name ?? "1 category"
+                        ? selectedCategoryIds[0] === NONE_CATEGORY_ID
+                          ? "No category"
+                          : categories.find((c) => c.id === selectedCategoryIds[0])?.name ?? "1 category"
                         : `${selectedCategoryIds.length} categories`}
                   </Button>
                 </PopoverTrigger>
@@ -1692,6 +1698,26 @@ export default function ItemManage() {
                         onCheckedChange={(checked) => checked && setSelectedCategoryIds([])}
                       />
                       <span className="text-sm font-medium">All Categories</span>
+                    </div>
+                    <div
+                      className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => {
+                        setSelectedCategoryIds((prev) =>
+                          prev.includes(NONE_CATEGORY_ID)
+                            ? prev.filter((id) => id !== NONE_CATEGORY_ID)
+                            : [...prev, NONE_CATEGORY_ID]
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        checked={selectedCategoryIds.includes(NONE_CATEGORY_ID)}
+                        onCheckedChange={(checked) => {
+                          setSelectedCategoryIds((prev) =>
+                            checked ? [...prev, NONE_CATEGORY_ID] : prev.filter((id) => id !== NONE_CATEGORY_ID)
+                          );
+                        }}
+                      />
+                      <span className="text-sm">No category</span>
                     </div>
                     {categories.map((category) => (
                       <div

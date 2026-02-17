@@ -1022,6 +1022,8 @@ export default function POS() {
         itemDiscounts: totalItemDiscounts,
         subtotal,
         discount: globalDiscountAmount,
+        discountType,
+        discountRaw: manualDiscount,
         totalDiscount,
         total: subtotal - globalDiscountAmount,
         tableId: selectedTable,
@@ -1362,6 +1364,15 @@ export default function POS() {
                   data-testid="button-category-all"
                 >
                   Show All
+                </Button>
+                <Button
+                  variant={selectedCategory === "__none__" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCategory("__none__")}
+                  className="whitespace-nowrap shrink-0 text-xs sm:text-sm h-7 sm:h-8"
+                  data-testid="button-category-none"
+                >
+                  None
                 </Button>
                 {categories.map((category) => (
                   <Button

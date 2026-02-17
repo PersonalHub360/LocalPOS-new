@@ -78,17 +78,48 @@ export default function ExpenseManage() {
     description: "",
   });
 
-  // When months selected, use exact date-time range in local time (fixes timezone: Jan export not including Feb 1st)
+  // Build same date range and filters for list + stats (stats cards update with filtering, like sales page)
   const getExpensesQueryParams = () => {
     const params = new URLSearchParams();
     if (selectedBranchId) params.append("branchId", selectedBranchId);
+    if (selectedCategory !== "all") params.append("categoryId", selectedCategory);
+    let dateFrom: Date | undefined;
+    let dateTo: Date | undefined;
     if (selectedMonths.length > 0) {
       const sorted = [...selectedMonths].sort();
       const [y1, m1] = sorted[0].split("-").map(Number);
       const [y2, m2] = sorted[sorted.length - 1].split("-").map(Number);
-      params.append("dateFrom", new Date(y1, m1 - 1, 1, 0, 0, 0, 0).toISOString());
-      params.append("dateTo", new Date(y2, m2, 0, 23, 59, 59, 999).toISOString());
+      dateFrom = new Date(y1, m1 - 1, 1, 0, 0, 0, 0);
+      dateTo = new Date(y2, m2, 0, 23, 59, 59, 999);
+    } else {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      if (dateFilter === "today") {
+        dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        dateTo = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      } else if (dateFilter === "yesterday") {
+        const y = new Date(now);
+        y.setDate(y.getDate() - 1);
+        dateFrom = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 0, 0, 0, 0);
+        dateTo = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999);
+      } else if (dateFilter === "thisMonth") {
+        dateFrom = new Date(currentYear, now.getMonth(), 1);
+        dateTo = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+      } else if (dateFilter === "lastMonth") {
+        dateFrom = new Date(currentYear, now.getMonth() - 1, 1);
+        dateTo = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+      } else if (dateFilter === "custom" && customDate) {
+        dateFrom = new Date(customDate.getFullYear(), customDate.getMonth(), customDate.getDate(), 0, 0, 0, 0);
+        dateTo = new Date(customDate.getFullYear(), customDate.getMonth(), customDate.getDate(), 23, 59, 59, 999);
+      } else if (["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"].includes(dateFilter)) {
+        const monthMap: Record<string, number> = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6, august: 7, september: 8, october: 9, november: 10, december: 11 };
+        const mo = monthMap[dateFilter] ?? 0;
+        dateFrom = new Date(currentYear, mo, 1);
+        dateTo = new Date(currentYear, mo + 1, 0, 23, 59, 59, 999);
+      }
     }
+    if (dateFrom) params.append("dateFrom", dateFrom.toISOString());
+    if (dateTo) params.append("dateTo", dateTo.toISOString());
     return params.toString();
   };
 
@@ -103,7 +134,7 @@ export default function ExpenseManage() {
     },
   });
 
-  const { data: expenseStats } = useQuery<{ totalAmount: number; count: number; avgExpense: number }>({
+  const { data: expenseStats } = useQuery<{ totalAmount: number; count: number; avgExpense: number; categoryCount: number }>({
     queryKey: ["/api/expenses/stats", expensesParamsString],
     queryFn: async () => {
       const res = await fetch(`/api/expenses/stats${expensesParamsString ? `?${expensesParamsString}` : ""}`, { credentials: "include" });
@@ -126,6 +157,7 @@ export default function ExpenseManage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses/stats"] });
       setShowAddExpenseDialog(false);
       resetExpenseForm();
       toast({ title: "Success", description: "Expense added successfully" });
@@ -141,6 +173,7 @@ export default function ExpenseManage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses/stats"] });
       setEditExpense(null);
       toast({ title: "Success", description: "Expense updated successfully" });
     },
@@ -160,6 +193,7 @@ export default function ExpenseManage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses/stats"] });
       setDeleteExpenseId(null);
       toast({ title: "Success", description: "Expense deleted successfully" });
     },
@@ -487,111 +521,22 @@ export default function ExpenseManage() {
     }
   };
 
-  const filteredExpenses = expenses.filter(expense => {
-    const category = categories.find(c => c.id === expense.categoryId);
+  // List is already filtered by category + date from backend; only filter by search client-side
+  const filteredExpenses = expenses.filter((expense) => {
+    const category = categories.find((c) => c.id === expense.categoryId);
     const searchLower = debouncedSearchTerm.toLowerCase();
-    
-    const matchesSearch = (
+    return (
       expense.id.toLowerCase().includes(searchLower) ||
-      expense.description.toLowerCase().includes(searchLower) ||
-      category?.name.toLowerCase().includes(searchLower) ||
-      expense.total.includes(debouncedSearchTerm)
+      (expense.description && expense.description.toLowerCase().includes(searchLower)) ||
+      (category?.name && category.name.toLowerCase().includes(searchLower)) ||
+      (expense.total && expense.total.includes(debouncedSearchTerm))
     );
-    
-    const matchesCategory = selectedCategory === "all" || expense.categoryId === selectedCategory;
-    
-    const expenseDate = new Date(expense.expenseDate);
-    let matchesDate = true;
-    if (selectedMonths.length > 0) {
-      matchesDate = selectedMonths.some((m) => {
-        const [y, mo] = m.split("-").map(Number);
-        return expenseDate.getFullYear() === y && expenseDate.getMonth() + 1 === mo;
-      });
-    } else {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    
-    if (dateFilter === "today") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      expenseDate.setHours(0, 0, 0, 0);
-      matchesDate = expenseDate.getTime() === today.getTime();
-    } else if (dateFilter === "yesterday") {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      yesterday.setHours(0, 0, 0, 0);
-      expenseDate.setHours(0, 0, 0, 0);
-      matchesDate = expenseDate.getTime() === yesterday.getTime();
-    } else if (dateFilter === "thisMonth") {
-      const start = new Date(currentYear, now.getMonth(), 1);
-      const end = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "lastMonth") {
-      const start = new Date(currentYear, now.getMonth() - 1, 1);
-      const end = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "january") {
-      const start = new Date(currentYear, 0, 1);
-      const end = new Date(currentYear, 1, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "february") {
-      const start = new Date(currentYear, 1, 1);
-      const end = new Date(currentYear, 2, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "march") {
-      const start = new Date(currentYear, 2, 1);
-      const end = new Date(currentYear, 3, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "april") {
-      const start = new Date(currentYear, 3, 1);
-      const end = new Date(currentYear, 4, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "may") {
-      const start = new Date(currentYear, 4, 1);
-      const end = new Date(currentYear, 5, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "june") {
-      const start = new Date(currentYear, 5, 1);
-      const end = new Date(currentYear, 6, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "july") {
-      const start = new Date(currentYear, 6, 1);
-      const end = new Date(currentYear, 7, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "august") {
-      const start = new Date(currentYear, 7, 1);
-      const end = new Date(currentYear, 8, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "september") {
-      const start = new Date(currentYear, 8, 1);
-      const end = new Date(currentYear, 9, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "october") {
-      const start = new Date(currentYear, 9, 1);
-      const end = new Date(currentYear, 10, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "november") {
-      const start = new Date(currentYear, 10, 1);
-      const end = new Date(currentYear, 11, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "december") {
-      const start = new Date(currentYear, 11, 1);
-      const end = new Date(currentYear, 12, 0, 23, 59, 59, 999);
-      matchesDate = expenseDate >= start && expenseDate <= end;
-    } else if (dateFilter === "custom" && customDate) {
-      const selectedDate = new Date(customDate);
-      selectedDate.setHours(0, 0, 0, 0);
-      expenseDate.setHours(0, 0, 0, 0);
-      matchesDate = expenseDate.getTime() === selectedDate.getTime();
-    }
-    }
-    
-    return matchesSearch && matchesCategory && matchesDate;
   });
 
-  const totalExpenses = expenseStats?.totalAmount ?? expenses.reduce((sum, expense) => sum + parseFloat(expense.total), 0);
-  const expenseCount = expenseStats?.count ?? expenses.length;
-  const avgExpense = expenseStats?.avgExpense ?? (expenseCount > 0 ? totalExpenses / expenseCount : 0);
+  const totalExpenses = expenseStats?.totalAmount ?? 0;
+  const expenseCount = expenseStats?.count ?? 0;
+  const avgExpense = expenseStats?.avgExpense ?? 0;
+  const categoryCount = expenseStats?.categoryCount ?? 0;
 
   return (
     <div className="h-full overflow-auto">
@@ -657,9 +602,9 @@ export default function ExpenseManage() {
               <FolderOpen className="h-5 w-5 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{categories.length}</div>
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{categoryCount}</div>
               <p className="text-xs text-muted-foreground font-medium">
-                Active categories
+                Categories in filtered results
               </p>
             </CardContent>
           </Card>

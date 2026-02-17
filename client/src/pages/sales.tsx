@@ -560,7 +560,7 @@ export default function SalesManage() {
       fetchOrderItems(viewSale.id);
     } else if (editSale) {
       fetchOrderItems(editSale.id);
-      // Load existing payment splits if any
+      // Load existing payment splits if any; otherwise derive one from paymentMethod so "Pay by" is editable
       if (editSale.paymentSplits) {
         try {
           const splits = JSON.parse(editSale.paymentSplits);
@@ -568,6 +568,13 @@ export default function SalesManage() {
         } catch {
           setPaymentSplits([]);
         }
+      } else if (editSale.paymentMethod && editSale.paymentMethod !== "split") {
+        // Single payment method stored without splits: show as one editable split
+        const method = (editSale.paymentMethod || "").toLowerCase().replace(/\s+/g, "_");
+        const validMethods = ["aba", "acleda", "cash", "due", "card", "cash_aba", "cash_acleda"];
+        const normalizedMethod = validMethods.includes(method) ? method : "cash";
+        const amount = parseFloat(editSale.total) || 0;
+        setPaymentSplits(amount > 0 ? [{ method: normalizedMethod, amount }] : []);
       } else {
         setPaymentSplits([]);
       }
@@ -727,6 +734,14 @@ export default function SalesManage() {
     setPaymentSplits(paymentSplits.filter((_, i) => i !== index));
   };
 
+  const updatePaymentSplitMethod = (index: number, method: string) => {
+    setPaymentSplits(prev => prev.map((s, i) => i === index ? { ...s, method } : s));
+  };
+
+  const updatePaymentSplitAmount = (index: number, amount: number) => {
+    setPaymentSplits(prev => prev.map((s, i) => i === index ? { ...s, amount } : s));
+  };
+
   const getPaymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
       "aba": "ABA",
@@ -751,12 +766,21 @@ export default function SalesManage() {
       primaryPaymentMethod = methods.length === 1 ? paymentSplits[0].method : "split";
     }
 
+    const subtotalNum = parseFloat(editSale.subtotal) || 0;
+    const discountNum = parseFloat(editSale.discount) || 0;
+    const discountType = (editSale.discountType as "amount" | "percentage") || "amount";
+    const discountAmount = discountType === "percentage" ? (subtotalNum * discountNum) / 100 : discountNum;
+    const newTotal = Math.max(0, subtotalNum - discountAmount);
+
     const updateData: any = {
       customerName: editSale.customerName,
       paymentStatus: editSale.paymentStatus,
       paymentMethod: primaryPaymentMethod,
       paymentSplits: paymentSplits.length > 0 ? JSON.stringify(paymentSplits) : null,
       status: editSale.status,
+      discount: String(discountNum),
+      discountType: editSale.discountType || "amount",
+      total: newTotal.toFixed(2),
     };
 
     // Add createdAt if it was modified
@@ -1447,7 +1471,11 @@ export default function SalesManage() {
                         <TableCell data-testid={`text-customer-${sale.id}`}>
                           {sale.customerName || "Walk-in Customer"}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell" data-testid={`text-discount-${sale.id}`}>${sale.discount}</TableCell>
+                        <TableCell className="hidden lg:table-cell" data-testid={`text-discount-${sale.id}`}>
+                        {(sale.discountType as string) === "percentage"
+                          ? `${sale.discount}%`
+                          : `$${parseFloat(sale.discount || "0").toFixed(2)}`}
+                      </TableCell>
                         <TableCell data-testid={`text-total-${sale.id}`}>${sale.total}</TableCell>
                         <TableCell className="hidden sm:table-cell" data-testid={`text-pay-by-${sale.id}`}>
                           {sale.paymentSplits ? (() => {
@@ -2005,7 +2033,11 @@ export default function SalesManage() {
                 </div>
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Discount</Label>
-                  <p className="font-medium" data-testid="view-discount">${viewSale.discount}</p>
+                  <p className="font-medium" data-testid="view-discount">
+                    {(viewSale.discountType as string) === "percentage"
+                      ? `${viewSale.discount}%`
+                      : `$${parseFloat(viewSale.discount || "0").toFixed(2)}`}
+                  </p>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <Label className="text-lg font-semibold">Total</Label>
@@ -2104,6 +2136,57 @@ export default function SalesManage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="edit-discount-type">Discount Type</Label>
+                    <Select
+                      value={(editSale.discountType as string) || "amount"}
+                      onValueChange={(value: "amount" | "percentage") => {
+                        setEditSale((prev) => {
+                          if (!prev) return prev;
+                          const next = { ...prev, discountType: value };
+                          const sub = parseFloat(prev.subtotal);
+                          const disc = parseFloat(prev.discount || "0") || 0;
+                          const amount = value === "percentage" ? (sub * disc) / 100 : disc;
+                          next.total = Math.max(0, sub - amount).toFixed(2);
+                          return next;
+                        });
+                      }}
+                    >
+                      <SelectTrigger id="edit-discount-type" data-testid="select-edit-discount-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="amount">Amount ($)</SelectItem>
+                        <SelectItem value="percentage">Percentage (%)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-discount">Discount</Label>
+                    <Input
+                      id="edit-discount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      data-testid="input-edit-discount"
+                      value={editSale.discount ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditSale((prev) => {
+                          if (!prev) return prev;
+                          const next = { ...prev, discount: val };
+                          const sub = parseFloat(prev.subtotal);
+                          const disc = parseFloat(val) || 0;
+                          const type = (prev.discountType as "amount" | "percentage") || "amount";
+                          const amount = type === "percentage" ? (sub * disc) / 100 : disc;
+                          next.total = Math.max(0, sub - amount).toFixed(2);
+                          return next;
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Process Payment Section */}
@@ -2113,22 +2196,39 @@ export default function SalesManage() {
                 {/* Payment Splits List */}
                 {paymentSplits.length > 0 && (
                   <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Current Payments:</Label>
+                    <Label className="text-sm text-muted-foreground">Current Payments (editable):</Label>
                     <div className="border rounded-md divide-y">
                       {paymentSplits.map((split, index) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between p-3 bg-muted/30"
+                          className="flex flex-wrap items-center gap-2 p-3 bg-muted/30"
                           data-testid={`payment-split-${index}`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium capitalize">
-                              {getPaymentMethodLabel(split.method)}
-                            </span>
-                            <span className="text-lg font-bold text-primary">
-                              ${split.amount.toFixed(2)}
-                            </span>
-                          </div>
+                          <Select
+                            value={split.method}
+                            onValueChange={(value) => updatePaymentSplitMethod(index, value)}
+                          >
+                            <SelectTrigger className="w-[140px] h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="aba">ABA</SelectItem>
+                              <SelectItem value="acleda">Acleda</SelectItem>
+                              <SelectItem value="cash">Cash</SelectItem>
+                              <SelectItem value="due">Due</SelectItem>
+                              <SelectItem value="card">Card</SelectItem>
+                              <SelectItem value="cash_aba">Cash And ABA</SelectItem>
+                              <SelectItem value="cash_acleda">Cash And Acleda</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-28 h-9 font-mono"
+                            value={split.amount}
+                            onChange={(e) => updatePaymentSplitAmount(index, parseFloat(e.target.value) || 0)}
+                          />
                           <Button
                             size="sm"
                             variant="ghost"
@@ -2265,7 +2365,11 @@ export default function SalesManage() {
                 </div>
                 <div className="flex justify-between">
                   <Label className="text-muted-foreground">Discount</Label>
-                  <p className="font-medium">${editSale.discount}</p>
+                  <p className="font-medium">
+                    {(editSale.discountType as string) === "percentage"
+                      ? `${editSale.discount}%`
+                      : `$${parseFloat(editSale.discount || "0").toFixed(2)}`}
+                  </p>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <Label className="text-lg font-semibold">Total</Label>

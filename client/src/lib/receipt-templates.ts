@@ -21,6 +21,18 @@ interface ReceiptData {
   paymentDetails: string;
 }
 
+/** Format discount for receipt: returns { label: "20%" or "$2.00", amount: number } so total = subtotal - amount */
+function getDiscountDisplay(sale: Order): { label: string; amount: number } {
+  const sub = parseFloat(sale.subtotal) || 0;
+  const disc = parseFloat(sale.discount) || 0;
+  const type = (sale.discountType || "amount") as "amount" | "percentage";
+  if (type === "percentage") {
+    const amount = (sub * disc) / 100;
+    return { label: `${disc}%`, amount };
+  }
+  return { label: `$${disc.toFixed(2)}`, amount: disc };
+}
+
 export function generateReceiptHTML(
   template: ReceiptTemplate,
   data: ReceiptData
@@ -89,6 +101,7 @@ function generateClassicTemplate(
   invoicePrefix: string
 ): string {
   const { sale, items, totalKHR, paymentDetails } = data;
+  const discountDisplay = getDiscountDisplay(sale);
   
   const itemsRows = items.map(item => `
     <tr>
@@ -186,7 +199,7 @@ function generateClassicTemplate(
         </table>
         <div class="summary">
           <div><span>Subtotal:</span><span>$${parseFloat(sale.subtotal).toFixed(2)}</span></div>
-          <div><span>Discount:</span><span>$${parseFloat(sale.discount).toFixed(2)}</span></div>
+          <div><span>Discount (${discountDisplay.label}):</span><span>-$${discountDisplay.amount.toFixed(2)}</span></div>
           <div class="total"><span>TOTAL:</span><span>$${parseFloat(sale.total).toFixed(2)}</span></div>
           <div><span>Total (KHR):</span><span>៛${totalKHR}</span></div>
         </div>
@@ -208,6 +221,7 @@ function generateModernTemplate(
   invoicePrefix: string
 ): string {
   const { sale, items, totalKHR, paymentDetails } = data;
+  const discountDisplay = getDiscountDisplay(sale);
   
   const itemsRows = items.map(item => `
     <tr>
@@ -296,8 +310,8 @@ function generateModernTemplate(
             <span>$${parseFloat(sale.subtotal).toFixed(2)}</span>
           </div>
           <div class="summary-row">
-            <span>Discount</span>
-            <span>$${parseFloat(sale.discount).toFixed(2)}</span>
+            <span>Discount (${discountDisplay.label})</span>
+            <span>-$${discountDisplay.amount.toFixed(2)}</span>
           </div>
           <div class="summary-row summary-total">
             <span>Total</span>
@@ -328,6 +342,7 @@ function generateCompactTemplate(
   invoicePrefix: string
 ): string {
   const { sale, items, totalKHR, paymentDetails } = data;
+  const discountDisplay = getDiscountDisplay(sale);
   
   const itemsRows = items.map(item => `
     <tr>
@@ -390,7 +405,7 @@ function generateCompactTemplate(
         </table>
         <div class="summary">
           <div>Subtotal: $${parseFloat(sale.subtotal).toFixed(2)}</div>
-          <div>Discount: $${parseFloat(sale.discount).toFixed(2)}</div>
+          <div>Discount (${discountDisplay.label}): -$${discountDisplay.amount.toFixed(2)}</div>
           <div class="total">TOTAL: $${parseFloat(sale.total).toFixed(2)}</div>
           <div style="font-size: 9px;">KHR: ៛${totalKHR}</div>
         </div>
@@ -410,6 +425,7 @@ function generateDetailedTemplate(
   invoicePrefix: string
 ): string {
   const { sale, items, totalKHR, paymentDetails } = data;
+  const discountDisplay = getDiscountDisplay(sale);
   
   const itemsRows = items.map(item => `
     <tr>
@@ -503,8 +519,8 @@ function generateDetailedTemplate(
             <span style="font-weight: 600;">$${parseFloat(sale.subtotal).toFixed(2)}</span>
           </div>
           <div class="summary-row">
-            <span style="font-weight: 600;">Discount Applied:</span>
-            <span style="font-weight: 600; color: #dc3545;">-$${parseFloat(sale.discount).toFixed(2)}</span>
+            <span style="font-weight: 600;">Discount (${discountDisplay.label}):</span>
+            <span style="font-weight: 600; color: #dc3545;">-$${discountDisplay.amount.toFixed(2)}</span>
           </div>
           <div class="summary-row summary-total">
             <span>GRAND TOTAL:</span>
@@ -540,6 +556,7 @@ function generateElegantTemplate(
   invoicePrefix: string
 ): string {
   const { sale, items, totalKHR, paymentDetails } = data;
+  const discountDisplay = getDiscountDisplay(sale);
   
   const itemsRows = items.map(item => `
     <tr>
@@ -661,8 +678,8 @@ function generateElegantTemplate(
             <span>$${parseFloat(sale.subtotal).toFixed(2)}</span>
           </div>
           <div class="summary-row">
-            <span>Discount</span>
-            <span>$${parseFloat(sale.discount).toFixed(2)}</span>
+            <span>Discount (${discountDisplay.label})</span>
+            <span>-$${discountDisplay.amount.toFixed(2)}</span>
           </div>
           <div class="summary-row summary-total">
             <span>Total</span>

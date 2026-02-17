@@ -432,9 +432,11 @@ export function OrderPanel({
               </div>
             )}
             
-            {discountType === 'percentage' && manualDiscount > 0 && (
+            {manualDiscount > 0 && (
               <div className="flex justify-end text-xs text-muted-foreground">
-                Global Discount: ${globalDiscountAmount.toFixed(2)}
+                {discountType === 'percentage'
+                  ? `Global Discount (${manualDiscount}%): -$${globalDiscountAmount.toFixed(2)}`
+                  : `Global Discount ($): -$${globalDiscountAmount.toFixed(2)}`}
               </div>
             )}
           </div>

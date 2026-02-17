@@ -44,6 +44,8 @@ interface ReceiptPrintModalProps {
     itemDiscounts?: number;
     subtotal: number;
     discount: number;
+    discountType?: 'amount' | 'percentage';
+    discountRaw?: number;
     totalDiscount?: number;
     total: number;
     tableId?: string | null;
@@ -138,6 +140,7 @@ export function ReceiptPrintModal({
 
       // Create a mock Order object for the template generator
       const totalDiscount = order.totalDiscount !== undefined ? order.totalDiscount : order.discount;
+      const isPct = order.discountType === 'percentage' && order.discountRaw != null;
       const mockOrder: Order = {
         id: `temp-${Date.now()}`,
         orderNumber: order.orderNumber,
@@ -149,8 +152,8 @@ export function ReceiptPrintModal({
         customerPhone: null,
         orderSource: "pos",
         subtotal: order.originalSubtotal !== undefined ? order.originalSubtotal.toString() : order.subtotal.toString(),
-        discount: totalDiscount.toString(),
-        discountType: "amount",
+        discount: isPct ? String(order.discountRaw) : totalDiscount.toString(),
+        discountType: isPct ? "percentage" : "amount",
         total: order.total.toString(),
         dueAmount: null,
         paidAmount: order.total.toString(),
@@ -446,7 +449,9 @@ export function ReceiptPrintModal({
             </div>
             {order.discount > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Global Discount:</span>
+                <span className="text-muted-foreground">
+                  Global Discount{order.discountType === 'percentage' && order.discountRaw != null ? ` (${order.discountRaw}%)` : ' ($)'}:
+                </span>
                 <div className="text-right">
                   <p className="font-mono font-medium text-accent">
                     -{formatDualCurrency(order.discount, settings).usd}
