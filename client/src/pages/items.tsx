@@ -2110,15 +2110,14 @@ export default function ItemManage() {
                           </html>
                         `);
                       } else {
-                        // Generate barcode SVG - larger size for print scannability (min ~2-3cm height)
+                        // Generate barcode SVG
                         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                         JsBarcode(svg, barcode, {
                           format: "CODE128",
-                          width: 3,
-                          height: 120,
+                          width: 2,
+                          height: 80,
                           displayValue: true,
-                          fontSize: 18,
-                          margin: 10,
+                          fontSize: 14,
                         });
                         const svgString = new XMLSerializer().serializeToString(svg);
                         const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
