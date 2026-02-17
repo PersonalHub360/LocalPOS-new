@@ -308,10 +308,10 @@ export default function DueManagement() {
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [paymentsPageSize, setPaymentsPageSize] = useState(10);
   
-  // Advanced filters
+  // Advanced filters - initially no date filter (show all date ranges)
   const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
+    from: undefined,
+    to: undefined,
   });
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
@@ -319,8 +319,12 @@ export default function DueManagement() {
   const [maxAmount, setMaxAmount] = useState<string>("");
 
   // When user selects months, set date range to first day of first month -> last day of last month
+  // When no months selected, clear date range (show all dates)
   useEffect(() => {
-    if (selectedMonths.length === 0) return;
+    if (selectedMonths.length === 0) {
+      setDateRange({ from: undefined, to: undefined });
+      return;
+    }
     const sorted = [...selectedMonths].sort();
     const [y1, m1] = sorted[0].split("-").map(Number);
     const [y2, m2] = sorted[sorted.length - 1].split("-").map(Number);
@@ -1394,7 +1398,7 @@ export default function DueManagement() {
                             {dateRange.from && dateRange.to ? (
                               `${format(dateRange.from, "MMM dd")} - ${format(dateRange.to, "MMM dd")}`
                             ) : (
-                              "Pick a date range"
+                              "All dates"
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -1402,7 +1406,10 @@ export default function DueManagement() {
                           <CalendarComponent
                             mode="range"
                             selected={{ from: dateRange.from, to: dateRange.to }}
-                            onSelect={(range) => setDateRange({ from: range?.from, to: range?.to })}
+                            onSelect={(range) => {
+                              setDateRange({ from: range?.from, to: range?.to });
+                              if (range?.from || range?.to) setSelectedMonths([]); // Clear months when using date range
+                            }}
                             numberOfMonths={2}
                           />
                         </PopoverContent>
@@ -1465,10 +1472,7 @@ export default function DueManagement() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          setDateRange({
-                            from: startOfMonth(new Date()),
-                            to: endOfMonth(new Date()),
-                          });
+                          setDateRange({ from: undefined, to: undefined });
                           setSelectedMonths([]);
                           setStatusFilter("pending");
                           setMinAmount("");

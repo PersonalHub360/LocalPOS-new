@@ -380,7 +380,7 @@ export interface IStorage {
     allocations: { orderId: string; amount: number }[]
   ): Promise<DuePayment>;
   
-  getCustomerDueSummary(customerId: string): Promise<{
+  getCustomerDueSummary(customerId: string, branchId?: string | null, dateFrom?: Date, dateTo?: Date): Promise<{
     totalDue: number;
     totalPaid: number;
     balance: number;
@@ -3799,53 +3799,91 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getCustomerDueSummary(customerId: string): Promise<{
+  async getCustomerDueSummary(customerId: string, branchId?: string | null, dateFrom?: Date, dateTo?: Date): Promise<{
     totalDue: number;
     totalPaid: number;
     balance: number;
     credit: number;
     ordersCount: number;
   }> {
-    // Get all orders for this customer (including paid, partial, and due)
-    const allOrders = await db.select().from(orders)
-      .where(eq(orders.customerId, customerId));
-    
-    // Filter orders with due or partial payment status
-    const dueOrders = allOrders.filter(order => 
+    // Build order conditions
+    const orderConditions: any[] = [eq(orders.customerId, customerId)];
+    if (branchId) {
+      orderConditions.push(
+        or(
+          eq(orders.branchId, branchId),
+          sql`${orders.branchId} IS NULL`
+        )
+      );
+    }
+    if (dateFrom) orderConditions.push(gte(orders.createdAt, dateFrom));
+    if (dateTo) orderConditions.push(lte(orders.createdAt, dateTo));
+
+    const allOrders = await db.select().from(orders).where(and(...orderConditions));
+
+    // Due-related: orderSource=due-management OR paymentStatus=due/partial OR has allocations
+    const allocations = await db.select().from(duePaymentAllocations);
+    const orderIdsWithAllocations = new Set(allocations.map(a => a.orderId));
+    const dueRelatedOrders = allOrders.filter(order =>
+      order.orderSource === "due-management" ||
+      order.paymentStatus === "due" ||
+      order.paymentStatus === "partial" ||
+      orderIdsWithAllocations.has(order.id)
+    );
+    const dueOrders = allOrders.filter(order =>
       order.paymentStatus === "due" || order.paymentStatus === "partial"
     );
-    
-    // Calculate totals from all orders (to show total business with customer)
-    let totalDue = 0; // Total amount of all orders
-    let totalPaid = 0; // Total amount paid across all orders
-    
-    for (const order of allOrders) {
-      const orderTotal = parseFloat(order.total || "0");
-      const orderPaid = parseFloat(order.paidAmount || "0");
-      totalDue += orderTotal;
-      totalPaid += orderPaid;
-    }
-    
-    // Calculate current balance (outstanding amount)
-    // This is the sum of (total - paid) for orders with due/partial status
+
+    let totalDue = 0;
+    let totalPaid = 0;
     let balance = 0;
-    for (const order of dueOrders) {
-      const orderTotal = parseFloat(order.total || "0");
-      const orderPaid = parseFloat(order.paidAmount || "0");
-      const orderBalance = orderTotal - orderPaid;
-      balance += orderBalance;
+
+    if (dateFrom || dateTo) {
+      // Date-filtered: stats from orders in range only
+      for (const order of dueRelatedOrders) {
+        const orderTotal = parseFloat(order.total || "0");
+        const orderPaid = parseFloat(order.paidAmount || "0");
+        totalDue += orderTotal;
+        totalPaid += orderPaid;
+      }
+      for (const order of dueOrders) {
+        const orderTotal = parseFloat(order.total || "0");
+        const orderPaid = parseFloat(order.paidAmount || "0");
+        balance += orderTotal - orderPaid;
+      }
+      // totalPaid for date range = payments received in range (not order.paidAmount)
+      const { payments } = await this.getDuePayments(customerId, branchId);
+      const paymentsInRange = payments.filter(p => {
+        const d = new Date(p.paymentDate);
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo && d > dateTo) return false;
+        return true;
+      });
+      totalPaid = paymentsInRange.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    } else {
+      // No date filter: all-time totals (original behavior)
+      for (const order of allOrders) {
+        const orderTotal = parseFloat(order.total || "0");
+        const orderPaid = parseFloat(order.paidAmount || "0");
+        totalDue += orderTotal;
+        totalPaid += orderPaid;
+      }
+      for (const order of dueOrders) {
+        const orderTotal = parseFloat(order.total || "0");
+        const orderPaid = parseFloat(order.paidAmount || "0");
+        balance += orderTotal - orderPaid;
+      }
     }
-    
-    // Get unapplied payments (credit)
-    const { payments } = await this.getDuePayments(customerId);
+
+    const { payments } = await this.getDuePayments(customerId, branchId);
     const credit = payments.reduce((sum, p) => sum + parseFloat(p.unappliedAmount || "0"), 0);
-    
+
     return {
-      totalDue, // Total of all orders
-      totalPaid, // Total paid across all orders
-      balance, // Current outstanding balance (only from due/partial orders)
-      credit, // Unapplied payments
-      ordersCount: dueOrders.length, // Count of orders with due/partial status
+      totalDue,
+      totalPaid,
+      balance,
+      credit,
+      ordersCount: dueOrders.length,
     };
   }
 
@@ -3867,43 +3905,39 @@ export class DatabaseStorage implements IStorage {
     credit: number;
     ordersCount: number;
   }>; total: number }> {
-    // Get all customers from database
     const allCustomers = await this.getCustomers(branchId);
-    
-    // Also get all orders to find customers that might not be in customers table yet
-    // (e.g., created from POS with just customerName)
+    const allocations = await db.select().from(duePaymentAllocations);
+    const orderIdsWithAllocations = new Set(allocations.map(a => a.orderId));
+
     let allOrdersQuery = db.select().from(orders);
+    const orderBaseConditions: any[] = [];
     if (branchId) {
-      allOrdersQuery = allOrdersQuery.where(eq(orders.branchId, branchId)) as any;
+      orderBaseConditions.push(
+        or(eq(orders.branchId, branchId), sql`${orders.branchId} IS NULL`)
+      );
     }
-    
-    // Apply date filter to orders if provided
-    if (dateFrom || dateTo) {
-      const dateConditions: any[] = [];
-      if (dateFrom) {
-        dateConditions.push(gte(orders.createdAt, dateFrom));
-      }
-      if (dateTo) {
-        dateConditions.push(lte(orders.createdAt, dateTo));
-      }
-      if (dateConditions.length > 0) {
-        const existingWhere = branchId ? eq(orders.branchId, branchId) : undefined;
-        const combinedWhere = existingWhere 
-          ? and(existingWhere, ...dateConditions)
-          : and(...dateConditions);
-        allOrdersQuery = allOrdersQuery.where(combinedWhere) as any;
-      }
+    if (dateFrom) orderBaseConditions.push(gte(orders.createdAt, dateFrom));
+    if (dateTo) orderBaseConditions.push(lte(orders.createdAt, dateTo));
+    if (orderBaseConditions.length > 0) {
+      allOrdersQuery = allOrdersQuery.where(and(...orderBaseConditions)) as any;
     }
-    
     const allOrders = await allOrdersQuery;
-    
+
+    // Due-related: orderSource=due-management OR paymentStatus=due/partial OR has allocations
+    const dueRelatedOrders = allOrders.filter(order =>
+      order.customerId && (
+        order.orderSource === "due-management" ||
+        order.paymentStatus === "due" ||
+        order.paymentStatus === "partial" ||
+        orderIdsWithAllocations.has(order.id)
+      )
+    );
+
     const customerIdsFromOrders = new Set<string>();
     const customerDataFromOrders = new Map<string, { name: string; phone: string | null; branchId: string | null; createdAt: Date }>();
-    
-    for (const order of allOrders) {
+    for (const order of dueRelatedOrders) {
       if (order.customerId) {
         customerIdsFromOrders.add(order.customerId);
-        // Store customer data from orders for customers not in database
         if (!customerDataFromOrders.has(order.customerId) && order.customerName) {
           customerDataFromOrders.set(order.customerId, {
             name: order.customerName || 'Unknown Customer',
@@ -3914,39 +3948,75 @@ export class DatabaseStorage implements IStorage {
         }
       }
     }
-    
-    // Get customers that exist in database
+
+    // When date filter: also include customers with payments in range
+    let customerIdsFromPayments = new Set<string>();
+    if (dateFrom || dateTo) {
+      let paymentsQuery = db.select({ customerId: duePayments.customerId }).from(duePayments);
+      const payConditions: any[] = [];
+      if (branchId) {
+        payConditions.push(
+          or(eq(duePayments.branchId, branchId), sql`${duePayments.branchId} IS NULL`)
+        );
+      }
+      if (dateFrom) payConditions.push(gte(duePayments.paymentDate, dateFrom));
+      if (dateTo) payConditions.push(lte(duePayments.paymentDate, dateTo));
+      if (payConditions.length > 0) {
+        paymentsQuery = paymentsQuery.where(and(...payConditions)) as any;
+      }
+      const paymentsInRange = await paymentsQuery;
+      customerIdsFromPayments = new Set(paymentsInRange.map(p => p.customerId).filter(Boolean));
+    }
+
+    // When date filter: only customers with due activity in range
+    // When no date filter: all customers (original behavior)
+    let customerIdsToInclude: Set<string>;
+    if (dateFrom || dateTo) {
+      customerIdsToInclude = new Set([...customerIdsFromOrders, ...customerIdsFromPayments]);
+    } else {
+      customerIdsToInclude = new Set(allCustomers.map(c => c.id));
+      for (const id of customerIdsFromOrders) customerIdsToInclude.add(id);
+    }
+
     const existingCustomerIds = new Set(allCustomers.map(c => c.id));
-    
-    // Find customer IDs from orders that don't have a customer record
-    const missingCustomerIds = Array.from(customerIdsFromOrders).filter(id => !existingCustomerIds.has(id));
-    
-    // For missing customers, create placeholder customer objects from order data
+    const missingCustomerIds = Array.from(customerIdsToInclude).filter(id => !existingCustomerIds.has(id));
+
     const missingCustomers: Customer[] = [];
     for (const customerId of missingCustomerIds) {
-      const customerData = customerDataFromOrders.get(customerId);
-      if (customerData) {
-        missingCustomers.push({
-          id: customerId,
-          name: customerData.name,
-          phone: customerData.phone,
-          email: null,
-          branchId: customerData.branchId,
-          notes: null,
-          createdAt: customerData.createdAt,
-        } as Customer);
+      let customerData = customerDataFromOrders.get(customerId);
+      if (!customerData) {
+        const cust = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+        if (cust[0]) {
+          missingCustomers.push(cust[0] as Customer);
+          continue;
+        }
+        customerData = { name: "Unknown Customer", phone: null, branchId: null, createdAt: new Date() };
       }
+      missingCustomers.push({
+        id: customerId,
+        name: customerData.name,
+        phone: customerData.phone,
+        email: null,
+        branchId: customerData.branchId,
+        notes: null,
+        createdAt: customerData.createdAt,
+      } as Customer);
     }
-    
-    // Combine all customers
-    const allCustomersCombined = [...allCustomers, ...missingCustomers];
-    
+
+    const allCustomersCombined = dateFrom || dateTo
+      ? [...allCustomers.filter(c => customerIdsToInclude.has(c.id)), ...missingCustomers.filter(c => customerIdsToInclude.has(c.id))]
+      : [...allCustomers, ...missingCustomers];
+
     const summaries = [];
-    
+
     for (const customer of allCustomersCombined) {
-      const summary = await this.getCustomerDueSummary(customer.id);
-      
-      // Include ALL customers, even if they have no dues
+      const summary = await this.getCustomerDueSummary(
+        customer.id,
+        branchId,
+        dateFrom || undefined,
+        dateTo || undefined
+      );
+
       summaries.push({
         customer,
         ...summary,
