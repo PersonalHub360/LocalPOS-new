@@ -2136,46 +2136,18 @@ export default function ItemManage() {
                                   flex-direction: column;
                                   align-items: center;
                                   justify-content: center;
-                                  min-height: 100vh;
                                   padding: 40px;
                                   font-family: Arial, sans-serif;
-                                  box-sizing: border-box;
-                                }
-                                .print-sheet {
-                                  display: flex;
-                                  flex-direction: column;
-                                  align-items: center;
-                                  justify-content: center;
-                                  gap: 24px;
-                                  flex: 1;
-                                  width: 100%;
-                                  max-width: 400px;
-                                }
-                                .barcode-top {
-                                  display: flex;
-                                  flex-direction: column;
-                                  align-items: center;
-                                  width: 100%;
-                                }
-                                .barcode-top img {
-                                  width: 100%;
-                                  max-width: 320px;
-                                  height: auto;
-                                }
-                                .details-bottom {
-                                  display: flex;
-                                  flex-direction: column;
-                                  align-items: center;
-                                  justify-content: center;
-                                  text-align: center;
-                                  width: 100%;
                                 }
                                 .product-name {
                                   font-size: 18px;
                                   font-weight: bold;
-                                  margin-bottom: 8px;
+                                  margin-bottom: 10px;
+                                  text-align: center;
                                 }
                                 .price-info {
+                                  margin-top: 15px;
+                                  text-align: center;
                                   font-size: 14px;
                                 }
                                 .price-usd {
@@ -2186,30 +2158,28 @@ export default function ItemManage() {
                                 .price-khr {
                                   font-size: 14px;
                                   color: #666;
-                                  margin-top: 4px;
+                                  margin-top: 5px;
                                 }
-                                .barcode-text {
+                                .barcode {
                                   font-size: 12px;
                                   color: #666;
-                                  margin-top: 8px;
+                                  margin-top: 10px;
                                   font-family: monospace;
+                                }
+                                img {
+                                  max-width: 100%;
+                                  height: auto;
                                 }
                               </style>
                             </head>
                             <body>
-                              <div class="print-sheet">
-                                <div class="barcode-top">
-                                  <img src="${svgDataUrl}" alt="Barcode" />
-                                </div>
-                                <div class="details-bottom">
-                                  <div class="product-name">${selectedProductForQR.name}</div>
-                                  <div class="price-info">
-                                    <div class="price-usd">$${sellingPrice.toFixed(2)} USD</div>
-                                    <div class="price-khr">${sellingPriceKHR.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${secondaryCurrencySymbol}</div>
-                                  </div>
-                                  <div class="barcode-text">${barcode}</div>
-                                </div>
+                              <div class="product-name">${selectedProductForQR.name}</div>
+                              <img src="${svgDataUrl}" alt="Barcode" />
+                              <div class="price-info">
+                                <div class="price-usd">$${sellingPrice.toFixed(2)} USD</div>
+                                <div class="price-khr">${sellingPriceKHR.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${secondaryCurrencySymbol}</div>
                               </div>
+                              <div class="barcode">${barcode}</div>
                             </body>
                           </html>
                         `);

@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { Product } from "@shared/schema";
@@ -29,6 +29,10 @@ interface ProductSelectProps {
   noneOptionLabel?: string;
   className?: string;
   dataTestId?: string;
+  /** Optional: when provided, use these products for the list. Ensures pre-selected product (e.g. from row click) is displayed. */
+  products?: Product[];
+  /** Optional: when true, shows loading state (e.g. when parent is fetching products). */
+  isLoading?: boolean;
 }
 
 export function ProductSelect({
@@ -41,14 +45,16 @@ export function ProductSelect({
   noneOptionLabel = "None",
   className,
   dataTestId,
+  products: productsProp,
+  isLoading: isLoadingProp,
 }: ProductSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const debouncedSearchValue = useDebounce(searchValue, 300);
   const commandListRef = useRef<HTMLDivElement>(null);
 
-  // Fetch products with debounced search
-  const { data: products = [] } = useQuery<Product[]>({
+  // Fetch products with debounced search (when products prop not provided)
+  const { data: fetchedProducts = [], isLoading: isFetching } = useQuery<Product[]>({
     queryKey: ["/api/products", debouncedSearchValue],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -57,10 +63,13 @@ export function ProductSelect({
       }
       const response = await fetch(`/api/products?${params.toString()}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch products");
-      return response.json();
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.products || []);
     },
+    enabled: !productsProp,
   });
-
+  const products = productsProp ?? fetchedProducts;
+  const isLoading = isLoadingProp ?? (!productsProp && isFetching);
   const selectedProduct = products.find((p) => p.id === value);
 
   // Reset scroll when search value changes or popover opens
@@ -102,18 +111,27 @@ export function ProductSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("justify-between", className)}
+          disabled={isLoading}
+          className={cn("w-full justify-between min-w-0 font-normal", className)}
           data-testid={dataTestId}
         >
-          {selectedProduct
-            ? getProductLabel(selectedProduct)
-            : includeNoneOption && value === "none"
-            ? noneOptionLabel
-            : placeholder}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <span className="truncate text-left flex-1 min-w-0">
+            {isLoading
+              ? "Loading products..."
+              : selectedProduct
+              ? getProductLabel(selectedProduct)
+              : includeNoneOption && value === "none"
+              ? noneOptionLabel
+              : placeholder}
+          </span>
+          {isLoading ? (
+            <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
+          ) : (
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0">
+      <PopoverContent className="w-[var(--radix-popper-anchor-width)] min-w-[280px] max-w-[400px] p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search products..."
@@ -130,7 +148,16 @@ export function ProductSelect({
             }}
           />
           <CommandList ref={commandListRef}>
-            <CommandEmpty>No products found.</CommandEmpty>
+            <CommandEmpty>
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Loading products...</span>
+                </div>
+              ) : (
+                "No products found."
+              )}
+            </CommandEmpty>
             <CommandGroup heading="Products">
               {includeNoneOption && (
                 <CommandItem

@@ -191,6 +191,36 @@ function requirePermission(permission: string) {
   };
 }
 
+// Allow any authenticated user to edit drafts; completed orders require sales.edit
+function requireOrderEditOrDraft() {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session?.userId && !req.session?.branchId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const order = await storage.getOrder(req.params.id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status === "draft") return next();
+    const hasPermission = await checkPermission(req, "sales.edit");
+    if (!hasPermission) return res.status(403).json({ error: "Insufficient permissions" });
+    next();
+  };
+}
+
+// Allow any authenticated user to delete drafts; completed orders require sales.delete
+function requireOrderDeleteOrDraft() {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session?.userId && !req.session?.branchId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const order = await storage.getOrder(req.params.id);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status === "draft") return next();
+    const hasPermission = await checkPermission(req, "sales.delete");
+    if (!hasPermission) return res.status(403).json({ error: "Insufficient permissions" });
+    next();
+  };
+}
+
 function getDateRange(filter: string, customDate?: string, clientStart?: string, clientEnd?: string): { startDate: Date; endDate: Date } {
   // Use client-provided range when given (ensures "today" etc. use user's timezone, not server's)
   if (clientStart && clientEnd) {
@@ -1460,7 +1490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/orders/:id", requirePermission("sales.edit"), async (req, res) => {
+  app.patch("/api/orders/:id", requireOrderEditOrDraft(), async (req, res) => {
     try {
       const updates: any = { ...req.body };
       
@@ -1525,7 +1555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/orders/:id", requirePermission("sales.delete"), async (req, res) => {
+  app.delete("/api/orders/:id", requireOrderDeleteOrDraft(), async (req, res) => {
     try {
       const deleted = await storage.deleteOrder(req.params.id);
       if (!deleted) {

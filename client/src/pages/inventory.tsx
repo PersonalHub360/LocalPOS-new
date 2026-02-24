@@ -517,7 +517,7 @@ export default function Inventory() {
   const adjustmentsTotal = Array.isArray(adjustmentsData) ? adjustmentsData.length : (adjustmentsData?.total || 0);
 
   // Query for all products (for dropdowns that need all products)
-  const { data: allProductsData } = useQuery<Product[]>({
+  const { data: allProductsData, isLoading: allProductsLoading } = useQuery<Product[]>({
     queryKey: ["/api/products", { branchId: selectedBranchId, limit: 10000 }],
     queryFn: async ({ queryKey }) => {
       const [, filters] = queryKey as [string, any];
@@ -1406,7 +1406,18 @@ export default function Inventory() {
             Export CSV
           </Button>
           {hasPermission("inventory.adjust") && (
-            <Button onClick={handleAdjustStock} className="gap-2" data-testid="button-adjust-stock">
+            <Button
+              onClick={() => {
+                setSelectedProduct(null);
+                setQuantity("");
+                setReason("");
+                setNotes("");
+                setAdjustmentType("add");
+                setAdjustmentDialogOpen(true);
+              }}
+              className="gap-2"
+              data-testid="button-adjust-stock"
+            >
               <RefreshCw className="w-4 h-4" />
               Adjust Stock
             </Button>
@@ -2040,6 +2051,10 @@ export default function Inventory() {
                                   size="sm"
                                   onClick={() => {
                                     setSelectedProduct(product);
+                                    setQuantity("");
+                                    setReason("");
+                                    setNotes("");
+                                    setAdjustmentType("add");
                                     setAdjustmentDialogOpen(true);
                                   }}
                                   data-testid={`button-adjust-${product.id}`}
@@ -2215,6 +2230,9 @@ export default function Inventory() {
                                 size="sm"
                                 onClick={() => {
                                   setSelectedProduct(product);
+                                  setQuantity("");
+                                  setReason("");
+                                  setNotes("");
                                   setAdjustmentType("add");
                                   setAdjustmentDialogOpen(true);
                                 }}
@@ -2517,7 +2535,7 @@ export default function Inventory() {
 
       {/* Adjust Stock Dialog */}
       <Dialog open={adjustmentDialogOpen} onOpenChange={setAdjustmentDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-md" data-testid="dialog-adjust-stock">
+        <DialogContent className="w-[95vw] sm:max-w-lg" data-testid="dialog-adjust-stock">
           <DialogHeader>
             <DialogTitle>Adjust Stock Level</DialogTitle>
             <DialogDescription>
@@ -2525,18 +2543,29 @@ export default function Inventory() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
+            <div className="space-y-2 w-full">
               <Label htmlFor="product">Product *</Label>
+              <div className="w-full min-w-0">
               <ProductSelect
                 value={selectedProduct?.id}
                 onValueChange={(value) => {
-                  const product = allProducts.find(p => p.id === value);
+                  const product =
+                    allProducts.find((p) => p.id === value) ??
+                    overviewProducts.find((p) => p.id === value) ??
+                    lowStockProducts.find((p) => p.id === value);
                   setSelectedProduct(product || null);
                 }}
                 placeholder="Select product"
                 showUnit={true}
                 dataTestId="select-product"
+                products={
+                  selectedProduct
+                    ? [selectedProduct, ...allProducts.filter((p) => p.id !== selectedProduct.id)]
+                    : allProducts
+                }
+                isLoading={!selectedProduct && allProductsLoading}
               />
+              </div>
             </div>
 
             <div className="space-y-2">
