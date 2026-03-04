@@ -128,8 +128,6 @@ export default function SalesManage() {
   // New filter states
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
-  const [minAmount, setMinAmount] = useState<string>("");
-  const [maxAmount, setMaxAmount] = useState<string>("");
   const [orderItemSearch, setOrderItemSearch] = useState<string>("");
   const debouncedOrderItemSearch = useDebounce(orderItemSearch, 300);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -251,7 +249,7 @@ export default function SalesManage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setSalesPage(1);
-  }, [debouncedSearchTerm, paymentMethodFilter, paymentStatusFilter, minAmount, maxAmount, dateFilter, startDate, endDate, debouncedOrderItemSearch, selectedBranchId, selectedMonths]);
+  }, [debouncedSearchTerm, paymentMethodFilter, paymentStatusFilter, dateFilter, startDate, endDate, debouncedOrderItemSearch, selectedBranchId, selectedMonths]);
 
   // Build query params for sales list/export (shared).
   // When months are selected, use exact date-time range in user's local time (toISOString for API)
@@ -262,8 +260,6 @@ export default function SalesManage() {
     if (debouncedSearchTerm?.trim()) params.append("search", debouncedSearchTerm);
     if (paymentMethodFilter !== "all") params.append("paymentMethod", paymentMethodFilter);
     if (paymentStatusFilter !== "all") params.append("paymentStatus", paymentStatusFilter);
-    if (minAmount?.trim() && !isNaN(parseFloat(minAmount))) params.append("minAmount", minAmount);
-    if (maxAmount?.trim() && !isNaN(parseFloat(maxAmount))) params.append("maxAmount", maxAmount);
     if (selectedMonths.length > 0) {
       const sorted = [...selectedMonths].sort();
       const [y1, m1] = sorted[0].split("-").map(Number);
@@ -278,7 +274,7 @@ export default function SalesManage() {
     }
     if (debouncedOrderItemSearch?.trim()) params.append("productSearch", debouncedOrderItemSearch);
     return params;
-  }, [selectedBranchId, debouncedSearchTerm, paymentMethodFilter, paymentStatusFilter, minAmount, maxAmount, selectedMonths, getDateRangeFromFilter.dateFrom, getDateRangeFromFilter.dateTo, debouncedOrderItemSearch]);
+  }, [selectedBranchId, debouncedSearchTerm, paymentMethodFilter, paymentStatusFilter, selectedMonths, getDateRangeFromFilter.dateFrom, getDateRangeFromFilter.dateTo, debouncedOrderItemSearch]);
 
   // Fetch paginated sales with backend filtering (key includes params string so month/list filters trigger refetch)
   const salesParamsString = getSalesQueryParams.toString();
@@ -1288,8 +1284,6 @@ export default function SalesManage() {
                   onClick={() => {
                     setPaymentMethodFilter("all");
                     setPaymentStatusFilter("all");
-                    setMinAmount("");
-                    setMaxAmount("");
                     setOrderItemSearch("");
                     setSearchTerm("");
                     setDateFilter("all");
@@ -1338,28 +1332,6 @@ export default function SalesManage() {
                       <SelectItem value="partial">Partial</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Min Amount */}
-                <div className="space-y-2">
-                  <Label>Min Amount ($)</Label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={minAmount}
-                    onChange={(e) => setMinAmount(e.target.value)}
-                  />
-                </div>
-
-                {/* Max Amount */}
-                <div className="space-y-2">
-                  <Label>Max Amount ($)</Label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={maxAmount}
-                    onChange={(e) => setMaxAmount(e.target.value)}
-                  />
                 </div>
 
                 {/* Months (multi-select) */}

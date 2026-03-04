@@ -315,8 +315,6 @@ export default function DueManagement() {
   });
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
-  const [minAmount, setMinAmount] = useState<string>("");
-  const [maxAmount, setMaxAmount] = useState<string>("");
 
   // When user selects months, set date range to first day of first month -> last day of last month
   // When no months selected, clear date range (show all dates)
@@ -344,8 +342,6 @@ export default function DueManagement() {
         limit: customersPageSize,
         search: debouncedSearchTerm,
         statusFilter,
-        minAmount: minAmount ? parseFloat(minAmount) : undefined,
-        maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
         dateFrom: dateRange.from?.toISOString(),
         dateTo: dateRange.to?.toISOString(),
       }
@@ -357,8 +353,6 @@ export default function DueManagement() {
         limit: customersPageSize.toString(),
         ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
         ...(statusFilter && statusFilter !== "all" && { statusFilter }),
-        ...(minAmount && { minAmount }),
-        ...(maxAmount && { maxAmount }),
         ...(dateRange.from && { dateFrom: dateRange.from.toISOString() }),
         ...(dateRange.to && { dateTo: dateRange.to.toISOString() }),
       });
@@ -379,8 +373,6 @@ export default function DueManagement() {
     if (dateRange.to) p.append("dateTo", dateRange.to.toISOString());
     if (debouncedSearchTerm) p.append("search", debouncedSearchTerm);
     if (statusFilter && statusFilter !== "all") p.append("statusFilter", statusFilter);
-    if (minAmount) p.append("minAmount", minAmount);
-    if (maxAmount) p.append("maxAmount", maxAmount);
     return p.toString();
   })();
   const { data: summaryStats } = useQuery<{
@@ -400,7 +392,7 @@ export default function DueManagement() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCustomersPage(1);
-  }, [debouncedSearchTerm, statusFilter, minAmount, maxAmount, dateRange.from, dateRange.to, selectedBranchId]);
+  }, [debouncedSearchTerm, statusFilter, dateRange.from, dateRange.to, selectedBranchId]);
 
   const { data: customers = [], refetch: refetchCustomers } = useQuery<Customer[]>({
     queryKey: ["/api/customers", { branchId: selectedBranchId }],
@@ -1036,8 +1028,6 @@ export default function DueManagement() {
       ...(selectedBranchId && { branchId: selectedBranchId }),
       ...(debouncedSearchTerm && { search: debouncedSearchTerm }),
       ...(statusFilter && statusFilter !== "all" && { statusFilter }),
-      ...(minAmount && { minAmount }),
-      ...(maxAmount && { maxAmount }),
       ...(dateRange.from && { dateFrom: dateRange.from.toISOString() }),
       ...(dateRange.to && { dateTo: dateRange.to.toISOString() }),
     });
@@ -1448,26 +1438,6 @@ export default function DueManagement() {
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Min Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={minAmount}
-                        onChange={(e) => setMinAmount(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Max Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={maxAmount}
-                        onChange={(e) => setMaxAmount(e.target.value)}
-                      />
-                    </div>
                     <div className="space-y-2 flex items-end">
                       <Button
                         variant="outline"
@@ -1475,8 +1445,6 @@ export default function DueManagement() {
                           setDateRange({ from: undefined, to: undefined });
                           setSelectedMonths([]);
                           setStatusFilter("pending");
-                          setMinAmount("");
-                          setMaxAmount("");
                           setSearchTerm("");
                         }}
                         className="w-full"

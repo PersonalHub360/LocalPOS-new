@@ -146,7 +146,7 @@ export interface IStorage {
   getQROrders(branchId?: string | null): Promise<Order[]>;
   getWebOrders(branchId?: string | null): Promise<Order[]>;
   getCompletedOrders(branchId?: string | null): Promise<Order[]>;
-  getSalesStats(branchId?: string | null, filters?: { dateFrom?: Date; dateTo?: Date; months?: string[]; paymentMethod?: string; paymentStatus?: string; minAmount?: number; maxAmount?: number; search?: string }): Promise<{ totalSales: number; totalRevenue: number; totalDue: number; totalPaid: number; averageOrderValue: number }>;
+  getSalesStats(branchId?: string | null, filters?: { dateFrom?: Date; dateTo?: Date; months?: string[]; paymentMethod?: string; paymentStatus?: string; minAmount?: number; maxAmount?: number; search?: string }): Promise<{ totalSales: number; totalRevenue: number; totalDue: number; totalPaid: number; averageOrderValue: number; totalDiscounts: number; paymentMethodBreakdown: Record<string, { total: number; count: number; paid: number; pending: number; failed: number }> }>;
   createOrder(order: InsertOrder): Promise<Order>;
   createOrderWithItems(order: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order>;
   updateOrder(id: string, order: Partial<InsertOrder>): Promise<Order | undefined>;
@@ -1234,7 +1234,26 @@ export class DatabaseStorage implements IStorage {
     }
     const totalSales = allOrders.length;
     const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
-    return { totalSales, totalRevenue, totalDue, totalPaid, averageOrderValue };
+    let totalDiscounts = 0;
+    const paymentMethodBreakdown: Record<string, { total: number; count: number; paid: number; pending: number; failed: number }> = {};
+    for (const order of allOrders) {
+      totalDiscounts += parseFloat(order.discount || "0");
+      const method = order.paymentMethod || "unknown";
+      if (!paymentMethodBreakdown[method]) {
+        paymentMethodBreakdown[method] = { total: 0, count: 0, paid: 0, pending: 0, failed: 0 };
+      }
+      const amt = parseFloat(order.total || "0");
+      paymentMethodBreakdown[method].total += amt;
+      paymentMethodBreakdown[method].count += 1;
+      if (order.paymentStatus === "paid") {
+        paymentMethodBreakdown[method].paid += amt;
+      } else if (order.paymentStatus === "pending") {
+        paymentMethodBreakdown[method].pending += amt;
+      } else if (order.paymentStatus === "failed") {
+        paymentMethodBreakdown[method].failed += amt;
+      }
+    }
+    return { totalSales, totalRevenue, totalDue, totalPaid, averageOrderValue, totalDiscounts, paymentMethodBreakdown };
   }
 
   async createOrder(insertOrder: InsertOrder): Promise<Order> {

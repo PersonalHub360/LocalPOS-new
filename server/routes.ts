@@ -1183,8 +1183,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         search, 
         paymentMethod, 
         paymentStatus, 
-        minAmount, 
-        maxAmount, 
         dateFrom, 
         dateTo,
         productSearch,
@@ -1199,29 +1197,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let months: string[] | undefined;
       if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
         months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
-      }
-      
-      // Parse and validate minAmount
-      let parsedMinAmount: number | undefined;
-      if (minAmount && typeof minAmount === "string" && minAmount.trim()) {
-        const parsed = parseFloat(minAmount);
-        if (!isNaN(parsed) && parsed >= 0) {
-          parsedMinAmount = parsed;
-        }
-      }
-      
-      // Parse and validate maxAmount
-      let parsedMaxAmount: number | undefined;
-      if (maxAmount && typeof maxAmount === "string" && maxAmount.trim()) {
-        const parsed = parseFloat(maxAmount);
-        if (!isNaN(parsed) && parsed >= 0) {
-          parsedMaxAmount = parsed;
-        }
-      }
-      
-      // Validate amount range
-      if (parsedMinAmount !== undefined && parsedMaxAmount !== undefined && parsedMinAmount > parsedMaxAmount) {
-        return res.status(400).json({ error: "Min amount cannot be greater than max amount" });
       }
       
       // Parse dates
@@ -1248,8 +1223,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         search && typeof search === "string" && search.trim() ? search.trim() : undefined,
         paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all" ? paymentMethod : undefined,
         paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all" ? paymentStatus : undefined,
-        parsedMinAmount,
-        parsedMaxAmount,
+        undefined,
+        undefined,
         parsedDateFrom,
         parsedDateTo,
         productSearch && typeof productSearch === "string" && productSearch.trim() ? productSearch.trim() : undefined,
@@ -1271,8 +1246,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         search, 
         paymentMethod, 
         paymentStatus, 
-        minAmount, 
-        maxAmount, 
         dateFrom, 
         dateTo,
         productSearch,
@@ -1284,16 +1257,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
       }
       
-      let parsedMinAmount: number | undefined;
-      if (minAmount && typeof minAmount === "string" && minAmount.trim()) {
-        const parsed = parseFloat(minAmount);
-        if (!isNaN(parsed) && parsed >= 0) parsedMinAmount = parsed;
-      }
-      let parsedMaxAmount: number | undefined;
-      if (maxAmount && typeof maxAmount === "string" && maxAmount.trim()) {
-        const parsed = parseFloat(maxAmount);
-        if (!isNaN(parsed) && parsed >= 0) parsedMaxAmount = parsed;
-      }
       let parsedDateFrom: Date | undefined;
       if (dateFrom && typeof dateFrom === "string" && dateFrom.trim()) {
         const d = new Date(dateFrom);
@@ -1312,8 +1275,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         search && typeof search === "string" && search.trim() ? search.trim() : undefined,
         paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all" ? paymentMethod : undefined,
         paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all" ? paymentStatus : undefined,
-        parsedMinAmount,
-        parsedMaxAmount,
+        undefined,
+        undefined,
         parsedDateFrom,
         parsedDateTo,
         productSearch && typeof productSearch === "string" && productSearch.trim() ? productSearch.trim() : undefined,
@@ -1329,7 +1292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/sales/stats", async (req, res) => {
     try {
-      const { branchId, dateFrom, dateTo, months: monthsParam, paymentMethod, paymentStatus, minAmount, maxAmount, search } = req.query;
+      const { branchId, dateFrom, dateTo, months: monthsParam, paymentMethod, paymentStatus, search } = req.query;
       let months: string[] | undefined;
       if (monthsParam && typeof monthsParam === "string" && monthsParam.trim()) {
         months = monthsParam.split(",").map((m) => m.trim()).filter(Boolean);
@@ -1344,25 +1307,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const d = new Date(dateTo);
         if (!isNaN(d.getTime())) parsedDateTo = d;
       }
-      let parsedMin: number | undefined;
-      if (minAmount && typeof minAmount === "string") {
-        const n = parseFloat(minAmount);
-        if (!isNaN(n) && n >= 0) parsedMin = n;
-      }
-      let parsedMax: number | undefined;
-      if (maxAmount && typeof maxAmount === "string") {
-        const n = parseFloat(maxAmount);
-        if (!isNaN(n) && n >= 0) parsedMax = n;
-      }
-      const filters = (parsedDateFrom != null || parsedDateTo != null || (months && months.length > 0) || (paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all") || (paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all") || parsedMin != null || parsedMax != null || (search && typeof search === "string" && search.trim()))
+      const filters = (parsedDateFrom != null || parsedDateTo != null || (months && months.length > 0) || (paymentMethod && typeof paymentMethod === "string" && paymentMethod !== "all") || (paymentStatus && typeof paymentStatus === "string" && paymentStatus !== "all") || (search && typeof search === "string" && search.trim()))
         ? {
             dateFrom: parsedDateFrom,
             dateTo: parsedDateTo,
             months,
             paymentMethod: paymentMethod as string | undefined,
             paymentStatus: paymentStatus as string | undefined,
-            minAmount: parsedMin,
-            maxAmount: parsedMax,
             search: typeof search === "string" && search.trim() ? search.trim() : undefined,
           }
         : undefined;
@@ -3980,8 +3931,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = page && limit ? (page - 1) * limit : undefined;
       const search = req.query.search as string | undefined;
       const statusFilter = req.query.statusFilter as string | undefined;
-      const minAmount = req.query.minAmount ? parseFloat(req.query.minAmount as string) : undefined;
-      const maxAmount = req.query.maxAmount ? parseFloat(req.query.maxAmount as string) : undefined;
       const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
       const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
       
@@ -3991,8 +3940,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         search,
         statusFilter,
-        minAmount,
-        maxAmount,
+        undefined,
+        undefined,
         dateFrom,
         dateTo
       );
@@ -4009,11 +3958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
       const search = (req.query.search as string)?.trim() || undefined;
       const statusFilter = (req.query.statusFilter as string) && req.query.statusFilter !== "all" ? req.query.statusFilter as string : undefined;
-      const minNum = req.query.minAmount != null && req.query.minAmount !== "" ? parseFloat(req.query.minAmount as string) : NaN;
-      const maxNum = req.query.maxAmount != null && req.query.maxAmount !== "" ? parseFloat(req.query.maxAmount as string) : NaN;
-      const minAmount = !isNaN(minNum) ? minNum : undefined;
-      const maxAmount = !isNaN(maxNum) ? maxNum : undefined;
-      const stats = await storage.getCustomersDueSummaryStats(branchId, dateFrom, dateTo, search, statusFilter, minAmount, maxAmount);
+      const stats = await storage.getCustomersDueSummaryStats(branchId, dateFrom, dateTo, search, statusFilter, undefined, undefined);
       res.json(stats);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch customers summary stats" });
@@ -4026,8 +3971,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const branchId = req.query.branchId as string | undefined;
       const search = req.query.search as string | undefined;
       const statusFilter = req.query.statusFilter as string | undefined;
-      const minAmount = req.query.minAmount ? parseFloat(req.query.minAmount as string) : undefined;
-      const maxAmount = req.query.maxAmount ? parseFloat(req.query.maxAmount as string) : undefined;
       const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
       const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
 
@@ -4038,8 +3981,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         undefined,
         search,
         statusFilter,
-        minAmount,
-        maxAmount,
+        undefined,
+        undefined,
         dateFrom,
         dateTo
       );

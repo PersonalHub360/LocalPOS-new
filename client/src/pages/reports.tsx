@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useBranch } from "@/contexts/BranchContext";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,18 +42,25 @@ import {
   XCircle,
   Clock,
   Edit,
-  X,
   Trash2,
-  Filter,
-  ChevronDown,
-  ChevronUp,
+  Search,
   Package
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Order, Product, OrderItem } from "@shared/schema";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "aba" | "acleda" | "cash" | "due" | "card" | "items";
 type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
@@ -72,15 +81,10 @@ export default function Reports() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>();
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
-  const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("cash");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [productFilter, setProductFilter] = useState<string>("all");
-  const [customerFilter, setCustomerFilter] = useState<string>("");
-  const [minAmount, setMinAmount] = useState<string>("");
-  const [maxAmount, setMaxAmount] = useState<string>("");
-  const [diningOptionFilter, setDiningOptionFilter] = useState<string>("all");
-  const [tableFilter, setTableFilter] = useState<string>("all");
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [paymentGatewayFilter, setPaymentGatewayFilter] = useState<string>("all");
+  const [searchFilter, setSearchFilter] = useState<string>("");
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPageSize, setReportPageSize] = useState(10);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false);
@@ -89,28 +93,111 @@ export default function Reports() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
-
-  const { data: sales = [] } = useQuery<Order[]>({
-    queryKey: ["/api/sales"],
-  });
-
-  const { data: orders = [] } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
-  });
+  const { selectedBranchId } = useBranch();
+  const debouncedSearchFilter = useDebounce(searchFilter, 400);
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
 
-  const { data: categories = [] } = useQuery<any[]>({
-    queryKey: ["/api/categories"],
+  // Build report query params for paginated orders and stats
+  const getReportDateRange = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    let dateFrom: Date | undefined;
+    let dateTo: Date | undefined;
+    switch (dateFilter) {
+      case "today":
+        dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        dateTo = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        break;
+      case "yesterday":
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        dateFrom = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+        dateTo = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+        break;
+      case "thismonth":
+        dateFrom = new Date(currentYear, now.getMonth(), 1);
+        dateTo = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case "lastmonth":
+        dateFrom = new Date(currentYear, now.getMonth() - 1, 1);
+        dateTo = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
+        break;
+      case "custom":
+        if (customStartDate) dateFrom = customStartDate;
+        if (customEndDate) dateTo = customEndDate;
+        break;
+      default:
+        const monthMap: Record<string, number> = {
+          january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+          july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+        };
+        if (monthMap[dateFilter] !== undefined) {
+          dateFrom = new Date(currentYear, monthMap[dateFilter], 1);
+          dateTo = new Date(currentYear, monthMap[dateFilter] + 1, 0, 23, 59, 59, 999);
+        }
+    }
+    return { dateFrom, dateTo };
+  }, [dateFilter, customStartDate, customEndDate]);
+
+  const reportParamsString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedBranchId) params.append("branchId", selectedBranchId);
+    if (debouncedSearchFilter?.trim()) params.append("search", debouncedSearchFilter.trim());
+    if (paymentStatusFilter !== "all") params.append("paymentStatus", paymentStatusFilter === "completed" ? "paid" : paymentStatusFilter);
+    if (paymentGatewayFilter !== "all") params.append("paymentMethod", paymentGatewayFilter);
+    if (getReportDateRange.dateFrom) params.append("dateFrom", getReportDateRange.dateFrom.toISOString());
+    if (getReportDateRange.dateTo) params.append("dateTo", getReportDateRange.dateTo.toISOString());
+    return params.toString();
+  }, [selectedBranchId, debouncedSearchFilter, paymentStatusFilter, paymentGatewayFilter, getReportDateRange.dateFrom, getReportDateRange.dateTo]);
+
+  useEffect(() => {
+    setReportPage(1);
+  }, [reportParamsString]);
+
+  const { data: reportData, isLoading: reportLoading } = useQuery<{ orders: Order[]; total: number }>({
+    queryKey: ["/api/orders/paginated", reportPage, reportPageSize, reportParamsString],
+    queryFn: async () => {
+      const params = new URLSearchParams(reportParamsString);
+      params.set("page", reportPage.toString());
+      params.set("limit", reportPageSize.toString());
+      const response = await fetch(`/api/orders/paginated?${params}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch report data");
+      return response.json();
+    },
+    enabled: reportType === "sales",
   });
 
-  const { data: tables = [] } = useQuery<any[]>({
-    queryKey: ["/api/tables"],
+  const { data: salesStats } = useQuery<{
+    totalSales: number;
+    totalRevenue: number;
+    totalDue: number;
+    totalPaid: number;
+    averageOrderValue: number;
+    totalDiscounts: number;
+    paymentMethodBreakdown: Record<string, { total: number; count: number; paid: number; pending: number; failed: number }>;
+  }>({
+    queryKey: ["/api/sales/stats", reportParamsString],
+    queryFn: async () => {
+      const response = await fetch(`/api/sales/stats?${reportParamsString}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch sales stats");
+      return response.json();
+    },
+    enabled: reportType === "sales",
   });
 
-  // Get date range helper
+  const filteredSales = reportType === "sales" ? (reportData?.orders || []) : [];
+  const salesTotal = reportType === "sales" ? (reportData?.total ?? 0) : 0;
+  const totalRevenue = salesStats?.totalRevenue ?? 0;
+  const totalTransactions = salesStats?.totalSales ?? 0;
+  const avgSaleValue = totalTransactions > 0 ? (salesStats?.averageOrderValue ?? 0) : 0;
+  const totalDiscounts = salesStats?.totalDiscounts ?? 0;
+  const paymentTotals = salesStats?.paymentMethodBreakdown ?? {};
+  const paymentMethods = Object.fromEntries(Object.entries(paymentTotals).map(([method, data]) => [method, data.count]));
+
+  // Get date range helper (for item sales report)
   const getDateRange = () => {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -167,187 +254,6 @@ export default function Reports() {
     enabled: reportType === "items",
   });
 
-  const getFilteredSales = () => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    let startDate = new Date();
-    let endDate = new Date();
-    
-    switch (dateFilter) {
-      case "today":
-        startDate.setHours(0, 0, 0, 0);
-        endDate.setHours(23, 59, 59, 999);
-        break;
-      case "yesterday":
-        startDate.setDate(now.getDate() - 1);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setHours(23, 59, 59, 999);
-        break;
-      case "thismonth":
-        startDate = new Date(currentYear, now.getMonth(), 1);
-        endDate = new Date(currentYear, now.getMonth() + 1, 0, 23, 59, 59, 999);
-        break;
-      case "lastmonth":
-        startDate = new Date(currentYear, now.getMonth() - 1, 1);
-        endDate = new Date(currentYear, now.getMonth(), 0, 23, 59, 59, 999);
-        break;
-      case "january":
-        startDate = new Date(currentYear, 0, 1);
-        endDate = new Date(currentYear, 1, 0, 23, 59, 59, 999);
-        break;
-      case "february":
-        startDate = new Date(currentYear, 1, 1);
-        endDate = new Date(currentYear, 2, 0, 23, 59, 59, 999);
-        break;
-      case "march":
-        startDate = new Date(currentYear, 2, 1);
-        endDate = new Date(currentYear, 3, 0, 23, 59, 59, 999);
-        break;
-      case "april":
-        startDate = new Date(currentYear, 3, 1);
-        endDate = new Date(currentYear, 4, 0, 23, 59, 59, 999);
-        break;
-      case "may":
-        startDate = new Date(currentYear, 4, 1);
-        endDate = new Date(currentYear, 5, 0, 23, 59, 59, 999);
-        break;
-      case "june":
-        startDate = new Date(currentYear, 5, 1);
-        endDate = new Date(currentYear, 6, 0, 23, 59, 59, 999);
-        break;
-      case "july":
-        startDate = new Date(currentYear, 6, 1);
-        endDate = new Date(currentYear, 7, 0, 23, 59, 59, 999);
-        break;
-      case "august":
-        startDate = new Date(currentYear, 7, 1);
-        endDate = new Date(currentYear, 8, 0, 23, 59, 59, 999);
-        break;
-      case "september":
-        startDate = new Date(currentYear, 8, 1);
-        endDate = new Date(currentYear, 9, 0, 23, 59, 59, 999);
-        break;
-      case "october":
-        startDate = new Date(currentYear, 9, 1);
-        endDate = new Date(currentYear, 10, 0, 23, 59, 59, 999);
-        break;
-      case "november":
-        startDate = new Date(currentYear, 10, 1);
-        endDate = new Date(currentYear, 11, 0, 23, 59, 59, 999);
-        break;
-      case "december":
-        startDate = new Date(currentYear, 11, 1);
-        endDate = new Date(currentYear, 12, 0, 23, 59, 59, 999);
-        break;
-      case "custom":
-        if (customStartDate) {
-          startDate = customStartDate;
-        }
-        if (customEndDate) {
-          endDate = customEndDate;
-        }
-        break;
-    }
-
-    return sales.filter(sale => {
-      // Exclude orders created from due management page
-      if (sale.orderSource === "due-management") {
-        return false;
-      }
-      
-      const saleDate = new Date(sale.createdAt);
-      let dateMatch = false;
-      
-      if (dateFilter === "custom" && customStartDate && customEndDate) {
-        dateMatch = saleDate >= startDate && saleDate <= endDate;
-      } else {
-        dateMatch = saleDate >= startDate && saleDate <= endDate;
-      }
-
-      if (!dateMatch) return false;
-
-      // Apply payment status filter
-      if (paymentStatusFilter !== "all") {
-        // Map "completed" to "paid" for backward compatibility
-        const statusToCheck = paymentStatusFilter === "completed" ? "paid" : paymentStatusFilter;
-        if (sale.paymentStatus !== statusToCheck) {
-          return false;
-        }
-      }
-
-      // Apply payment gateway filter
-      if (paymentGatewayFilter !== "all" && sale.paymentMethod !== paymentGatewayFilter) {
-        return false;
-      }
-
-      // Apply advanced filters
-      if (customerFilter && customerFilter.trim() !== "") {
-        const customerLower = customerFilter.toLowerCase();
-        const matchesCustomer = 
-          (sale.customerName && sale.customerName.toLowerCase().includes(customerLower)) ||
-          (sale.customerPhone && sale.customerPhone.includes(customerFilter));
-        if (!matchesCustomer) return false;
-      }
-
-      if (minAmount && parseFloat(minAmount) > 0) {
-        if (parseFloat(sale.total) < parseFloat(minAmount)) return false;
-      }
-
-      if (maxAmount && parseFloat(maxAmount) > 0) {
-        if (parseFloat(sale.total) > parseFloat(maxAmount)) return false;
-      }
-
-      if (diningOptionFilter !== "all") {
-        if (sale.diningOption !== diningOptionFilter) return false;
-      }
-
-      if (tableFilter !== "all") {
-        if (sale.tableId !== tableFilter) return false;
-      }
-
-      return true;
-    });
-  };
-
-  const filteredSales = getFilteredSales();
-  
-  const totalRevenue = filteredSales.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
-  const totalTransactions = filteredSales.length;
-  const avgSaleValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
-  const totalDiscounts = filteredSales.reduce((sum, sale) => sum + parseFloat(sale.discount), 0);
-
-  const paymentMethods = filteredSales.reduce((acc, sale) => {
-    const method = sale.paymentMethod || "Unknown";
-    acc[method] = (acc[method] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Calculate payment totals by method for payment history (using filtered sales to respect date range)
-  const paymentTotals = filteredSales.reduce((acc, sale) => {
-    const method = sale.paymentMethod || "unknown";
-    const total = parseFloat(sale.total);
-    if (!acc[method]) {
-      acc[method] = { total: 0, count: 0, paid: 0, pending: 0, failed: 0 };
-    }
-    acc[method].total += total;
-    acc[method].count += 1;
-    if (sale.paymentStatus === "paid") {
-      acc[method].paid += total;
-    } else if (sale.paymentStatus === "pending") {
-      acc[method].pending += total;
-    } else if (sale.paymentStatus === "failed") {
-      acc[method].failed += total;
-    }
-    return acc;
-  }, {} as Record<string, { total: number; count: number; paid: number; pending: number; failed: number }>);
-
-  // Calculate outstanding dues (all pending/unpaid "due" payments, filtered by date range)
-  const outstandingDues = filteredSales.filter(
-    sale => sale.paymentMethod === "due" && sale.paymentStatus !== "paid"
-  );
-  const totalOutstanding = outstandingDues.reduce((sum, sale) => sum + parseFloat(sale.total), 0);
-
   const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" => {
     if (status === "completed" || status === "paid" || status === "successful") return "default";
     if (status === "pending") return "secondary";
@@ -362,31 +268,111 @@ export default function Reports() {
     return Clock;
   };
 
-  const handleExportCSV = () => {
-    const csvContent = [
-      ["Date", "Order Number", "Customer", "Total (USD)", "Total (KHR)", "Payment Method", "Payment Status", "Status"].join(","),
-      ...filteredSales.map(sale => [
-        format(new Date(sale.createdAt), "yyyy-MM-dd HH:mm"),
-        sale.orderNumber,
-        sale.customerName || "Walk-in",
-        parseFloat(sale.total).toFixed(2),
-        (parseFloat(sale.total) * 4100).toFixed(0),
-        sale.paymentMethod || "N/A",
-        sale.paymentStatus || "N/A",
-        sale.status
-      ].join(","))
-    ].join("\n");
+  const handleExportCSV = async () => {
+    try {
+      if (reportType === "items") {
+        const totalRevenueForPct = itemSales.reduce((sum, i) => sum + i.revenue, 0);
+        const csvContent = [
+          ["Product Name", "Quantity Sold", "Revenue (USD)", "Revenue (KHR)", "Avg Price", "% of Total"].join(","),
+          ...itemSales
+            .sort((a, b) => b.revenue - a.revenue)
+            .map((item) => {
+              const pct = totalRevenueForPct > 0 ? (item.revenue / totalRevenueForPct) * 100 : 0;
+              const avgPrice = item.quantity > 0 ? item.revenue / item.quantity : 0;
+              return [item.product, item.quantity, item.revenue.toFixed(2), (item.revenue * 4100).toFixed(0), avgPrice.toFixed(2), `${pct.toFixed(1)}%`].join(",");
+            }),
+        ].join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `per-item-report-${format(new Date(), "yyyy-MM-dd")}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const response = await fetch(`/api/orders/export?${reportParamsString}`, { credentials: "include" });
+        if (!response.ok) throw new Error("Failed to fetch export data");
+        const { orders: exportOrders = [] } = await response.json();
+        const salesToExport = exportOrders.filter((o: Order) => o.orderSource !== "due-management");
+        const csvContent = [
+          ["Date", "Order Number", "Customer", "Total (USD)", "Total (KHR)", "Payment Method", "Payment Status", "Status"].join(","),
+          ...salesToExport.map((sale: Order) => [
+            format(new Date(sale.createdAt), "yyyy-MM-dd HH:mm"),
+            sale.orderNumber,
+            sale.customerName || "Walk-in",
+            parseFloat(sale.total).toFixed(2),
+            (parseFloat(sale.total) * 4100).toFixed(0),
+            sale.paymentMethod || "N/A",
+            sale.paymentStatus || "N/A",
+            sale.status
+          ].join(","))
+        ].join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${reportType}-report-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+        const blob = new Blob([csvContent], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `sales-report-${format(new Date(), "yyyy-MM-dd")}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to export CSV", variant: "destructive" });
+    }
   };
 
-  const handleExportPDF = () => {
+  const handleExportExcel = async () => {
+    try {
+      if (reportType === "items") {
+        const totalRevenueForPct = itemSales.reduce((sum, i) => sum + i.revenue, 0);
+        const exportData = itemSales
+          .sort((a, b) => b.revenue - a.revenue)
+          .map((item) => {
+            const percentage = totalRevenueForPct > 0 ? (item.revenue / totalRevenueForPct) * 100 : 0;
+            const avgPrice = item.quantity > 0 ? item.revenue / item.quantity : 0;
+            return {
+              "Product Name": item.product,
+              "Quantity Sold": item.quantity,
+              "Revenue (USD)": item.revenue.toFixed(2),
+              "Revenue (KHR)": (item.revenue * 4100).toFixed(0),
+              "Avg Price (USD)": avgPrice.toFixed(2),
+              "% of Total": `${percentage.toFixed(1)}%`,
+            };
+          });
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Per Item Sales");
+        XLSX.writeFile(workbook, `per-item-report-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+        toast({ title: "Success", description: `Exported ${itemSales.length} items to Excel` });
+      } else {
+        const response = await fetch(`/api/orders/export?${reportParamsString}`, { credentials: "include" });
+        if (!response.ok) throw new Error("Failed to fetch export data");
+        const { orders: exportOrders = [] } = await response.json();
+        const salesToExport = exportOrders.filter((o: Order) => o.orderSource !== "due-management");
+        const exportData = salesToExport.map((sale: Order) => ({
+          "Invoice No": `INV-${sale.orderNumber}`,
+          "Date & Time": format(new Date(sale.createdAt), "PPpp"),
+          "Customer Name": sale.customerName || "Walk-in Customer",
+          "Subtotal": `$${sale.subtotal}`,
+          "Discount Amount": `$${sale.discount}`,
+          "Total Amount (USD)": `$${parseFloat(sale.total).toFixed(2)}`,
+          "Total Amount (KHR)": `៛${(parseFloat(sale.total) * 4100).toFixed(0)}`,
+          "Payment Method": sale.paymentMethod || "N/A",
+          "Payment Status": sale.paymentStatus || "N/A",
+          "Order Status": sale.status,
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Sales");
+        XLSX.writeFile(workbook, `sales-report-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+        toast({ title: "Success", description: `Exported ${salesToExport.length} transactions to Excel` });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to export Excel", variant: "destructive" });
+    }
+  };
+
+  const handleExportPDF = async () => {
     const doc = new jsPDF();
     
     // Get report title based on type
@@ -452,13 +438,23 @@ export default function Reports() {
         }
       });
     } else {
-      // Add summary for sales report
+      // Add summary for sales report - fetch all matching orders for PDF export
+      let salesForPdf = filteredSales;
+      try {
+        const response = await fetch(`/api/orders/export?${reportParamsString}`, { credentials: "include" });
+        if (response.ok) {
+          const { orders: exportOrders = [] } = await response.json();
+          salesForPdf = exportOrders.filter((o: Order) => o.orderSource !== "due-management");
+        }
+      } catch {
+        // Fall back to current page if fetch fails
+      }
       doc.setFontSize(10);
-      doc.text(`Total Transactions: ${filteredSales.length}`, 14, 42);
+      doc.text(`Total Transactions: ${totalTransactions}`, 14, 42);
       doc.text(`Total Revenue: $${totalRevenue.toFixed(2)} USD (៛${(totalRevenue * 4100).toFixed(0)} KHR)`, 14, 48);
       
       // Prepare table data
-      const tableData = filteredSales.map(sale => [
+      const tableData = salesForPdf.map((sale: Order) => [
         sale.orderNumber,
         format(new Date(sale.createdAt), "MMM dd, HH:mm"),
         sale.paymentMethod || "N/A",
@@ -703,6 +699,8 @@ export default function Reports() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/paginated"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sales/stats"] });
       toast({
         title: "Success",
         description: `${selectedOrders.length} order(s) deleted successfully`,
@@ -775,6 +773,10 @@ export default function Reports() {
                   <Download className="w-4 h-4 mr-2" />
                   Export PDF
                 </Button>
+                <Button variant="outline" onClick={handleExportExcel} data-testid="button-export-excel">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export Excel
+                </Button>
                 <Button onClick={handleExportCSV} data-testid="button-export-csv">
                   <Download className="w-4 h-4 mr-2" />
                   Export CSV
@@ -783,266 +785,6 @@ export default function Reports() {
             )}
           </div>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Report Filters</CardTitle>
-            <CardDescription>Select report type and date range</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Date Range</label>
-                <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as DateFilter)}>
-                  <SelectTrigger data-testid="select-date-filter">
-                    <SelectValue placeholder="Select date range" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="yesterday">Yesterday</SelectItem>
-                    <SelectItem value="thismonth">This Month</SelectItem>
-                    <SelectItem value="lastmonth">Last Month</SelectItem>
-                    <SelectItem value="january">January</SelectItem>
-                    <SelectItem value="february">February</SelectItem>
-                    <SelectItem value="march">March</SelectItem>
-                    <SelectItem value="april">April</SelectItem>
-                    <SelectItem value="may">May</SelectItem>
-                    <SelectItem value="june">June</SelectItem>
-                    <SelectItem value="july">July</SelectItem>
-                    <SelectItem value="august">August</SelectItem>
-                    <SelectItem value="september">September</SelectItem>
-                    <SelectItem value="october">October</SelectItem>
-                    <SelectItem value="november">November</SelectItem>
-                    <SelectItem value="december">December</SelectItem>
-                    <SelectItem value="custom">Custom Date</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">Report Type</label>
-                <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
-                  <SelectTrigger data-testid="select-report-type">
-                    <SelectValue placeholder="Select report type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sales">Sales</SelectItem>
-                    <SelectItem value="items">Per Item Report</SelectItem>
-                    <SelectItem value="inventory">Inventory</SelectItem>
-                    <SelectItem value="discounts">Discounts</SelectItem>
-                    <SelectItem value="refunds">Refunds</SelectItem>
-                    <SelectItem value="staff">Staff Performance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">Payment Status</label>
-                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
-                  <SelectTrigger data-testid="select-payment-status">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="due">Due</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">Payment Gateway</label>
-                <Select value={paymentGatewayFilter} onValueChange={setPaymentGatewayFilter}>
-                  <SelectTrigger data-testid="select-payment-gateway">
-                    <SelectValue placeholder="Select gateway" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Methods</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="aba">ABA</SelectItem>
-                    <SelectItem value="acleda">Acleda</SelectItem>
-                    <SelectItem value="due">Due</SelectItem>
-                    <SelectItem value="cash and aba">Cash And ABA</SelectItem>
-                    <SelectItem value="cash and acleda">Cash And Acleda</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {dateFilter === "custom" && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Start Date</label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full" data-testid="button-start-date">
-                          <CalendarIcon className="w-4 h-4 mr-2" />
-                          {customStartDate ? format(customStartDate, "MMM dd, yyyy") : "Pick date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={customStartDate}
-                          onSelect={setCustomStartDate}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">End Date</label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full" data-testid="button-end-date">
-                          <CalendarIcon className="w-4 h-4 mr-2" />
-                          {customEndDate ? format(customEndDate, "MMM dd, yyyy") : "Pick date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={customEndDate}
-                          onSelect={setCustomEndDate}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Advanced Filters Toggle */}
-            <div className="flex items-center justify-between pt-4 border-t">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="gap-2"
-              >
-                <Filter className="w-4 h-4" />
-                {showAdvancedFilters ? "Hide" : "Show"} Advanced Filters
-                {showAdvancedFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </Button>
-            </div>
-
-            {/* Advanced Filters */}
-            {showAdvancedFilters && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pt-4 border-t">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Category</label>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Product</label>
-                  <Select value={productFilter} onValueChange={setProductFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Products" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Products</SelectItem>
-                      {products
-                        .filter(p => categoryFilter === "all" || p.categoryId === categoryFilter)
-                        .map((prod) => (
-                          <SelectItem key={prod.id} value={prod.id}>{prod.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Customer</label>
-                  <Input
-                    placeholder="Search by name or phone"
-                    value={customerFilter}
-                    onChange={(e) => setCustomerFilter(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Min Amount ($)</label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={minAmount}
-                    onChange={(e) => setMinAmount(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Max Amount ($)</label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={maxAmount}
-                    onChange={(e) => setMaxAmount(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Dining Option</label>
-                  <Select value={diningOptionFilter} onValueChange={setDiningOptionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Options" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Options</SelectItem>
-                      <SelectItem value="dine-in">Dine In</SelectItem>
-                      <SelectItem value="takeaway">Takeaway</SelectItem>
-                      <SelectItem value="delivery">Delivery</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Table</label>
-                  <Select value={tableFilter} onValueChange={setTableFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Tables" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Tables</SelectItem>
-                      {tables.map((table) => (
-                        <SelectItem key={table.id} value={table.id}>{table.tableNumber}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setCategoryFilter("all");
-                      setProductFilter("all");
-                      setCustomerFilter("");
-                      setMinAmount("");
-                      setMaxAmount("");
-                      setDiningOptionFilter("all");
-                      setTableFilter("all");
-                    }}
-                    className="w-full"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Clear Filters
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 shadow-md">
@@ -1144,6 +886,150 @@ export default function Reports() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>Report Filters</CardTitle>
+            <CardDescription>Filter transactions before viewing the report table</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Date Range</label>
+                <Select value={dateFilter} onValueChange={(value) => setDateFilter(value as DateFilter)}>
+                  <SelectTrigger data-testid="select-date-filter">
+                    <SelectValue placeholder="Select date range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="thismonth">This Month</SelectItem>
+                    <SelectItem value="lastmonth">Last Month</SelectItem>
+                    <SelectItem value="january">January</SelectItem>
+                    <SelectItem value="february">February</SelectItem>
+                    <SelectItem value="march">March</SelectItem>
+                    <SelectItem value="april">April</SelectItem>
+                    <SelectItem value="may">May</SelectItem>
+                    <SelectItem value="june">June</SelectItem>
+                    <SelectItem value="july">July</SelectItem>
+                    <SelectItem value="august">August</SelectItem>
+                    <SelectItem value="september">September</SelectItem>
+                    <SelectItem value="october">October</SelectItem>
+                    <SelectItem value="november">November</SelectItem>
+                    <SelectItem value="december">December</SelectItem>
+                    <SelectItem value="custom">Custom Date</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Report Type</label>
+                <Select value={reportType} onValueChange={(value) => setReportType(value as ReportType)}>
+                  <SelectTrigger data-testid="select-report-type">
+                    <SelectValue placeholder="Select report type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sales">Sales</SelectItem>
+                    <SelectItem value="items">Per Item Report</SelectItem>
+                    <SelectItem value="inventory">Inventory</SelectItem>
+                    <SelectItem value="discounts">Discounts</SelectItem>
+                    <SelectItem value="refunds">Refunds</SelectItem>
+                    <SelectItem value="staff">Staff Performance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payment Status</label>
+                <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                  <SelectTrigger data-testid="select-payment-status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="due">Due</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Payment Gateway</label>
+                <Select value={paymentGatewayFilter} onValueChange={setPaymentGatewayFilter}>
+                  <SelectTrigger data-testid="select-payment-gateway">
+                    <SelectValue placeholder="Select gateway" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Methods</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="aba">ABA</SelectItem>
+                    <SelectItem value="acleda">Acleda</SelectItem>
+                    <SelectItem value="due">Due</SelectItem>
+                    <SelectItem value="cash and aba">Cash And ABA</SelectItem>
+                    <SelectItem value="cash and acleda">Cash And Acleda</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Invoice or customer..."
+                    value={searchFilter}
+                    onChange={(e) => setSearchFilter(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+
+              {dateFilter === "custom" && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Start Date</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full" data-testid="button-start-date">
+                          <CalendarIcon className="w-4 h-4 mr-2" />
+                          {customStartDate ? format(customStartDate, "MMM dd, yyyy") : "Pick date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={customStartDate}
+                          onSelect={setCustomStartDate}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">End Date</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full" data-testid="button-end-date">
+                          <CalendarIcon className="w-4 h-4 mr-2" />
+                          {customEndDate ? format(customEndDate, "MMM dd, yyyy") : "Pick date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={customEndDate}
+                          onSelect={setCustomEndDate}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {reportType === "payments" && (
           <Card>
             <CardHeader>
@@ -1185,11 +1071,11 @@ export default function Reports() {
                   View all transactions in the selected date range
                 </CardDescription>
               </div>
-              {filteredSales.length > 0 && (
+              {reportType === "sales" && salesTotal > 0 && (
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="gap-1">
                     <CreditCard className="w-3 h-3" />
-                    {filteredSales.length} Transactions
+                    {salesTotal} Transactions
                   </Badge>
                 </div>
               )}
@@ -1261,6 +1147,9 @@ export default function Reports() {
               </div>
             ) : reportType === "sales" ? (
               <div className="space-y-4">
+                {reportLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading transactions...</div>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1419,6 +1308,82 @@ export default function Reports() {
                     )}
                   </TableBody>
                 </Table>
+                )}
+                {reportType === "sales" && salesTotal > 0 && (
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((reportPage - 1) * reportPageSize) + 1} to {Math.min(reportPage * reportPageSize, salesTotal)} of {salesTotal} transactions
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Per page:</span>
+                        <Select
+                          value={reportPageSize.toString()}
+                          onValueChange={(value) => {
+                            setReportPageSize(parseInt(value, 10));
+                            setReportPage(1);
+                          }}
+                        >
+                          <SelectTrigger className="w-20">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="25">25</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {salesTotal > reportPageSize && (
+                      <Pagination>
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious 
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (reportPage > 1) setReportPage(reportPage - 1);
+                              }}
+                              className={reportPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                            />
+                          </PaginationItem>
+                          {Array.from({ length: Math.ceil(salesTotal / reportPageSize) }, (_, i) => i + 1)
+                            .filter(page => page === 1 || page === Math.ceil(salesTotal / reportPageSize) || (page >= reportPage - 1 && page <= reportPage + 1))
+                            .map((page, index, array) => {
+                              const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
+                              return (
+                                <div key={page} className="flex items-center">
+                                  {showEllipsisBefore && <PaginationEllipsis />}
+                                  <PaginationItem>
+                                    <PaginationLink
+                                      href="#"
+                                      onClick={(e) => { e.preventDefault(); setReportPage(page); }}
+                                      isActive={reportPage === page}
+                                      className="cursor-pointer"
+                                    >
+                                      {page}
+                                    </PaginationLink>
+                                  </PaginationItem>
+                                </div>
+                              );
+                            })}
+                          <PaginationItem>
+                            <PaginationNext 
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (reportPage < Math.ceil(salesTotal / reportPageSize)) setReportPage(reportPage + 1);
+                              }}
+                              className={reportPage >= Math.ceil(salesTotal / reportPageSize) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <Table>
