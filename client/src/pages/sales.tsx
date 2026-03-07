@@ -813,7 +813,7 @@ export default function SalesManage() {
       const response = await fetch(`/api/orders/export?${getSalesQueryParams}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch export data");
       const { orders: exportOrders } = await response.json();
-      const list = (exportOrders || []).filter((s: Order) => s.orderSource !== "due-management");
+      const list = exportOrders || [];
       const exportData = list.map((sale: Order) => ({
         "Sale ID": sale.id,
         "Invoice No": `INV-${sale.orderNumber}`,
@@ -846,7 +846,7 @@ export default function SalesManage() {
       const response = await fetch(`/api/orders/export?${getSalesQueryParams}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch export data");
       const { orders: exportOrders } = await response.json();
-      const list = (exportOrders || []).filter((s: Order) => s.orderSource !== "due-management");
+      const list = exportOrders || [];
       const doc = new jsPDF();
       doc.setFontSize(18);
       doc.text("Sales Report", 14, 22);
@@ -1049,15 +1049,8 @@ export default function SalesManage() {
     e.target.value = '';
   };
 
-  // Backend handles all filtering, so we just use the sales from the query
-  // Exclude orders from due management (this should be handled in backend, but keeping for safety)
-  const filteredSales = sales.filter((sale) => {
-    // Exclude orders created from due management page
-    if (sale.orderSource === "due-management") {
-      return false;
-    }
-    return true;
-  });
+  // Backend handles all filtering, use sales directly (includes due-management orders)
+  const filteredSales = sales;
 
   return (
     <div className="h-full overflow-auto">

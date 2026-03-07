@@ -418,6 +418,7 @@ export interface IStorage {
   ): Promise<{
     totalCustomers: number;
     pendingDues: number;
+    totalDue: number;
     totalOutstanding: number;
     totalCollected: number;
   }>;
@@ -780,9 +781,6 @@ export class DatabaseStorage implements IStorage {
     
     // Status filter - only completed orders for sales
     conditions.push(eq(orders.status, 'completed'));
-    
-    // Exclude orders from due management
-    conditions.push(sql`(${orders.orderSource} IS NULL OR ${orders.orderSource} != 'due-management')`);
     
     // Search filter - search in orderNumber (invoice number) and customerName only
     // No search by Sale ID (order ID) - removed as per user request
@@ -1162,7 +1160,6 @@ export class DatabaseStorage implements IStorage {
 
     if (branchId) conditions.push(eq(orders.branchId, branchId));
     conditions.push(eq(orders.status, 'completed'));
-    conditions.push(sql`(${orders.orderSource} IS NULL OR ${orders.orderSource} != 'due-management')`);
 
     if (filters?.search?.trim()) {
       const searchTrimmed = filters.search.trim();
@@ -1813,8 +1810,6 @@ export class DatabaseStorage implements IStorage {
       eq(orders.status, 'completed'),
       gte(orders.createdAt, startDate),
       lte(orders.createdAt, endDate),
-      // Exclude orders from due management
-      sql`(${orders.orderSource} IS NULL OR ${orders.orderSource} != 'due-management')`,
     ];
 
     // Branch filter
@@ -4158,12 +4153,14 @@ export class DatabaseStorage implements IStorage {
     
     const totalCustomers = result.total;
     const pendingDues = result.summaries.filter(s => s.balance > 0).length;
+    const totalDue = result.summaries.reduce((sum, s) => sum + s.totalDue, 0);
     const totalOutstanding = result.summaries.reduce((sum, s) => sum + s.balance, 0);
     const totalCollected = result.summaries.reduce((sum, s) => sum + s.totalPaid, 0);
     
     return {
       totalCustomers,
       pendingDues,
+      totalDue,
       totalOutstanding,
       totalCollected,
     };

@@ -378,6 +378,7 @@ export default function DueManagement() {
   const { data: summaryStats } = useQuery<{
     totalCustomers: number;
     pendingDues: number;
+    totalDue: number;
     totalOutstanding: number;
     totalCollected: number;
   }>({
@@ -432,6 +433,7 @@ export default function DueManagement() {
   // Use stats from backend for ALL records
   const totalCustomers = summaryStats?.totalCustomers || 0;
   const pendingDues = summaryStats?.pendingDues || 0;
+  const totalDue = summaryStats?.totalDue || 0;
   const totalOutstanding = summaryStats?.totalOutstanding || 0;
   const totalCollected = summaryStats?.totalCollected || 0;
 
@@ -1309,7 +1311,7 @@ export default function DueManagement() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Customers</CardTitle>
@@ -1324,6 +1326,14 @@ export default function DueManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{pendingDues}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Due</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${totalDue.toFixed(2)}</div>
             </CardContent>
           </Card>
           <Card>

@@ -26,7 +26,15 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import * as XLSX from 'xlsx';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const UNIT_OPTIONS = ["piece", "kg", "gram", "ml", "litre", "plate", "serving", "bowl", "cup", "glass", "box"];
 
@@ -748,21 +756,25 @@ export default function ItemManage() {
     }
   };
 
-  const handleExport = async () => {
+  const fetchProductsForExport = async (): Promise<Product[]> => {
+    const params = new URLSearchParams();
+    params.append("limit", "50000");
+    params.append("offset", "0");
+    if (debouncedSearchQuery) params.append("search", debouncedSearchQuery);
+    if (selectedCategoryIds.length === 1) params.append("categoryId", selectedCategoryIds[0]);
+    const dateRange = getItemsDateRange();
+    if (dateRange.dateFrom) params.append("dateFrom", dateRange.dateFrom.toISOString());
+    if (dateRange.dateTo) params.append("dateTo", dateRange.dateTo.toISOString());
+    const res = await fetch(`/api/products?${params}`, { credentials: "include" });
+    if (!res.ok) throw new Error("Failed to fetch products");
+    const data = await res.json();
+    return Array.isArray(data) ? data : (data.products || []);
+  };
+
+  const handleExportCSV = async () => {
     setExporting(true);
     try {
-      const params = new URLSearchParams();
-      params.append("limit", "50000");
-      params.append("offset", "0");
-      if (debouncedSearchQuery) params.append("search", debouncedSearchQuery);
-      if (selectedCategoryIds.length === 1) params.append("categoryId", selectedCategoryIds[0]);
-      const dateRange = getItemsDateRange();
-      if (dateRange.dateFrom) params.append("dateFrom", dateRange.dateFrom.toISOString());
-      if (dateRange.dateTo) params.append("dateTo", dateRange.dateTo.toISOString());
-      const res = await fetch(`/api/products?${params}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch products");
-      const data = await res.json();
-      const productsToExport = Array.isArray(data) ? data : (data.products || []);
+      const productsToExport = await fetchProductsForExport();
       const csvHeaders = "Name,Category,Purchase Cost,Sales Price,Unit,Quantity,Description,Enable Size Pricing,Sizes,Sale S,Sale M,Sale L,Purchase S,Purchase M,Purchase L,Created At\n";
       const csvRows = productsToExport.map((product: Product) => {
         const category = categories.find(c => c.id === product.categoryId)?.name || "";
@@ -791,7 +803,80 @@ export default function ItemManage() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      toast({ title: "Success", description: `Exported ${productsToExport.length} items` });
+      toast({ title: "Success", description: `Exported ${productsToExport.length} items to CSV` });
+    } catch (e) {
+      toast({ title: "Export Failed", description: e instanceof Error ? e.message : "Failed to export", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const productsToExport = await fetchProductsForExport();
+      const sizePrices = (p: Product) => p.sizePrices as Record<string, string> | null | undefined;
+      const sizePurchasePrices = (p: Product) => p.sizePurchasePrices as Record<string, string> | null | undefined;
+      const hasSizePrices = (p: Product) => sizePrices(p) && Object.keys(sizePrices(p) || {}).length > 0;
+      const exportData = productsToExport.map((product: Product) => {
+        const category = categories.find(c => c.id === product.categoryId)?.name || "";
+        const sp = sizePrices(product);
+        const spp = sizePurchasePrices(product);
+        const hasSize = hasSizePrices(product);
+        return {
+          "Name": product.name,
+          "Category": category,
+          "Purchase Cost": hasSize ? "" : (product.purchaseCost || ""),
+          "Sales Price": hasSize ? "" : product.price,
+          "Unit": product.unit,
+          "Quantity": product.quantity,
+          "Description": product.description || "",
+          "Enable Size Pricing": hasSize ? "Y" : "",
+          "Sizes": hasSize && sp ? Object.keys(sp).join(",") : "",
+          "Sale S": hasSize && sp ? (sp.S ?? "") : "",
+          "Sale M": hasSize && sp ? (sp.M ?? "") : "",
+          "Sale L": hasSize && sp ? (sp.L ?? "") : "",
+          "Purchase S": hasSize && spp ? (spp.S ?? "") : "",
+          "Purchase M": hasSize && spp ? (spp.M ?? "") : "",
+          "Purchase L": hasSize && spp ? (spp.L ?? "") : "",
+          "Created At": format(new Date(product.createdAt), "yyyy-MM-dd"),
+        };
+      });
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Items");
+      XLSX.writeFile(workbook, `items-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+      toast({ title: "Success", description: `Exported ${productsToExport.length} items to Excel` });
+    } catch (e) {
+      toast({ title: "Export Failed", description: e instanceof Error ? e.message : "Failed to export", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    setExporting(true);
+    try {
+      const productsToExport = await fetchProductsForExport();
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text("Item Management Report", 14, 20);
+      doc.setFontSize(11);
+      doc.text(`Generated: ${format(new Date(), "MMM dd, yyyy HH:mm")}`, 14, 28);
+      doc.text(`Total Items: ${productsToExport.length}`, 14, 35);
+      const tableData = productsToExport.map((p: Product) => {
+        const category = categories.find(c => c.id === p.categoryId)?.name || "";
+        return [p.name, category, p.price || "", p.unit || "", p.quantity || "", format(new Date(p.createdAt), "yyyy-MM-dd")];
+      });
+      autoTable(doc, {
+        startY: 42,
+        head: [["Name", "Category", "Price", "Unit", "Quantity", "Created At"]],
+        body: tableData,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [59, 130, 246] },
+      });
+      doc.save(`items-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      toast({ title: "Success", description: `Exported ${productsToExport.length} items to PDF` });
     } catch (e) {
       toast({ title: "Export Failed", description: e instanceof Error ? e.message : "Failed to export", variant: "destructive" });
     } finally {
@@ -1235,10 +1320,25 @@ export default function ItemManage() {
             </Button>
 
             {hasPermission("reports.export") && (
-              <Button variant="outline" onClick={handleExport} disabled={exporting} data-testid="button-export">
-                <Download className="w-4 h-4 mr-2" />
-                {exporting ? "Exporting…" : "Export Items"}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={exporting} data-testid="button-export">
+                    <Download className="w-4 h-4 mr-2" />
+                    {exporting ? "Exporting…" : "Export Items"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExportCSV} disabled={exporting}>
+                    Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportExcel} disabled={exporting}>
+                    Export Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportPDF} disabled={exporting}>
+                    Export PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>

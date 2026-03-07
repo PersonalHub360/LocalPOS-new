@@ -61,6 +61,12 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type ReportType = "sales" | "inventory" | "payments" | "discounts" | "refunds" | "staff" | "aba" | "acleda" | "cash" | "due" | "card" | "items";
 type DateFilter = "today" | "yesterday" | "thismonth" | "lastmonth" | "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december" | "custom";
@@ -293,7 +299,7 @@ export default function Reports() {
         const response = await fetch(`/api/orders/export?${reportParamsString}`, { credentials: "include" });
         if (!response.ok) throw new Error("Failed to fetch export data");
         const { orders: exportOrders = [] } = await response.json();
-        const salesToExport = exportOrders.filter((o: Order) => o.orderSource !== "due-management");
+        const salesToExport = exportOrders;
         const csvContent = [
           ["Date", "Order Number", "Customer", "Total (USD)", "Total (KHR)", "Payment Method", "Payment Status", "Status"].join(","),
           ...salesToExport.map((sale: Order) => [
@@ -348,7 +354,7 @@ export default function Reports() {
         const response = await fetch(`/api/orders/export?${reportParamsString}`, { credentials: "include" });
         if (!response.ok) throw new Error("Failed to fetch export data");
         const { orders: exportOrders = [] } = await response.json();
-        const salesToExport = exportOrders.filter((o: Order) => o.orderSource !== "due-management");
+        const salesToExport = exportOrders;
         const exportData = salesToExport.map((sale: Order) => ({
           "Invoice No": `INV-${sale.orderNumber}`,
           "Date & Time": format(new Date(sale.createdAt), "PPpp"),
@@ -444,7 +450,7 @@ export default function Reports() {
         const response = await fetch(`/api/orders/export?${reportParamsString}`, { credentials: "include" });
         if (response.ok) {
           const { orders: exportOrders = [] } = await response.json();
-          salesForPdf = exportOrders.filter((o: Order) => o.orderSource !== "due-management");
+          salesForPdf = exportOrders;
         }
       } catch {
         // Fall back to current page if fetch fails
@@ -768,20 +774,28 @@ export default function Reports() {
               Print
             </Button>
             {hasPermission("reports.export") && (
-              <>
-                <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export PDF
-                </Button>
-                <Button variant="outline" onClick={handleExportExcel} data-testid="button-export-excel">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export Excel
-                </Button>
-                <Button onClick={handleExportCSV} data-testid="button-export-csv">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-              </>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" data-testid="button-export">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExportCSV} data-testid="button-export-csv">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportExcel} data-testid="button-export-excel">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportPDF} data-testid="button-export-pdf">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
