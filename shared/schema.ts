@@ -80,6 +80,26 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
 
+export const subscriptionCards = pgTable("subscription_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  barcode: text("barcode").notNull().unique(),
+  customerId: varchar("customer_id")
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  discountOverrideValue: decimal("discount_override_value", { precision: 10, scale: 2 }),
+  isActive: text("is_active").notNull().default("true"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSubscriptionCardSchema = createInsertSchema(subscriptionCards).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSubscriptionCard = z.infer<typeof insertSubscriptionCardSchema>;
+export type SubscriptionCard = typeof subscriptionCards.$inferSelect;
+
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderNumber: text("order_number").notNull().unique(),
@@ -101,6 +121,8 @@ export const orders = pgTable("orders", {
   paymentStatus: text("payment_status").notNull().default("pending"),
   paymentMethod: text("payment_method"),
   paymentSplits: text("payment_splits"),
+  subscriptionCardId: varchar("subscription_card_id"),
+  subscriptionDiscount: decimal("subscription_discount", { precision: 10, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   completedAt: timestamp("completed_at"),
 });
@@ -576,6 +598,11 @@ export const settings = pgTable("settings", {
   permAccessSettings: text("perm_access_settings").notNull().default("false"),
   permProcessRefunds: text("perm_process_refunds").notNull().default("false"),
   permManageInventory: text("perm_manage_inventory").notNull().default("true"),
+
+  subscriptionProgramEnabled: text("subscription_program_enabled").notNull().default("true"),
+  subscriptionMinSpend: decimal("subscription_min_spend", { precision: 10, scale: 2 }).notNull().default("50"),
+  subscriptionDiscountType: text("subscription_discount_type").notNull().default("percentage"),
+  subscriptionDiscountValue: decimal("subscription_discount_value", { precision: 10, scale: 2 }).notNull().default("5"),
   
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });

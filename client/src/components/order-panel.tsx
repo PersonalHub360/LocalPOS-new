@@ -45,6 +45,10 @@ interface OrderPanelProps {
   discountType: 'amount' | 'percentage';
   onDiscountTypeChange: (type: 'amount' | 'percentage') => void;
   onDiscountChange?: (value: number, type: 'amount' | 'percentage') => void;
+  /** Dollar amount removed by subscription card (after line-item discounts). */
+  subscriptionDiscountAmount?: number;
+  subscriptionCustomerLabel?: string | null;
+  onClearSubscription?: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -72,6 +76,9 @@ export function OrderPanel({
   discountType,
   onDiscountTypeChange,
   onDiscountChange,
+  subscriptionDiscountAmount = 0,
+  subscriptionCustomerLabel,
+  onClearSubscription,
   open,
   onOpenChange,
 }: OrderPanelProps) {
@@ -113,16 +120,16 @@ export function OrderPanel({
   
   // Calculate subtotal with per-item discounts applied
   const subtotal = originalSubtotal - totalItemDiscounts;
-  
-  // Calculate actual discount amount based on type (global discount)
-  const globalDiscountAmount = discountType === 'percentage' 
-    ? (subtotal * manualDiscount) / 100 
-    : manualDiscount;
-  
-  // Total discount = item discounts + global discount
-  const totalDiscount = totalItemDiscounts + globalDiscountAmount;
-  
-  const total = subtotal - globalDiscountAmount;
+  const baseAfterSubscription = Math.max(0, subtotal - subscriptionDiscountAmount);
+
+  // Global discount applies after subscription card discount
+  const globalDiscountAmount = discountType === "percentage"
+    ? (baseAfterSubscription * manualDiscount) / 100
+    : Math.min(manualDiscount, baseAfterSubscription);
+
+  const totalDiscount = totalItemDiscounts + subscriptionDiscountAmount + globalDiscountAmount;
+
+  const total = baseAfterSubscription - globalDiscountAmount;
   
   // Derive active preset from current discount value
   const activePreset = discountType === 'percentage' && PRESET_PERCENTAGES.includes(manualDiscount) 
@@ -367,6 +374,28 @@ export function OrderPanel({
               <span className="font-mono shrink-0 text-accent">-${totalItemDiscounts.toFixed(2)}</span>
             </div>
           )}
+
+          {subscriptionDiscountAmount > 0 && (
+            <div className="flex justify-between items-center gap-2 min-w-0">
+              <span className="text-muted-foreground whitespace-nowrap text-xs sm:text-sm shrink-0">
+                Subscription card{subscriptionCustomerLabel ? ` (${subscriptionCustomerLabel})` : ""} :
+              </span>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="font-mono text-accent">-${subscriptionDiscountAmount.toFixed(2)}</span>
+                {onClearSubscription && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1 text-xs"
+                    onClick={onClearSubscription}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
           
           <div className="space-y-2">
             <div className="flex justify-between items-center gap-1 sm:gap-2 min-w-0">
@@ -394,12 +423,12 @@ export function OrderPanel({
                   <Input
                     type="number"
                     min="0"
-                    max={discountType === 'percentage' ? 100 : subtotal}
+                    max={discountType === 'percentage' ? 100 : baseAfterSubscription}
                     step={discountType === 'percentage' ? '1' : '0.01'}
                     value={manualDiscount || ''}
                     onChange={(e) => {
                       const value = parseFloat(e.target.value) || 0;
-                      const maxValue = discountType === 'percentage' ? 100 : subtotal;
+                      const maxValue = discountType === 'percentage' ? 100 : baseAfterSubscription;
                       onManualDiscountChange(Math.min(Math.max(0, value), maxValue));
                     }}
                     className="w-16 sm:w-20 h-6 sm:h-7 text-right font-mono pr-4 sm:pr-6 text-xs"

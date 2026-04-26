@@ -33,6 +33,27 @@ function getDiscountDisplay(sale: Order): { label: string; amount: number } {
   return { label: `$${disc.toFixed(2)}`, amount: disc };
 }
 
+function subscriptionDiscountRowHtml(sale: Order): string {
+  const amt = parseFloat(sale.subscriptionDiscount || "0");
+  if (!amt || amt <= 0) return "";
+  return `<div><span>Subscription card:</span><span>-$${amt.toFixed(2)}</span></div>`;
+}
+
+function subscriptionDiscountSummaryRow(sale: Order): string {
+  const amt = parseFloat(sale.subscriptionDiscount || "0");
+  if (!amt || amt <= 0) return "";
+  return `<div class="summary-row">
+            <span>Subscription card</span>
+            <span>-$${amt.toFixed(2)}</span>
+          </div>`;
+}
+
+function subscriptionDiscountCompactLine(sale: Order): string {
+  const amt = parseFloat(sale.subscriptionDiscount || "0");
+  if (!amt || amt <= 0) return "";
+  return `<div>Subscription card: -$${amt.toFixed(2)}</div>`;
+}
+
 export function generateReceiptHTML(
   template: ReceiptTemplate,
   data: ReceiptData
@@ -199,6 +220,7 @@ function generateClassicTemplate(
         </table>
         <div class="summary">
           <div><span>Subtotal:</span><span>$${parseFloat(sale.subtotal).toFixed(2)}</span></div>
+          ${subscriptionDiscountRowHtml(sale)}
           <div><span>Discount (${discountDisplay.label}):</span><span>-$${discountDisplay.amount.toFixed(2)}</span></div>
           <div class="total"><span>TOTAL:</span><span>$${parseFloat(sale.total).toFixed(2)}</span></div>
           <div><span>Total (KHR):</span><span>៛${totalKHR}</span></div>
@@ -309,6 +331,7 @@ function generateModernTemplate(
             <span>Subtotal</span>
             <span>$${parseFloat(sale.subtotal).toFixed(2)}</span>
           </div>
+          ${subscriptionDiscountSummaryRow(sale)}
           <div class="summary-row">
             <span>Discount (${discountDisplay.label})</span>
             <span>-$${discountDisplay.amount.toFixed(2)}</span>
@@ -405,6 +428,7 @@ function generateCompactTemplate(
         </table>
         <div class="summary">
           <div>Subtotal: $${parseFloat(sale.subtotal).toFixed(2)}</div>
+          ${subscriptionDiscountCompactLine(sale)}
           <div>Discount (${discountDisplay.label}): -$${discountDisplay.amount.toFixed(2)}</div>
           <div class="total">TOTAL: $${parseFloat(sale.total).toFixed(2)}</div>
           <div style="font-size: 9px;">KHR: ៛${totalKHR}</div>
@@ -518,6 +542,7 @@ function generateDetailedTemplate(
             <span style="font-weight: 600;">Subtotal:</span>
             <span style="font-weight: 600;">$${parseFloat(sale.subtotal).toFixed(2)}</span>
           </div>
+          ${subscriptionDiscountSummaryRow(sale)}
           <div class="summary-row">
             <span style="font-weight: 600;">Discount (${discountDisplay.label}):</span>
             <span style="font-weight: 600; color: #dc3545;">-$${discountDisplay.amount.toFixed(2)}</span>
@@ -677,6 +702,7 @@ function generateElegantTemplate(
             <span>Subtotal</span>
             <span>$${parseFloat(sale.subtotal).toFixed(2)}</span>
           </div>
+          ${subscriptionDiscountSummaryRow(sale)}
           <div class="summary-row">
             <span>Discount (${discountDisplay.label})</span>
             <span>-$${discountDisplay.amount.toFixed(2)}</span>

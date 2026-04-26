@@ -48,6 +48,7 @@ interface ReceiptPrintModalProps {
     discountRaw?: number;
     totalDiscount?: number;
     total: number;
+    subscriptionDiscount?: number;
     tableId?: string | null;
     diningOption: string;
     paymentMethod?: string;
@@ -150,6 +151,7 @@ export function ReceiptPrintModal({
         diningOption: order.diningOption,
         customerName: null,
         customerPhone: null,
+        customerContactType: null,
         orderSource: "pos",
         subtotal: order.originalSubtotal !== undefined ? order.originalSubtotal.toString() : order.subtotal.toString(),
         discount: isPct ? String(order.discountRaw) : totalDiscount.toString(),
@@ -161,6 +163,8 @@ export function ReceiptPrintModal({
         paymentStatus: "paid",
         paymentMethod: order.paymentSplits ? "split" : (order.paymentMethod || "cash"),
         paymentSplits: order.paymentSplits || null,
+        subscriptionCardId: null,
+        subscriptionDiscount: (order.subscriptionDiscount ?? 0).toFixed(2),
         createdAt: new Date(),
         completedAt: new Date(),
       };

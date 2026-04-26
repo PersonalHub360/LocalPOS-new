@@ -18,6 +18,7 @@ import {
   CreditCard,
   Printer,
   Users,
+  IdCard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -97,7 +98,7 @@ const operationsMenuItems: MenuItem[] = [
     title: "Items",
     url: "/items",
     icon: Package,
-    permission: "inventory.view", // Items are part of inventory
+    permission: "items.view",
   },
   {
     title: "Inventory",
@@ -125,6 +126,12 @@ const managementMenuItems: MenuItem[] = [
     url: "/due-management",
     icon: CreditCard,
     permission: "due.view",
+  },
+  {
+    title: "Subscription cards",
+    url: "/subscription-cards",
+    icon: IdCard,
+    permission: "subscription_cards.manage",
   },
   {
     title: "Hardware",

@@ -1177,7 +1177,7 @@ export default function ItemManage() {
           <div className="w-full sm:w-auto">
             <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">Item Management</h1>
             <p className="text-sm md:text-base text-muted-foreground mt-1">Manage inventory and menu items</p>
-            {filteredProducts.length > 0 && hasPermission("inventory.delete") && (
+            {filteredProducts.length > 0 && hasPermission("items.delete") && (
               <div className="flex items-center gap-4 mt-3">
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -1343,7 +1343,7 @@ export default function ItemManage() {
 
             <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
               <DialogTrigger asChild>
-                {hasPermission("inventory.create") && (
+                {hasPermission("items.create") && (
                   <Button onClick={handleAddItemClick} data-testid="button-add-item">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Item
@@ -1929,7 +1929,7 @@ export default function ItemManage() {
                         <Utensils className="w-10 h-10 text-muted-foreground" />
                       </div>
                     )}
-                    {hasPermission("inventory.delete") && (
+                    {hasPermission("items.delete") && (
                       <div className="absolute top-2 right-2 bg-background rounded-md p-1 shadow-md">
                         <Checkbox
                           checked={selectedItems.includes(product.id)}
@@ -2001,7 +2001,7 @@ export default function ItemManage() {
                         <QrCode className="w-3 h-3 mr-1" />
                         QR
                       </Button>
-                      {hasPermission("inventory.edit") && (
+                      {hasPermission("items.edit") && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -2013,7 +2013,7 @@ export default function ItemManage() {
                           Edit
                         </Button>
                       )}
-                      {hasPermission("inventory.delete") && (
+                      {hasPermission("items.delete") && (
                         <Button
                           size="sm"
                           variant="outline"

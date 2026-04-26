@@ -782,6 +782,71 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Subscription loyalty cards</CardTitle>
+                <CardDescription>
+                  Barcode cards for repeat customers. Eligibility uses completed POS orders only.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Enable program</Label>
+                    <p className="text-sm text-muted-foreground">Allow scanning cards on the POS and issuing cards</p>
+                  </div>
+                  <Switch
+                    checked={formData.subscriptionProgramEnabled === "true"}
+                    onCheckedChange={(checked) =>
+                      updateField("subscriptionProgramEnabled", checked ? "true" : "false")
+                    }
+                  />
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="sub-min-spend">Minimum lifetime POS spend ($)</Label>
+                    <Input
+                      id="sub-min-spend"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={formData.subscriptionMinSpend ?? "50"}
+                      onChange={(e) => updateField("subscriptionMinSpend", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="sub-discount-type">Discount type</Label>
+                    <Select
+                      value={formData.subscriptionDiscountType || "percentage"}
+                      onValueChange={(v) => updateField("subscriptionDiscountType", v)}
+                    >
+                      <SelectTrigger id="sub-discount-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percentage">Percentage off cart subtotal</SelectItem>
+                        <SelectItem value="amount">Fixed amount off cart subtotal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="sub-discount-value">
+                    {formData.subscriptionDiscountType === "amount" ? "Discount amount ($)" : "Discount percent (%)"}
+                  </Label>
+                  <Input
+                    id="sub-discount-value"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={formData.subscriptionDiscountValue ?? "5"}
+                    onChange={(e) => updateField("subscriptionDiscountValue", e.target.value)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="tax" className="space-y-6">

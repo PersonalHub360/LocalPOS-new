@@ -20,6 +20,10 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useBranch } from "@/contexts/BranchContext";
 import { withBranchId } from "@/lib/branchQuery";
 
+function roundMoneyPos(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
 interface ProductsResponse {
   products: Product[];
   total: number;
@@ -58,6 +62,14 @@ export default function POS() {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [manualDiscount, setManualDiscount] = useState<number>(0);
   const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount');
+  const [appliedSubscription, setAppliedSubscription] = useState<{
+    cardId: string;
+    barcode: string;
+    customerId: string;
+    customerName: string;
+    discountType: "percentage" | "amount";
+    discountValue: number;
+  } | null>(null);
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
   const [sizeSelectionDialogOpen, setSizeSelectionDialogOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
@@ -207,6 +219,7 @@ export default function POS() {
         setCurrentDraftId(null);
         setManualDiscount(0);
         setDiscountType('amount');
+        setAppliedSubscription(null);
       }
       
       toast({
@@ -389,6 +402,25 @@ export default function POS() {
       return;
     }
 
+    const playScanBeep = () => {
+      if (!beepSound) return;
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.frequency.value = 800;
+        oscillator.type = "sine";
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+      } catch {
+        /* ignore */
+      }
+    };
+
     const handleBarcodeScan = async (event: KeyboardEvent) => {
       // Don't interfere if user is typing in an input field
       const target = event.target as HTMLElement;
@@ -419,7 +451,7 @@ export default function POS() {
           return;
         }
         
-        // Look for product by barcode
+        // Look for product by barcode, then subscription card
         try {
           const response = await fetch(`/api/products/barcode/${encodeURIComponent(scannedBarcode)}`, {
             credentials: "include",
@@ -428,43 +460,47 @@ export default function POS() {
           if (response.ok) {
             const product = await response.json();
             handleAddToOrder(product);
-            
-            // Play beep sound if enabled
-            if (beepSound) {
-              try {
-                const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.frequency.value = 800; // Beep frequency
-                oscillator.type = 'sine';
-                
-                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-                
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + 0.1);
-              } catch (e) {
-                // Audio context not supported, ignore
-              }
-            }
-            
+            playScanBeep();
             toast({
               title: "Product Added",
               description: `${product.name} added to cart`,
             });
           } else {
-            // Try to find by product ID if barcode lookup fails
             const product = allProducts.find(p => p.id === scannedBarcode || p.barcode === scannedBarcode);
             if (product) {
               handleAddToOrder(product);
+              playScanBeep();
               toast({
                 title: "Product Added",
                 description: `${product.name} added to cart`,
               });
+            } else if (settings?.subscriptionProgramEnabled === "true") {
+              const subRes = await fetch(
+                `/api/subscription-cards/lookup/${encodeURIComponent(scannedBarcode)}`,
+                { credentials: "include" }
+              );
+              if (subRes.ok) {
+                const data = await subRes.json();
+                setAppliedSubscription({
+                  cardId: data.cardId,
+                  barcode: data.barcode,
+                  customerId: data.customerId,
+                  customerName: data.customerName,
+                  discountType: data.discountType,
+                  discountValue: data.discountValue,
+                });
+                playScanBeep();
+                toast({
+                  title: "Subscription card applied",
+                  description: `${data.customerName} — discount active for this sale`,
+                });
+              } else {
+                toast({
+                  title: "Not found",
+                  description: `No product or active subscription card for: ${scannedBarcode}`,
+                  variant: "destructive",
+                });
+              }
             } else {
               toast({
                 title: "Product Not Found",
@@ -477,7 +513,7 @@ export default function POS() {
           console.error("Error fetching product by barcode:", error);
           toast({
             title: "Error",
-            description: "Failed to scan product",
+            description: "Failed to scan",
             variant: "destructive",
           });
         }
@@ -497,16 +533,14 @@ export default function POS() {
     };
 
     window.addEventListener("keydown", handleBarcodeScan);
-    
-    window.addEventListener("keydown", handleBarcodeScan);
-    
+
     return () => {
       window.removeEventListener("keydown", handleBarcodeScan);
       if (barcodeTimeout) {
         clearTimeout(barcodeTimeout);
       }
     };
-  }, [barcodeBuffer, barcodeTimeout, allProducts, toast, handleAddToOrder, isScannerEnabled, scanDelay, beepSound, soldQuantities]);
+  }, [barcodeBuffer, barcodeTimeout, allProducts, toast, handleAddToOrder, isScannerEnabled, scanDelay, beepSound, soldQuantities, settings?.subscriptionProgramEnabled]);
 
   const handleUpdateQuantity = (productId: string, quantity: number, selectedSize?: string) => {
     if (quantity < 1) return;
@@ -581,6 +615,7 @@ export default function POS() {
     setManualDiscount(0);
     setDiscountType('amount');
     setCurrentDraftId(null);
+    setAppliedSubscription(null);
   };
 
   // Helper function to get item price (with size support)
@@ -634,13 +669,31 @@ export default function POS() {
     }, 0);
   };
 
-  const handleSaveDraft = () => {
+  function computeCurrentTotals() {
     const subtotal = calculateSubtotal(orderItems);
+    let subscriptionDiscountAmount = 0;
+    if (appliedSubscription) {
+      if (appliedSubscription.discountType === "percentage") {
+        subscriptionDiscountAmount = roundMoneyPos(
+          Math.min(subtotal, (subtotal * appliedSubscription.discountValue) / 100)
+        );
+      } else {
+        subscriptionDiscountAmount = roundMoneyPos(
+          Math.min(subtotal, appliedSubscription.discountValue)
+        );
+      }
+    }
+    const afterSubscription = roundMoneyPos(subtotal - subscriptionDiscountAmount);
+    const globalDiscountAmount =
+      discountType === "percentage"
+        ? roundMoneyPos((afterSubscription * manualDiscount) / 100)
+        : roundMoneyPos(Math.min(manualDiscount, afterSubscription));
+    const total = roundMoneyPos(afterSubscription - globalDiscountAmount);
+    return { subtotal, subscriptionDiscountAmount, afterSubscription, globalDiscountAmount, total };
+  }
 
-    const discountAmount = discountType === 'percentage' 
-      ? (subtotal * manualDiscount) / 100 
-      : manualDiscount;
-    const total = subtotal - discountAmount;
+  const handleSaveDraft = () => {
+    const { subtotal, subscriptionDiscountAmount, total } = computeCurrentTotals();
 
     const orderData = {
       tableId: selectedTable,
@@ -649,6 +702,8 @@ export default function POS() {
       discount: manualDiscount.toString(),
       discountType: discountType,
       total: total.toString(),
+      subscriptionCardId: appliedSubscription?.cardId ?? null,
+      subscriptionDiscount: subscriptionDiscountAmount.toFixed(2),
       status: "draft",
       items: orderItems.map((item) => {
         const itemPrice = getItemPrice(item);
@@ -788,6 +843,29 @@ export default function POS() {
       setCurrentDraftId(orderId);
       setManualDiscount(parseFloat(order.discount) || 0);
       setDiscountType((order.discountType as 'amount' | 'percentage') || 'amount');
+      const subCardId = order.subscriptionCardId;
+      if (subCardId) {
+        try {
+          const subRes = await fetch(`/api/subscription-cards/by-id/${subCardId}`, { credentials: "include" });
+          if (subRes.ok) {
+            const data = await subRes.json();
+            setAppliedSubscription({
+              cardId: data.cardId,
+              barcode: data.barcode,
+              customerId: data.customerId,
+              customerName: data.customerName,
+              discountType: data.discountType,
+              discountValue: data.discountValue,
+            });
+          } else {
+            setAppliedSubscription(null);
+          }
+        } catch {
+          setAppliedSubscription(null);
+        }
+      } else {
+        setAppliedSubscription(null);
+      }
       setDraftListModalOpen(false);
       
       toast({
@@ -962,6 +1040,29 @@ export default function POS() {
         setCurrentDraftId(orderId);
         setManualDiscount(parseFloat(order.discount) || 0);
         setDiscountType((order.discountType as 'amount' | 'percentage') || 'amount');
+        const subCardId = order.subscriptionCardId;
+        if (subCardId) {
+          try {
+            const subRes = await fetch(`/api/subscription-cards/by-id/${subCardId}`, { credentials: "include" });
+            if (subRes.ok) {
+              const data = await subRes.json();
+              setAppliedSubscription({
+                cardId: data.cardId,
+                barcode: data.barcode,
+                customerId: data.customerId,
+                customerName: data.customerName,
+                discountType: data.discountType,
+                discountValue: data.discountValue,
+              });
+            } else {
+              setAppliedSubscription(null);
+            }
+          } catch {
+            setAppliedSubscription(null);
+          }
+        } else {
+          setAppliedSubscription(null);
+        }
       } catch (error) {
         toast({
           title: "Error",
@@ -996,14 +1097,9 @@ export default function POS() {
     if (type === "kot") {
       const originalSubtotal = calculateOriginalSubtotal(orderItems);
       const totalItemDiscounts = calculateTotalItemDiscounts(orderItems);
-      const subtotal = calculateSubtotal(orderItems);
-      
-      const globalDiscountAmount = discountType === 'percentage' 
-        ? (subtotal * manualDiscount) / 100 
-        : manualDiscount;
-      
-      const totalDiscount = totalItemDiscounts + globalDiscountAmount;
-      
+      const { subtotal, subscriptionDiscountAmount, globalDiscountAmount, total } = computeCurrentTotals();
+      const totalDiscount = totalItemDiscounts + subscriptionDiscountAmount + globalDiscountAmount;
+
       setReceiptData({
         orderNumber: currentOrderNumber,
         items: orderItems.map((item) => {
@@ -1021,11 +1117,12 @@ export default function POS() {
         originalSubtotal,
         itemDiscounts: totalItemDiscounts,
         subtotal,
+        subscriptionDiscount: subscriptionDiscountAmount,
         discount: globalDiscountAmount,
         discountType,
         discountRaw: manualDiscount,
         totalDiscount,
-        total: subtotal - globalDiscountAmount,
+        total,
         tableId: selectedTable,
         diningOption,
       });
@@ -1038,12 +1135,7 @@ export default function POS() {
   const handleConfirmPayment = async (paymentMethod: string, amountPaid: number, paymentSplits?: { method: string; amount: number }[], customerName?: string, customerPhone?: string, orderDate?: string, dateType?: "date" | "month") => {
     const originalSubtotal = calculateOriginalSubtotal(orderItems);
     const totalItemDiscounts = calculateTotalItemDiscounts(orderItems);
-    const subtotal = calculateSubtotal(orderItems);
-
-    const globalDiscountAmount = discountType === 'percentage' 
-      ? (subtotal * manualDiscount) / 100 
-      : manualDiscount;
-    const total = subtotal - globalDiscountAmount;
+    const { subtotal, subscriptionDiscountAmount, globalDiscountAmount, total } = computeCurrentTotals();
     const draftIdToDelete = currentDraftId;
 
     const totalPaidAmount = paymentSplits && paymentSplits.length > 0
@@ -1128,6 +1220,8 @@ export default function POS() {
         };
       }),
       orderSource: "pos",
+      subscriptionCardId: appliedSubscription?.cardId ?? null,
+      subscriptionDiscount: subscriptionDiscountAmount.toFixed(2),
     };
     
     // Add createdAt if order date is provided
@@ -1152,7 +1246,7 @@ export default function POS() {
       orderData.paymentSplits = JSON.stringify(paymentSplits);
     }
 
-    const totalDiscount = totalItemDiscounts + globalDiscountAmount;
+    const totalDiscount = totalItemDiscounts + subscriptionDiscountAmount + globalDiscountAmount;
     const receiptPayload = {
       items: orderItems.map((item) => {
         const itemPrice = getItemPrice(item);
@@ -1169,6 +1263,7 @@ export default function POS() {
       originalSubtotal,
       itemDiscounts: totalItemDiscounts,
       subtotal,
+      subscriptionDiscount: subscriptionDiscountAmount,
       discount: globalDiscountAmount,
       totalDiscount,
       total: total,
@@ -1193,6 +1288,7 @@ export default function POS() {
       setCurrentOrderNumber("");
       setManualDiscount(0);
       setDiscountType("amount");
+      setAppliedSubscription(null);
     };
 
     const runSaveAndReceipt = async () => {
@@ -1246,6 +1342,7 @@ export default function POS() {
     setCurrentDraftId(null);
     setManualDiscount(0);
     setDiscountType('amount');
+    setAppliedSubscription(null);
     toast({
       title: "New Order",
       description: "Started a new order",
@@ -1296,7 +1393,7 @@ export default function POS() {
     }
   }, [selectedCategory, searchQuery, minPrice, maxPrice, stockFilter]);
 
-  const subtotal = calculateSubtotal(orderItems);
+  const { subscriptionDiscountAmount, total: orderGrandTotal } = computeCurrentTotals();
 
   return (
     <div className="flex flex-col md:flex-row h-full overflow-hidden">
@@ -1536,6 +1633,9 @@ export default function POS() {
         discountType={discountType}
         onDiscountTypeChange={setDiscountType}
         onDiscountChange={handleDiscountChange}
+        subscriptionDiscountAmount={subscriptionDiscountAmount}
+        subscriptionCustomerLabel={appliedSubscription?.customerName ?? null}
+        onClearSubscription={() => setAppliedSubscription(null)}
         open={isDesktop ? undefined : orderPanelOpen}
         onOpenChange={isDesktop ? undefined : setOrderPanelOpen}
       />
@@ -1544,7 +1644,7 @@ export default function POS() {
         open={paymentModalOpen}
         onClose={() => setPaymentModalOpen(false)}
         onConfirm={handleConfirmPayment}
-        total={subtotal - (discountType === 'percentage' ? (subtotal * manualDiscount) / 100 : manualDiscount)}
+        total={orderGrandTotal}
         orderNumber={currentOrderNumber}
       />
 

@@ -69,6 +69,8 @@ const uploadMultiple = multer({
 
 const createOrderWithItemsSchema = insertOrderSchema.extend({
   items: z.array(insertOrderItemSchema.omit({ orderId: true })),
+  subscriptionCardId: z.string().optional().nullable(),
+  subscriptionDiscount: z.union([z.string(), z.number()]).optional(),
 });
 
 const publicOrderItemSchema = z.object({
@@ -188,6 +190,19 @@ function requirePermission(permission: string) {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
     next();
+  };
+}
+
+// Allow if user has any of the given permissions (for items OR inventory)
+function requireAnyPermission(permissions: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    for (const permission of permissions) {
+      const hasPermission = await checkPermission(req, permission);
+      if (hasPermission) {
+        return next();
+      }
+    }
+    return res.status(403).json({ error: "Insufficient permissions" });
   };
 }
 
@@ -383,6 +398,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentStatus: isDue ? ("due" as const) : ("pending" as const),
         paymentMethod: webPaymentMethod === "cash_on_delivery" ? "cash" : (isDue ? "due" : null),
         paymentSplits: null,
+        subscriptionCardId: null,
+        subscriptionDiscount: "0",
       };
 
       const order = await storage.createOrderWithItems(orderData, orderItems);
@@ -760,7 +777,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/categories", requirePermission("inventory.create"), async (req, res) => {
+  app.post("/api/categories", requireAnyPermission(["items.create", "inventory.create"]), async (req, res) => {
     try {
       const validatedData = insertCategorySchema.parse(req.body);
       const category = await storage.createCategory(validatedData);
@@ -867,7 +884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/products", requirePermission("inventory.create"), async (req, res) => {
+  app.post("/api/products", requireAnyPermission(["items.create", "inventory.create"]), async (req, res) => {
     try {
       const validatedData = insertProductSchema.parse(req.body);
       
@@ -901,7 +918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/products/bulk", requirePermission("inventory.edit"), async (req, res) => {
+  app.post("/api/products/bulk", requireAnyPermission(["items.edit", "inventory.edit"]), async (req, res) => {
     try {
       const items = req.body.items;
       if (!Array.isArray(items)) {
@@ -989,7 +1006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/products/:id", requirePermission("inventory.edit"), async (req, res) => {
+  app.patch("/api/products/:id", requireAnyPermission(["items.edit", "inventory.edit"]), async (req, res) => {
     try {
       // Get current product
       const currentProduct = await storage.getProduct(req.params.id);
@@ -1049,7 +1066,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/products/:id", requirePermission("inventory.delete"), async (req, res) => {
+  app.delete("/api/products/:id", requireAnyPermission(["items.delete", "inventory.delete"]), async (req, res) => {
     try {
       const deleted = await storage.deleteProduct(req.params.id);
       if (!deleted) {
@@ -3732,6 +3749,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete customer" });
     }
   });
+
+  app.get("/api/subscription-cards", requirePermission("subscription_cards.manage"), async (req, res) => {
+    try {
+      const list = await storage.listSubscriptionCards();
+      res.json(list);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch subscription cards" });
+    }
+  });
+
+  app.get("/api/subscription-cards/by-id/:id", requirePermission("sales.create"), async (req, res) => {
+    try {
+      const settings = await storage.getSettings();
+      if (settings?.subscriptionProgramEnabled === "false") {
+        return res.status(400).json({ error: "Subscription program is disabled" });
+      }
+      const row = await storage.getSubscriptionCardById(req.params.id);
+      if (!row || row.isActive !== "true") {
+        return res.status(404).json({ error: "Card not found or inactive" });
+      }
+      const discountType = settings?.subscriptionDiscountType === "amount" ? "amount" : "percentage";
+      const defaultVal = parseFloat(settings?.subscriptionDiscountValue || "5");
+      const override = row.discountOverrideValue;
+      const value =
+        override != null && String(override) !== "" && !Number.isNaN(parseFloat(String(override)))
+          ? parseFloat(String(override))
+          : defaultVal;
+      res.json({
+        cardId: row.id,
+        barcode: row.barcode,
+        customerId: row.customer.id,
+        customerName: row.customer.name,
+        discountType,
+        discountValue: value,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load subscription card" });
+    }
+  });
+
+  app.get("/api/subscription-cards/lookup/:barcode", requirePermission("sales.create"), async (req, res) => {
+    try {
+      const settings = await storage.getSettings();
+      if (settings?.subscriptionProgramEnabled === "false") {
+        return res.status(400).json({ error: "Subscription program is disabled" });
+      }
+      const decoded = decodeURIComponent(req.params.barcode);
+      const row = await storage.getSubscriptionCardByBarcode(decoded);
+      if (!row || row.isActive !== "true") {
+        return res.status(404).json({ error: "Card not found or inactive" });
+      }
+      const discountType = settings?.subscriptionDiscountType === "amount" ? "amount" : "percentage";
+      const defaultVal = parseFloat(settings?.subscriptionDiscountValue || "5");
+      const override = row.discountOverrideValue;
+      const value =
+        override != null && String(override) !== "" && !Number.isNaN(parseFloat(String(override)))
+          ? parseFloat(String(override))
+          : defaultVal;
+      res.json({
+        cardId: row.id,
+        barcode: row.barcode,
+        customerId: row.customer.id,
+        customerName: row.customer.name,
+        discountType,
+        discountValue: value,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to look up subscription card" });
+    }
+  });
+
+  app.post("/api/subscription-cards", requirePermission("subscription_cards.manage"), async (req, res) => {
+    try {
+      const body = z
+        .object({
+          customerId: z.string(),
+          discountOverrideValue: z.string().optional().nullable(),
+          notes: z.string().optional().nullable(),
+        })
+        .parse(req.body);
+      const card = await storage.issueSubscriptionCard(body.customerId, {
+        discountOverrideValue: body.discountOverrideValue ?? null,
+        notes: body.notes ?? null,
+      });
+      res.status(201).json(card);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid request", details: error.errors });
+      }
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("not eligible")) {
+        return res.status(400).json({ error: msg });
+      }
+      res.status(500).json({ error: "Failed to issue subscription card" });
+    }
+  });
+
+  app.patch("/api/subscription-cards/:id", requirePermission("subscription_cards.manage"), async (req, res) => {
+    try {
+      const body = z
+        .object({
+          isActive: z.enum(["true", "false"]).optional(),
+          notes: z.string().optional().nullable(),
+          discountOverrideValue: z.string().optional().nullable(),
+        })
+        .parse(req.body);
+      const updated = await storage.updateSubscriptionCard(req.params.id, body);
+      if (!updated) {
+        return res.status(404).json({ error: "Subscription card not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid request", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to update subscription card" });
+    }
+  });
+
+  app.get(
+    "/api/customers/:id/subscription-eligibility",
+    requirePermission("subscription_cards.manage"),
+    async (req, res) => {
+      try {
+        const settings = await storage.getSettings();
+        const minSpend = parseFloat(settings?.subscriptionMinSpend || "50");
+        const spend = await storage.getCustomerPosLifetimeSpend(req.params.id);
+        res.json({
+          eligible: spend + 1e-9 >= minSpend,
+          lifetimePosSpend: spend,
+          minSpend,
+        });
+      } catch (error) {
+        res.status(500).json({ error: "Failed to check eligibility" });
+      }
+    }
+  );
 
   app.post("/api/customers/bulk-delete", requirePermission("customers.delete"), async (req, res) => {
     try {

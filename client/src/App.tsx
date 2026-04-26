@@ -51,6 +51,7 @@ import Inventory from "@/pages/inventory";
 import Reports from "@/pages/reports";
 import BankStatement from "@/pages/bank-statement";
 import DueManagement from "@/pages/due-management";
+import SubscriptionCards from "@/pages/subscription-cards";
 import CustomerProfile from "@/pages/customer-profile";
 import Settings from "@/pages/settings";
 import Hardware from "@/pages/hardware";
@@ -76,6 +77,7 @@ function Router() {
       <Route path="/reports" component={Reports} />
       <Route path="/bank-statement" component={BankStatement} />
       <Route path="/due-management" component={DueManagement} />
+      <Route path="/subscription-cards" component={SubscriptionCards} />
       <Route path="/customer-profile/:id" component={CustomerProfile} />
       <Route path="/hardware" component={Hardware} />
       <Route path="/settings" component={Settings} />

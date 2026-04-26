@@ -706,7 +706,7 @@ async function applyStaffDeductionsAdvancesMigration(client) {
     for (const statement of statements) {
       try {
         await client.query(statement + (statement.endsWith(';') ? '' : ';'));
-        const match = statement.match(/CREATE TABLE .*?(\w+)/i);
+        const match = statement.match(/CREATE TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i);
         console.log(`✅ Created table ${match ? match[1] : 'staff_*'}`);
       } catch (error) {
         if (error.code === '42P07' || error.message?.includes('already exists')) {
@@ -770,6 +770,53 @@ async function applyStaffLoansMigration(client) {
     if (error.code === 'ENOENT') {
       console.log(`⚠️  Migration file not found: ${migrationPath}, skipping`);
     } else throw error;
+  }
+}
+
+async function applySubscriptionCardsMigration(client) {
+  console.log('\n📦 Applying subscription cards migration...');
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS "subscription_cards" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "barcode" text NOT NULL UNIQUE,
+      "customer_id" varchar NOT NULL REFERENCES "customers"("id") ON DELETE CASCADE,
+      "discount_override_value" numeric(10, 2),
+      "is_active" text NOT NULL DEFAULT 'true',
+      "notes" text,
+      "created_at" timestamp NOT NULL DEFAULT now()
+    );`,
+    `ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "subscription_card_id" varchar;`,
+    `ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "subscription_discount" numeric(10, 2) NOT NULL DEFAULT 0;`,
+    `ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "subscription_program_enabled" text NOT NULL DEFAULT 'true';`,
+    `ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "subscription_min_spend" numeric(10, 2) NOT NULL DEFAULT 50;`,
+    `ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "subscription_discount_type" text NOT NULL DEFAULT 'percentage';`,
+    `ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "subscription_discount_value" numeric(10, 2) NOT NULL DEFAULT 5;`,
+  ];
+  const labels = [
+    'Create table subscription_cards',
+    'orders.subscription_card_id',
+    'orders.subscription_discount',
+    'settings.subscription_program_enabled',
+    'settings.subscription_min_spend',
+    'settings.subscription_discount_type',
+    'settings.subscription_discount_value',
+  ];
+  for (let i = 0; i < statements.length; i++) {
+    try {
+      await client.query(statements[i]);
+      console.log(`✅ ${labels[i]}`);
+    } catch (error) {
+      if (
+        error.code === '42701' ||
+        error.code === '42P07' ||
+        error.message?.includes('already exists') ||
+        error.message?.includes('duplicate')
+      ) {
+        logSkip(`⚠️  ${labels[i]} - already exists, skipping`);
+      } else {
+        throw error;
+      }
+    }
   }
 }
 
@@ -1039,6 +1086,13 @@ async function seedPermissions(client) {
     { name: 'sales.delete', description: 'Delete sales/orders', category: 'sales' },
     { name: 'sales.print', description: 'Print receipts', category: 'sales' },
     
+    // Items permissions (Item Management / Products page)
+    { name: 'items.view', description: 'View items and products', category: 'items' },
+    { name: 'items.create', description: 'Create items and products', category: 'items' },
+    { name: 'items.edit', description: 'Edit items and products', category: 'items' },
+    { name: 'items.delete', description: 'Delete items and products', category: 'items' },
+    { name: 'items.export', description: 'Export items to CSV/Excel/PDF', category: 'items' },
+    
     // Inventory permissions
     { name: 'inventory.view', description: 'View inventory items', category: 'inventory' },
     { name: 'inventory.create', description: 'Create inventory items', category: 'inventory' },
@@ -1092,6 +1146,8 @@ async function seedPermissions(client) {
     { name: 'due.create', description: 'Create due payments', category: 'due' },
     { name: 'due.edit', description: 'Edit due payments', category: 'due' },
     { name: 'due.delete', description: 'Delete due payments', category: 'due' },
+
+    { name: 'subscription_cards.manage', description: 'Manage subscription loyalty cards', category: 'sales' },
   ];
 
   for (const permission of permissions) {
@@ -1567,6 +1623,11 @@ async function runAllMigrations() {
     // 16j. Apply staff_unpaid_leave table
     await client.query('BEGIN');
     await applyStaffUnpaidLeaveMigration(client);
+    await client.query('COMMIT');
+
+    // 16k. Subscription loyalty cards
+    await client.query('BEGIN');
+    await applySubscriptionCardsMigration(client);
     await client.query('COMMIT');
 
     // 17. Create admin user (run in separate transaction)

@@ -69,6 +69,9 @@ import {
   type InsertMainProductItem,
   type Unit,
   type InsertUnit,
+  type SubscriptionCard,
+  type InsertSubscriptionCard,
+  subscriptionCards,
   categories,
   products,
   tables,
@@ -110,6 +113,29 @@ import { db } from "./db";
 import { eq, and, gte, lte, desc, asc, sql, isNull, or, inArray, ne, not } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { format } from "date-fns";
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function computeSubscriptionDiscountAmount(
+  subtotalAfterItems: number,
+  settings: Settings | undefined,
+  card: { discountOverrideValue: string | null }
+): number {
+  if (!settings || settings.subscriptionProgramEnabled === "false") return 0;
+  const dtype = settings.subscriptionDiscountType === "amount" ? "amount" : "percentage";
+  const defaultVal = parseFloat(settings.subscriptionDiscountValue || "5");
+  const override = card.discountOverrideValue;
+  const val =
+    override != null && override !== "" && !Number.isNaN(parseFloat(override))
+      ? parseFloat(override)
+      : defaultVal;
+  if (dtype === "percentage") {
+    return roundMoney(Math.min(subtotalAfterItems, (subtotalAfterItems * val) / 100));
+  }
+  return roundMoney(Math.min(subtotalAfterItems, val));
+}
 
 export interface IStorage {
   getCategories(): Promise<Category[]>;
@@ -446,6 +472,19 @@ export interface IStorage {
     available: number;
     subProducts: Array<{ product: Product; quantity: number; sold: number; available: number; branchName: string | null }>;
   }>;
+
+  getCustomerPosLifetimeSpend(customerId: string): Promise<number>;
+  getSubscriptionCardByBarcode(barcode: string): Promise<(SubscriptionCard & { customer: Customer }) | undefined>;
+  getSubscriptionCardById(id: string): Promise<(SubscriptionCard & { customer: Customer }) | undefined>;
+  listSubscriptionCards(): Promise<Array<SubscriptionCard & { customer: Customer }>>;
+  issueSubscriptionCard(
+    customerId: string,
+    opts?: { discountOverrideValue?: string | null; notes?: string | null }
+  ): Promise<SubscriptionCard>;
+  updateSubscriptionCard(
+    id: string,
+    updates: Partial<Pick<InsertSubscriptionCard, "isActive" | "notes" | "discountOverrideValue">>
+  ): Promise<SubscriptionCard | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1263,13 +1302,125 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  private async resolveSubscriptionAndValidateTotalsInTx(
+    tx: any,
+    orderPayload: any,
+    items: Omit<InsertOrderItem, "orderId">[]
+  ): Promise<{
+    subscriptionCardId: string | null;
+    subscriptionDiscount: string;
+    subtotal: string;
+    total: string;
+    customerId?: string;
+    customerName?: string | null;
+    customerPhone?: string | null;
+  }> {
+    const settings = await this.getSettings();
+    const subtotalNum = roundMoney(
+      items.reduce((sum, i) => sum + parseFloat(String(i.total)), 0)
+    );
+
+    let subscriptionCardId: string | null = orderPayload.subscriptionCardId || null;
+    let subscriptionDiscountNum = 0;
+
+    let customerId: string | undefined;
+    let customerName: string | null | undefined;
+    let customerPhone: string | null | undefined;
+
+    // Without a subscription card: trust client subtotal/total like before (no cross-check vs line items).
+    if (!subscriptionCardId) {
+      const clientSubDisc = roundMoney(parseFloat(String(orderPayload.subscriptionDiscount ?? 0)));
+      if (Math.abs(clientSubDisc) > 0.05) {
+        throw new Error("Unexpected subscription discount without a card");
+      }
+      const subStr =
+        orderPayload.subtotal != null && String(orderPayload.subtotal).trim() !== ""
+          ? String(orderPayload.subtotal)
+          : subtotalNum.toFixed(2);
+      const totalStr =
+        orderPayload.total != null && String(orderPayload.total).trim() !== ""
+          ? String(orderPayload.total)
+          : subStr;
+      return {
+        subscriptionCardId: null,
+        subscriptionDiscount: "0.00",
+        subtotal: subStr,
+        total: totalStr,
+      };
+    }
+
+    const clientSubtotal = roundMoney(parseFloat(String(orderPayload.subtotal ?? 0)));
+    if (Math.abs(clientSubtotal - subtotalNum) > 0.05) {
+      throw new Error(`Subtotal mismatch (${clientSubtotal} vs ${subtotalNum})`);
+    }
+
+    const cardRows = await tx
+      .select()
+      .from(subscriptionCards)
+      .where(eq(subscriptionCards.id, subscriptionCardId))
+      .limit(1);
+    const card = cardRows[0];
+    if (!card || card.isActive !== "true") {
+      throw new Error("Invalid or inactive subscription card");
+    }
+    if (settings?.subscriptionProgramEnabled === "false") {
+      throw new Error("Subscription program is disabled");
+    }
+    subscriptionDiscountNum = computeSubscriptionDiscountAmount(subtotalNum, settings, card);
+    const clientSubDisc = roundMoney(parseFloat(String(orderPayload.subscriptionDiscount ?? 0)));
+    if (Math.abs(clientSubDisc - subscriptionDiscountNum) > 0.05) {
+      throw new Error("Subscription discount mismatch");
+    }
+    const custRows = await tx
+      .select()
+      .from(customers)
+      .where(eq(customers.id, card.customerId))
+      .limit(1);
+    const cust = custRows[0];
+    customerId = card.customerId;
+    customerName = cust?.name ?? null;
+    customerPhone = cust?.phone ?? null;
+
+    const afterSub = roundMoney(subtotalNum - subscriptionDiscountNum);
+    const globalDiscRaw = parseFloat(String(orderPayload.discount ?? 0));
+    const discType = (orderPayload.discountType || "amount") as "amount" | "percentage";
+    const globalAmt =
+      discType === "percentage"
+        ? roundMoney((afterSub * globalDiscRaw) / 100)
+        : roundMoney(Math.min(afterSub, globalDiscRaw));
+    const expectedTotal = roundMoney(afterSub - globalAmt);
+    const clientTotal = roundMoney(parseFloat(String(orderPayload.total ?? 0)));
+    if (Math.abs(expectedTotal - clientTotal) > 0.05) {
+      throw new Error(`Order total mismatch (expected ${expectedTotal}, got ${clientTotal})`);
+    }
+
+    return {
+      subscriptionCardId,
+      subscriptionDiscount: subscriptionDiscountNum.toFixed(2),
+      subtotal: subtotalNum.toFixed(2),
+      total: expectedTotal.toFixed(2),
+      ...(customerId ? { customerId, customerName, customerPhone } : {}),
+    };
+  }
+
   async createOrderWithItems(insertOrder: InsertOrder, items: Omit<InsertOrderItem, 'orderId'>[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const orderNumber = await this.getNextOrderNumber();
+      const pricing = await this.resolveSubscriptionAndValidateTotalsInTx(tx, insertOrder, items);
       let orderData: any = {
         ...insertOrder,
         orderNumber,
+        subscriptionCardId: pricing.subscriptionCardId,
+        subscriptionDiscount: pricing.subscriptionDiscount,
+        subtotal: pricing.subtotal,
+        total: pricing.total,
       };
+
+      if (pricing.customerId) {
+        orderData.customerId = pricing.customerId;
+        orderData.customerName = pricing.customerName ?? orderData.customerName;
+        orderData.customerPhone = pricing.customerPhone ?? orderData.customerPhone;
+      }
       
       // Handle createdAt if provided - convert to Date if it's a string
       if (insertOrder.createdAt) {
@@ -1279,7 +1430,7 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Create or find customer if customerName is provided (not just for due/partial orders)
-      if (insertOrder.customerName && insertOrder.customerName.trim() && insertOrder.customerName !== 'Walk-in Customer') {
+      if (!orderData.customerId && insertOrder.customerName && insertOrder.customerName.trim() && insertOrder.customerName !== 'Walk-in Customer') {
         const customerName = insertOrder.customerName.trim();
         
         // Try to find existing customer by name and phone (if provided)
@@ -1368,7 +1519,7 @@ export class DatabaseStorage implements IStorage {
   async updateOrder(id: string, updates: Partial<InsertOrder>): Promise<Order | undefined> {
     return await db.transaction(async (tx) => {
       // If customerName is being updated and is provided, create or find customer
-      if (updates.customerName && updates.customerName.trim() && updates.customerName !== 'Walk-in Customer') {
+      if (!(updates as any).customerId && updates.customerName && updates.customerName.trim() && updates.customerName !== 'Walk-in Customer') {
         const customerName = updates.customerName.trim();
         
         // Try to find existing customer by name and phone (if provided)
@@ -1460,8 +1611,22 @@ export class DatabaseStorage implements IStorage {
       // Delete existing order items
       await tx.delete(orderItems).where(eq(orderItems.orderId, id));
       
+      const mergedPayload: any = { ...existingOrder[0], ...updates };
+      const pricing = await this.resolveSubscriptionAndValidateTotalsInTx(tx, mergedPayload, items);
+      Object.assign(updates, {
+        subscriptionCardId: pricing.subscriptionCardId,
+        subscriptionDiscount: pricing.subscriptionDiscount,
+        subtotal: pricing.subtotal,
+        total: pricing.total,
+      });
+      if (pricing.customerId) {
+        (updates as any).customerId = pricing.customerId;
+        (updates as any).customerName = pricing.customerName ?? (updates as any).customerName;
+        (updates as any).customerPhone = pricing.customerPhone ?? (updates as any).customerPhone;
+      }
+
       // Handle customer creation/update (same logic as updateOrder)
-      if (updates.customerName && updates.customerName.trim() && updates.customerName !== 'Walk-in Customer') {
+      if (!(updates as any).customerId && updates.customerName && updates.customerName.trim() && updates.customerName !== 'Walk-in Customer') {
         const customerName = updates.customerName.trim();
         
         let existingCustomer;
@@ -4405,6 +4570,108 @@ export class DatabaseStorage implements IStorage {
       console.error("Error deleting unit:", error);
       return false;
     }
+  }
+
+  async getCustomerPosLifetimeSpend(customerId: string): Promise<number> {
+    const rows = await db
+      .select({
+        sum: sql<string>`coalesce(sum(${orders.total}::numeric), 0)`,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.customerId, customerId),
+          eq(orders.status, "completed"),
+          eq(orders.orderSource, "pos")
+        )
+      );
+    return roundMoney(parseFloat(rows[0]?.sum || "0"));
+  }
+
+  async getSubscriptionCardByBarcode(barcode: string): Promise<(SubscriptionCard & { customer: Customer }) | undefined> {
+    const trimmed = barcode.trim();
+    if (!trimmed) return undefined;
+    const [card] = await db
+      .select()
+      .from(subscriptionCards)
+      .where(eq(subscriptionCards.barcode, trimmed))
+      .limit(1);
+    if (!card) return undefined;
+    const customer = await this.getCustomer(card.customerId);
+    if (!customer) return undefined;
+    return { ...card, customer };
+  }
+
+  async getSubscriptionCardById(id: string): Promise<(SubscriptionCard & { customer: Customer }) | undefined> {
+    const [card] = await db.select().from(subscriptionCards).where(eq(subscriptionCards.id, id)).limit(1);
+    if (!card) return undefined;
+    const customer = await this.getCustomer(card.customerId);
+    if (!customer) return undefined;
+    return { ...card, customer };
+  }
+
+  async listSubscriptionCards(): Promise<Array<SubscriptionCard & { customer: Customer }>> {
+    const cards = await db.select().from(subscriptionCards).orderBy(desc(subscriptionCards.createdAt));
+    const out: Array<SubscriptionCard & { customer: Customer }> = [];
+    for (const card of cards) {
+      const customer = await this.getCustomer(card.customerId);
+      if (customer) out.push({ ...card, customer });
+    }
+    return out;
+  }
+
+  async issueSubscriptionCard(
+    customerId: string,
+    opts?: { discountOverrideValue?: string | null; notes?: string | null }
+  ): Promise<SubscriptionCard> {
+    const settings = await this.getSettings();
+    const minSpend = parseFloat(settings?.subscriptionMinSpend || "50");
+    const spend = await this.getCustomerPosLifetimeSpend(customerId);
+    if (spend + 1e-9 < minSpend) {
+      throw new Error(
+        `Customer is not eligible yet. Minimum POS spend is $${minSpend.toFixed(2)} (current: $${spend.toFixed(2)}).`
+      );
+    }
+    const cust = await this.getCustomer(customerId);
+    if (!cust) throw new Error("Customer not found");
+
+    await db
+      .update(subscriptionCards)
+      .set({ isActive: "false" })
+      .where(and(eq(subscriptionCards.customerId, customerId), eq(subscriptionCards.isActive, "true")));
+
+    let barcode = "";
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const part = Math.random().toString(36).slice(2, 10).toUpperCase();
+      barcode = `SUB${Date.now().toString(36).toUpperCase()}${part}`.slice(0, 32);
+      const existing = await db
+        .select({ id: subscriptionCards.id })
+        .from(subscriptionCards)
+        .where(eq(subscriptionCards.barcode, barcode))
+        .limit(1);
+      if (existing.length === 0) break;
+    }
+    if (!barcode) throw new Error("Could not generate a unique barcode");
+
+    const [row] = await db
+      .insert(subscriptionCards)
+      .values({
+        barcode,
+        customerId,
+        discountOverrideValue: opts?.discountOverrideValue ?? null,
+        notes: opts?.notes ?? null,
+        isActive: "true",
+      })
+      .returning();
+    return row;
+  }
+
+  async updateSubscriptionCard(
+    id: string,
+    updates: Partial<Pick<InsertSubscriptionCard, "isActive" | "notes" | "discountOverrideValue">>
+  ): Promise<SubscriptionCard | undefined> {
+    const result = await db.update(subscriptionCards).set(updates).where(eq(subscriptionCards.id, id)).returning();
+    return result[0];
   }
 }
 
